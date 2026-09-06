@@ -8,7 +8,7 @@ export const NPC_EVENTS: EventCardDef[] = [
     emoji: '🚀',
     narrative: 'Priya Mehta (the aggressive investor) pulls up next to you with an excited grin: "NexGen Tech is securing a massive government cloud contract! If you buy 15 shares today, you will double your money."',
     priority: 25,
-    cooldownDays: 18,
+    cooldownDays: 45,
     choices: [
       {
         id: 'follow-priya-tip',
@@ -61,7 +61,7 @@ export const NPC_EVENTS: EventCardDef[] = [
     emoji: '🍲',
     narrative: 'Aarav Sharma has been running a wildly successful food cart downtown. He needs ₹4,000 for a second griddle and offers you a 25% share of weekly profits.',
     priority: 30,
-    cooldownDays: 25,
+    cooldownDays: 50,
     condition: (state) => state.player.money >= 4000,
     choices: [
       {
@@ -99,13 +99,39 @@ export const NPC_EVENTS: EventCardDef[] = [
     ]
   },
   {
+    id: 'npc-rohan-landlord-rules',
+    category: 'npc',
+    title: 'Rohan Gupta: Real Estate Wisdom',
+    emoji: '🏢',
+    narrative: 'Rohan Gupta (the city landlord) meets you for coffee at the real estate registrar: "Real estate in this city appreciates at 4-6% annually plus 4% rental yield. Never buy a property with disputed title deeds!"',
+    priority: 24,
+    cooldownDays: 40,
+    condition: (state) => state.player.currentDay >= 30,
+    choices: [
+      {
+        id: 'absorb-rohan-advice',
+        label: 'Take Notes on Property Yields (+15 Mental)',
+        emoji: '📝',
+        preview: [
+          { text: '+15 Real Estate Insight', type: 'positive' }
+        ],
+        onSelect: (state) => {
+          state.player.health.mental = Math.min(100, state.player.health.mental + 15);
+          return {
+            outcomeText: 'Rohan showed you his portfolio cashflow spreadsheets. You gained sharp property evaluation skills!'
+          };
+        }
+      }
+    ]
+  },
+  {
     id: 'npc-vikram-advice',
     category: 'npc',
     title: 'Vikram Verma: The 6-Month Emergency Fund',
     emoji: '🛡️',
     narrative: 'At the bank ATM, you bump into Vikram Verma (the cautious saver). He inspects his passbook proudly: "No debt, 6 months living costs in cash, and physical gold. How is your emergency buffer looking?"',
     priority: 22,
-    cooldownDays: 20,
+    cooldownDays: 45,
     choices: [
       {
         id: 'deposit-to-savings-vikram',

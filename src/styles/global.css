@@ -948,3 +948,54 @@ body {
   border-radius: 999px;
   transition: width 0.4s ease;
 }
+
+/* ─── Doctor Warning Advisory Banner ─── */
+.doctor-alert-card {
+  background: linear-gradient(135deg, #1c1015, #140b10);
+  border: 1.5px solid var(--accent-red);
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+  animation: pulseGlow 2.5s infinite ease-in-out;
+}
+
+.doctor-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.doctor-alert-icon {
+  font-size: 1.8rem;
+}
+
+.doctor-alert-title {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #f87171;
+}
+
+.doctor-alert-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.doctor-quote-box {
+  background: rgba(0, 0, 0, 0.4);
+  border-left: 3px solid #ef4444;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #fecaca;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.impending-box {
+  font-size: 0.75rem;
+  color: #fbbf24;
+}
+
+@keyframes pulseGlow {
+  0% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.15); }
+  50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.35); }
+  100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.15); }
+}

@@ -8,7 +8,7 @@ export const DAILY_GRIND_EVENTS: EventCardDef[] = [
     emoji: '🚌',
     narrative: 'The metro station is packed to the brim. A rickshaw is waiting outside offering a direct ride to your office.',
     priority: 10,
-    cooldownDays: 3,
+    cooldownDays: 12,
     condition: (state) => state.player.lifestyle.transportMode === 'walk',
     choices: [
       {
@@ -59,7 +59,7 @@ export const DAILY_GRIND_EVENTS: EventCardDef[] = [
     emoji: '🍱',
     narrative: 'It is 1:30 PM and your stomach is growling. The spicy aroma of the street food stall wafts in through the window.',
     priority: 8,
-    cooldownDays: 4,
+    cooldownDays: 10,
     choices: [
       {
         id: 'street-chole-bhature',
@@ -123,13 +123,134 @@ export const DAILY_GRIND_EVENTS: EventCardDef[] = [
     ]
   },
   {
+    id: 'daily-chai-tapri-break',
+    category: 'daily',
+    title: '4:00 PM Chai Tapri Break',
+    emoji: '☕',
+    narrative: 'Your office team heads downstairs to the corner tea stall for ginger cutting chai and hot samosas.',
+    priority: 9,
+    cooldownDays: 8,
+    choices: [
+      {
+        id: 'hot-cutting-chai',
+        label: 'Cutting Chai & Bun Maska (-₹30)',
+        emoji: '🫖',
+        preview: [
+          { text: '-₹30', type: 'neutral' },
+          { text: '+12 Mental', type: 'positive' },
+          { text: '-8 Stress', type: 'positive' }
+        ],
+        disabled: (state) => state.player.money < 30,
+        disabledReason: 'Need ₹30 cash',
+        onSelect: (state) => {
+          state.player.money -= 30;
+          state.player.health.mental = Math.min(100, state.player.health.mental + 12);
+          state.player.stats.stress = Math.max(0, state.player.stats.stress - 8);
+          return {
+            outcomeText: 'Steaming spicy ginger tea and banter with colleagues washed away the afternoon office fatigue.',
+            moneyDelta: -30,
+            mentalDelta: 12,
+            stressDelta: -8
+          };
+        }
+      },
+      {
+        id: 'drink-desk-water',
+        label: 'Stay at Desk & Grind',
+        emoji: '💻',
+        preview: [
+          { text: 'Save ₹30', type: 'neutral' }
+        ],
+        onSelect: () => {
+          return {
+            outcomeText: 'You kept staring at spreadsheets while the office was quiet.'
+          };
+        }
+      }
+    ]
+  },
+  {
+    id: 'daily-podcast-learning',
+    category: 'daily',
+    title: 'Commute Wealth Audio',
+    emoji: '🎧',
+    narrative: 'You have a 35-minute commute ahead. Do you plug into a masterclass on value investing or mindlessly shuffle pop music?',
+    priority: 11,
+    cooldownDays: 14,
+    choices: [
+      {
+        id: 'listen-finance-pod',
+        label: 'Listen to Compound Interest Deep Dive',
+        emoji: '🎙️',
+        preview: [
+          { text: '+10 Financial Insight', type: 'positive' },
+          { text: '+5 Mental', type: 'positive' }
+        ],
+        onSelect: (state) => {
+          state.player.health.mental = Math.min(100, state.player.health.mental + 5);
+          return {
+            outcomeText: 'You absorbed crucial insights on asset allocation and avoiding lifestyle inflation. Commute well-spent!',
+            mentalDelta: 5
+          };
+        }
+      },
+      {
+        id: 'listen-music-chill',
+        label: 'Listen to Lo-Fi Chill Tracks',
+        emoji: '🎵',
+        preview: [
+          { text: '-6 Stress', type: 'positive' },
+          { text: '+5 Energy', type: 'positive' }
+        ],
+        onSelect: (state) => {
+          state.player.stats.stress = Math.max(0, state.player.stats.stress - 6);
+          state.player.health.energy = Math.min(100, state.player.health.energy + 5);
+          return {
+            outcomeText: 'Mellow beats relaxed your mind on the journey home.',
+            stressDelta: -6,
+            energyDelta: 5
+          };
+        }
+      }
+    ]
+  },
+  {
+    id: 'daily-morning-sunlight',
+    category: 'daily',
+    title: 'Balcony Morning Sunshine',
+    emoji: '🌅',
+    narrative: 'Early morning sunlight floods through the balcony. The city is calm before the rush hour mayhem begins.',
+    priority: 8,
+    cooldownDays: 10,
+    choices: [
+      {
+        id: 'soak-morning-sun',
+        label: '15 Mins Sun & Deep Breaths',
+        emoji: '🧘',
+        preview: [
+          { text: '+8 Physical (Vitamin D)', type: 'positive' },
+          { text: '+10 Energy Boost', type: 'positive' }
+        ],
+        onSelect: (state) => {
+          state.player.health.physical = Math.min(100, state.player.health.physical + 8);
+          state.player.health.energy = Math.min(100, state.player.health.energy + 10);
+          return {
+            outcomeText: 'Warm sunlight reset your circadian rhythm and elevated your morning vitality. Pure zero-cost health!',
+            physicalDelta: 8,
+            energyDelta: 10
+          };
+        }
+      }
+    ]
+  },
+  {
     id: 'daily-boss-overtime',
     category: 'daily',
     title: 'Urgent Client Escalation',
     emoji: '💼',
     narrative: 'Your manager drops by your desk at 5:45 PM: "We need someone to finish this client deck tonight. 1.5x overtime bonus if you stay."',
     priority: 15,
-    cooldownDays: 5,
+    cooldownDays: 16,
     choices: [
       {
         id: 'accept-overtime',
@@ -178,7 +299,7 @@ export const DAILY_GRIND_EVENTS: EventCardDef[] = [
     emoji: '🏋️',
     narrative: 'You are back home. The bed looks inviting, but your workout shoes are sitting right by the door.',
     priority: 9,
-    cooldownDays: 3,
+    cooldownDays: 12,
     choices: [
       {
         id: 'do-pushups-run',
@@ -216,53 +337,6 @@ export const DAILY_GRIND_EVENTS: EventCardDef[] = [
           return {
             outcomeText: 'You sank into the cushions and watched random comedy sketches. Restful, but the body stiffens.',
             energyDelta: 12
-          };
-        }
-      }
-    ]
-  },
-  {
-    id: 'daily-night-doomscroll',
-    category: 'daily',
-    title: 'Late Night Screen Glow',
-    emoji: '📱',
-    narrative: 'It is 11:30 PM. You are in bed scrolling short-form videos. Just one more reel turns into an hour.',
-    priority: 8,
-    cooldownDays: 4,
-    choices: [
-      {
-        id: 'turn-off-sleep',
-        label: 'Put Phone Away (8 Hrs Sleep)',
-        emoji: '😴',
-        preview: [
-          { text: '+20 Energy', type: 'positive' },
-          { text: '+5 Mental', type: 'positive' }
-        ],
-        onSelect: (state) => {
-          state.player.health.energy = Math.min(100, state.player.health.energy + 20);
-          state.player.health.mental = Math.min(100, state.player.health.mental + 5);
-          return {
-            outcomeText: 'You enjoyed deep REM sleep and woke up feeling like a million bucks.',
-            energyDelta: 20,
-            mentalDelta: 5
-          };
-        }
-      },
-      {
-        id: 'doomscroll-till-2am',
-        label: 'Scroll Until 2:00 AM',
-        emoji: '👀',
-        preview: [
-          { text: '-15 Energy', type: 'negative' },
-          { text: '+10 Stress', type: 'negative' }
-        ],
-        onSelect: (state) => {
-          state.player.health.energy = Math.max(0, state.player.health.energy - 15);
-          state.player.stats.stress = Math.min(100, state.player.stats.stress + 10);
-          return {
-            outcomeText: 'You watched viral debates and luxury lifestyle reels. You wake up with gritty eyes and brain fog.',
-            energyDelta: -15,
-            stressDelta: 10
           };
         }
       }

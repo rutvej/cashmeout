@@ -8,7 +8,7 @@ export const OPPORTUNITY_EVENTS: EventCardDef[] = [
     emoji: '💻',
     narrative: 'An ex-colleague messages you on LinkedIn: "Hey, we have an urgent data cleaning & presentation project for a client. Can you deliver by Monday? Budget ₹3,500."',
     priority: 30,
-    cooldownDays: 10,
+    cooldownDays: 25,
     choices: [
       {
         id: 'accept-freelance',
@@ -57,7 +57,7 @@ export const OPPORTUNITY_EVENTS: EventCardDef[] = [
     emoji: '🚲',
     narrative: 'Your apartment neighbor is relocating to Bangalore and selling their lightly-used 21-speed commuter bicycle for just ₹3,000 (Store price is ₹5,000).',
     priority: 35,
-    cooldownDays: 30,
+    once: true,
     condition: (state) => !state.player.lifestyleAssets.some(a => a.id === 'bicycle') && state.player.lifestyle.transportMode === 'walk',
     choices: [
       {
@@ -109,7 +109,7 @@ export const OPPORTUNITY_EVENTS: EventCardDef[] = [
     emoji: '💻',
     narrative: 'Your IT department is liquidating high-performance ThinkPad laptops after a company-wide upgrade: ₹35,000 for a machine that retailed at ₹60,000!',
     priority: 35,
-    cooldownDays: 45,
+    once: true,
     condition: (state) => !state.player.lifestyleAssets.some(a => a.id === 'laptop'),
     choices: [
       {
@@ -154,13 +154,68 @@ export const OPPORTUNITY_EVENTS: EventCardDef[] = [
     ]
   },
   {
+    id: 'opp-tech-ipo-frenzy',
+    category: 'opportunity',
+    title: 'CloudNet Tech IPO Allotment',
+    emoji: '🚀',
+    narrative: 'CloudNet Solutions is filing for an initial public offering (IPO) on the National Stock Exchange. Retail lots are open at ₹14,000 per application lot.',
+    priority: 32,
+    cooldownDays: 60,
+    condition: (state) => state.player.currentDay >= 45 && state.player.money >= 14000,
+    choices: [
+      {
+        id: 'apply-ipo-lot',
+        label: 'Apply 1 Lot (₹14,000)',
+        emoji: '📝',
+        preview: [
+          { text: '-₹14,000 applied', type: 'negative' },
+          { text: 'Listing gain potential', type: 'positive' }
+        ],
+        onSelect: (state) => {
+          state.player.money -= 14000;
+          // 70% chance of lucrative listing pop
+          const success = Math.random() > 0.3;
+          if (success) {
+            const earned = 18500; // 32% listing gain
+            state.player.money += earned;
+            state.player.taxes.capitalGainsThisCycle += (earned - 14000);
+            state.player.health.mental = Math.min(100, state.player.health.mental + 20);
+            return {
+              outcomeText: `IPO Allotted! CloudNet listed with a 32% premium. You cashed out on opening bell for ₹18,500 (+₹4,500 net gain)!`,
+              moneyDelta: 4500,
+              mentalDelta: 20
+            };
+          } else {
+            state.player.money += 14000; // unallotted refund
+            return {
+              outcomeText: 'Oversubscribed 45x! You were not allotted any shares. Full ₹14,000 unblocked back to wallet.'
+            };
+          }
+        }
+      },
+      {
+        id: 'skip-ipo',
+        label: 'Skip IPO Volatility',
+        emoji: '🛡️',
+        preview: [
+          { text: 'Keep cash liquid', type: 'neutral' }
+        ],
+        onSelect: () => {
+          return {
+            outcomeText: 'You skipped the IPO speculation to keep your cash buffer intact.'
+          };
+        }
+      }
+    ]
+  },
+  {
     id: 'opp-skill-workshop',
     category: 'opportunity',
-    title: 'Weekend Financial Analytics Workshop',
+    title: 'Financial Valuation Masterclass',
     emoji: '📊',
-    narrative: 'A renowned portfolio manager is hosting a 2-day intensive financial modeling bootcamp downtown.',
+    narrative: 'A top equity research analyst is hosting an exclusive weekend corporate valuation bootcamp.',
     priority: 28,
-    cooldownDays: 20,
+    cooldownDays: 35,
     choices: [
       {
         id: 'attend-workshop',
@@ -168,7 +223,7 @@ export const OPPORTUNITY_EVENTS: EventCardDef[] = [
         emoji: '🎓',
         preview: [
           { text: '-₹2,500', type: 'negative' },
-          { text: '+30% Course Credit', type: 'positive' },
+          { text: '+35% Course Credit', type: 'positive' },
           { text: '+15 Mental', type: 'positive' }
         ],
         disabled: (state) => state.player.money < 2500,

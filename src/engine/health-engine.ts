@@ -1,12 +1,26 @@
 import { GameState } from '../types/game';
 import { FOOD_TIERS, TRANSPORT_MODES } from '../data/static-data';
 
+export interface HealthWarning {
+  meterKey: 'cheapFoodDays' | 'noExerciseDays' | 'highStressDays' | 'lowEnergyDays' | 'unhealthyDays';
+  title: string;
+  doctorName: string;
+  meterName: string;
+  currentDays: number;
+  maxDays: number;
+  pct: number;
+  impendingCrisis: string;
+  expectedCost: number;
+  advice: string;
+}
+
 export interface HealthConsequenceResult {
   triggered: boolean;
   name?: string;
   medicalBill?: number;
   outOfPocketCost?: number;
   description?: string;
+  warning?: HealthWarning;
 }
 
 export function processHealthAndConsequences(state: GameState, day: number): HealthConsequenceResult {
@@ -84,6 +98,61 @@ export function processHealthAndConsequences(state: GameState, day: number): Hea
   // 5. Threshold triggers
   let result: HealthConsequenceResult = { triggered: false };
 
+  // Check 60% Early Doctor Warning (Entering the red zone)
+  if (p.consequenceMeters.cheapFoodDays === 12) {
+    result.warning = {
+      meterKey: 'cheapFoodDays',
+      title: 'Digestive Inflammation Warning (60% Risk)',
+      doctorName: 'Dr. Nair (Gastroenterologist)',
+      meterName: 'Street Food Strain',
+      currentDays: p.consequenceMeters.cheapFoodDays,
+      maxDays: 20,
+      pct: 60,
+      impendingCrisis: 'Acute Gastroenteritis',
+      expectedCost: 3500,
+      advice: 'Your digestive tract has sustained 12 consecutive days of cheap, unhygienic street oils. If this reaches 20 days, bacterial infection will trigger Acute Gastroenteritis with a ₹3,500 clinic bill! Switch to clean home food or take prescribed probiotics now.'
+    };
+  } else if (p.consequenceMeters.noExerciseDays === 21) {
+    result.warning = {
+      meterKey: 'noExerciseDays',
+      title: 'Lumbar Spine Compression Warning (60% Risk)',
+      doctorName: 'Dr. Kapoor (Orthopedic)',
+      meterName: 'Sedentary Inactivity',
+      currentDays: p.consequenceMeters.noExerciseDays,
+      maxDays: 35,
+      pct: 60,
+      impendingCrisis: 'Severe Lumbar Spasm',
+      expectedCost: 5500,
+      advice: '21 consecutive days of sitting have compressed your L4-L5 vertebrae. In just 14 more days, you will trigger an acute lumbar spasm costing ₹5,500 in emergency physio! Allocate workout time or schedule daily cardio immediately.'
+    };
+  } else if (p.consequenceMeters.highStressDays === 15) {
+    result.warning = {
+      meterKey: 'highStressDays',
+      title: 'Nervous Exhaustion Warning (60% Risk)',
+      doctorName: 'Dr. Shenoy (Psychiatrist)',
+      meterName: 'Stress & Cortisol Fatigue',
+      currentDays: p.consequenceMeters.highStressDays,
+      maxDays: 25,
+      pct: 60,
+      impendingCrisis: 'Panic & Clinical Burnout',
+      expectedCost: 7000,
+      advice: 'Your stress levels have been in the danger zone for 15 straight days. In 10 days, adrenal collapse and panic episodes will force ₹7,000 in psychiatric care! Take a rest slot and unplug tonight.'
+    };
+  } else if (p.consequenceMeters.lowEnergyDays === 9) {
+    result.warning = {
+      meterKey: 'lowEnergyDays',
+      title: 'Severe Sleep Debt Warning (60% Risk)',
+      doctorName: 'Dr. Verma (Physician)',
+      meterName: 'Energy Depletion',
+      currentDays: p.consequenceMeters.lowEnergyDays,
+      maxDays: 15,
+      pct: 60,
+      impendingCrisis: 'Adrenal Burnout',
+      expectedCost: 4000,
+      advice: 'Operating on under 25% energy for 9 consecutive days has drained your cellular reserves. In 6 days, total adrenal burnout will cost ₹4,000 in hospitalization! Sleep 8 hours tonight.'
+    };
+  }
+
   if (p.consequenceMeters.cheapFoodDays >= 20) {
     p.consequenceMeters.cheapFoodDays = 0;
     result = triggerMedicalEvent(state, day, 'Acute Gastroenteritis (Street Food Streak)', 3500, -18);
@@ -102,6 +171,89 @@ export function processHealthAndConsequences(state: GameState, day: number): Hea
   }
 
   return result;
+}
+
+export function getConsequenceWarnings(state: GameState): HealthWarning[] {
+  const p = state.player;
+  const warnings: HealthWarning[] = [];
+
+  const check = (
+    key: 'cheapFoodDays' | 'noExerciseDays' | 'highStressDays' | 'lowEnergyDays' | 'unhealthyDays',
+    cur: number,
+    max: number,
+    title: string,
+    doctorName: string,
+    meterName: string,
+    crisis: string,
+    cost: number,
+    advice: string
+  ) => {
+    const pct = Math.round((cur / max) * 100);
+    if (pct >= 60) {
+      warnings.push({
+        meterKey: key,
+        title,
+        doctorName,
+        meterName,
+        currentDays: cur,
+        maxDays: max,
+        pct,
+        impendingCrisis: crisis,
+        expectedCost: cost,
+        advice
+      });
+    }
+  };
+
+  check(
+    'cheapFoodDays',
+    p.consequenceMeters.cheapFoodDays,
+    20,
+    'Gut Inflammation Alert',
+    'Dr. Nair (Gastroenterologist)',
+    'Street Food Strain',
+    'Acute Gastroenteritis',
+    3500,
+    '12+ days of cheap street food is eroding stomach lining. Switch to home food before hospital bills hit!'
+  );
+
+  check(
+    'noExerciseDays',
+    p.consequenceMeters.noExerciseDays,
+    35,
+    'Spinal Compression Alert',
+    'Dr. Kapoor (Orthopedic)',
+    'Sedentary Inactivity',
+    'Severe Lumbar Spasm',
+    5500,
+    '21+ days without workout has frozen your lumbar joints. Add a workout slot to avoid ₹5,500 physio bills.'
+  );
+
+  check(
+    'highStressDays',
+    p.consequenceMeters.highStressDays,
+    25,
+    'Adrenal Burnout Alert',
+    'Dr. Shenoy (Psychiatrist)',
+    'High Stress Fatigue',
+    'Panic & Nervous Exhaustion',
+    7000,
+    '15+ days in high stress danger zone. Unplug and rest before a severe panic crash occurs.'
+  );
+
+  check(
+    'lowEnergyDays',
+    p.consequenceMeters.lowEnergyDays,
+    15,
+    'Cellular Fatigue Alert',
+    'Dr. Verma (Physician)',
+    'Low Energy Fatigue',
+    'Adrenal Burnout',
+    4000,
+    'Running on empty for 9+ days. Get deep sleep tonight to protect your immune system.'
+  );
+
+  return warnings;
 }
 
 function triggerMedicalEvent(

@@ -1,7 +1,7 @@
 import { GameState } from '../types/game';
 import { ActiveEventCard, EventCardDef, ChoiceResult } from './event-types';
 import { ALL_EVENT_DEFS, getEventDefById } from './event-pool';
-import { HealthConsequenceResult } from '../engine/health-engine';
+import { HealthConsequenceResult, HealthWarning } from '../engine/health-engine';
 
 export class EventScheduler {
   private seenEvents: Map<string, number> = new Map(); // defId -> lastDaySeen
@@ -58,7 +58,13 @@ export class EventScheduler {
       cards.push(emergencyCard);
     }
 
-    // 2. Filter available event defs
+    // 2. If a 60% danger zone doctor warning was triggered, build doctor warning card
+    if (healthEmergency && healthEmergency.warning) {
+      const warningCard = this.createDoctorWarningCard(state, healthEmergency.warning, currentDay);
+      cards.push(warningCard);
+    }
+
+    // 3. Filter available event defs
     const eligibleDefs = ALL_EVENT_DEFS.filter(def => {
       // If once-only and already triggered
       if (def.once && this.onceTriggered.has(def.id)) return false;
@@ -156,6 +162,46 @@ export class EventScheduler {
     };
   }
 
+  private createDoctorWarningCard(
+    state: GameState,
+    w: HealthWarning,
+    day: number
+  ): ActiveEventCard {
+    return {
+      instanceId: `card-doctor-warning-${w.meterKey}-${day}-${Date.now()}`,
+      defId: `doctor-warning-${w.meterKey}`,
+      category: 'health',
+      title: `👨‍⚕️ Doctor's Warning: ${w.title}`,
+      emoji: '🩺',
+      narrative: `${w.doctorName} stops you after inspecting your test indicators: "${w.advice}"`,
+      day,
+      choices: [
+        {
+          id: 'follow-advice',
+          label: "Follow Doctor's Detox Regimen",
+          emoji: '💊',
+          preview: [
+            { text: '-₹400 Consultation/Meds', type: 'negative' },
+            { text: `-8 ${w.meterName} Days (Safe Zone!)`, type: 'positive' },
+            { text: '+12 Health Recovery', type: 'positive' }
+          ],
+          disabled: state.player.money < 400,
+          disabledReason: 'Need ₹400 cash'
+        },
+        {
+          id: 'brush-off',
+          label: "Brush Off: 'I'll Be Fine, Doc'",
+          emoji: '🏃',
+          preview: [
+            { text: '₹0 spent', type: 'neutral' },
+            { text: `Impending ${w.impendingCrisis} (~₹${w.expectedCost})`, type: 'negative' }
+          ]
+        }
+      ],
+      resolved: false
+    };
+  }
+
   public resolveCardChoice(
     card: ActiveEventCard,
     choiceId: string,
@@ -167,6 +213,33 @@ export class EventScheduler {
       card.selectedChoiceId = choiceId;
       card.outcomeText = 'You paid the medical charges and rested. Time to re-evaluate lifestyle habits!';
       return { outcomeText: card.outcomeText };
+    }
+
+    // If it's the doctor 60% warning card
+    if (card.defId.startsWith('doctor-warning-')) {
+      const meterKey = card.defId.replace('doctor-warning-', '') as
+        | 'cheapFoodDays'
+        | 'noExerciseDays'
+        | 'highStressDays'
+        | 'lowEnergyDays';
+
+      card.resolved = true;
+      card.selectedChoiceId = choiceId;
+
+      if (choiceId === 'follow-advice') {
+        state.player.money = Math.max(0, state.player.money - 400);
+        if (state.player.consequenceMeters[meterKey] !== undefined) {
+          state.player.consequenceMeters[meterKey] = Math.max(0, state.player.consequenceMeters[meterKey] - 8);
+        }
+        state.player.health.physical = Math.min(100, state.player.health.physical + 12);
+        card.moneyDelta = -400;
+        card.outcomeText = `You followed doctor's advice, rested, and took prescribed detox supplements. Your strain dropped safely to ${state.player.consequenceMeters[meterKey]} days!`;
+        return { outcomeText: card.outcomeText, moneyDelta: -400 };
+      } else {
+        state.player.stats.stress = Math.min(100, state.player.stats.stress + 5);
+        card.outcomeText = `You brushed off the physician's warning. The risk continues building toward an emergency...`;
+        return { outcomeText: card.outcomeText };
+      }
     }
 
     const def = getEventDefById(card.defId);

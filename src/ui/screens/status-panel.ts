@@ -6,6 +6,7 @@ import { ALL_JOBS, FOOD_TIERS } from '../../data/static-data';
 import { HEALTH_INSURANCE_TIERS } from '../../data/insurance-plans';
 import { UnlockManager } from '../../progression/unlock-manager';
 import { FeatureUnlockDef } from '../../progression/unlock-types';
+import { getConsequenceWarnings } from '../../engine/health-engine';
 
 export function renderStatusPanelScreen(
   state: GameState,
@@ -14,6 +15,7 @@ export function renderStatusPanelScreen(
 ): HTMLElement {
   const p = state.player;
   const netWorth = calculateNetWorth(state);
+  const healthWarnings = getConsequenceWarnings(state);
 
   const container = document.createElement('div');
   container.className = 'screen-content status-panel-screen';
@@ -36,6 +38,27 @@ export function renderStatusPanelScreen(
     </div>
   `;
   container.appendChild(heroCard);
+
+  // 1b. Active Doctor's Warning Advisory Banner (if any meter >= 60%)
+  if (healthWarnings.length > 0) {
+    const docCard = document.createElement('div');
+    docCard.className = 'card doctor-alert-card';
+    docCard.innerHTML = `
+      <div class="doctor-alert-header">
+        <span class="doctor-alert-icon">👨‍⚕️</span>
+        <div>
+          <div class="doctor-alert-title">Doctor's Medical Advisory</div>
+          <div class="doctor-alert-sub">${healthWarnings[0].doctorName}</div>
+        </div>
+        <span class="badge badge-red">⚠️ ${healthWarnings[0].pct}% Red Zone</span>
+      </div>
+      <div class="doctor-quote-box">"${healthWarnings[0].advice}"</div>
+      <div class="impending-box">
+        ⚠️ <strong>Impending Emergency:</strong> ${healthWarnings[0].impendingCrisis} (Estimated Bill: ${formatCurrency(healthWarnings[0].expectedCost)})
+      </div>
+    `;
+    container.appendChild(docCard);
+  }
 
   // 2. Career, Occupation & Schedule Card (Always Unlocked)
   const careerCard = document.createElement('div');
@@ -73,6 +96,19 @@ export function renderStatusPanelScreen(
             ${p.job.id === j.id ? '<span class="badge badge-green">Current</span>' : `<button class="btn btn-sm btn-switch-job-status" data-id="${j.id}" style="padding:2px 6px;">Switch</button>`}
           </div>
         `).join('')}
+      </div>
+    </div>
+
+    <!-- Consequence Risk Trackers -->
+    <div style="margin-top:12px; border-top:1px solid #1a2336; padding-top:8px;">
+      <div style="font-size:0.75rem; font-weight:700; color:var(--text-muted); margin-bottom:6px;">
+        🩺 Health Consequence Trackers (Doctor Alert at 60% • Crisis at 100%):
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${renderMeterRow('Street Food Strain', p.consequenceMeters.cheapFoodDays, 20, 'At 20d: Acute Gastroenteritis (₹3,500)')}
+        ${renderMeterRow('Sedentary Inactivity', p.consequenceMeters.noExerciseDays, 35, 'At 35d: Severe Lumbar Spasm (₹5,500)')}
+        ${renderMeterRow('High Stress Fatigue', p.consequenceMeters.highStressDays, 25, 'At 25d: Panic & Clinical Burnout (₹7,000)')}
+        ${renderMeterRow('Energy Depletion', p.consequenceMeters.lowEnergyDays, 15, 'At 15d: Adrenal Burnout (₹4,000)')}
       </div>
     </div>
   `;
@@ -283,6 +319,24 @@ function renderLockedTeaser(def: FeatureUnlockDef, state: GameState): string {
       <div class="locked-bar-track">
         <div class="locked-bar-fill" style="width: ${prog.pct}%;"></div>
       </div>
+    </div>
+  `;
+}
+
+function renderMeterRow(name: string, cur: number, max: number, crisis: string): string {
+  const pct = Math.min(100, Math.round((cur / max) * 100));
+  const isDanger = pct >= 60;
+  const color = isDanger ? 'var(--accent-red)' : (pct >= 40 ? 'var(--accent-gold)' : 'var(--accent-green)');
+  return `
+    <div style="background:#0b0f19; padding:6px 8px; border-radius:6px; border:1px solid ${isDanger ? 'rgba(239, 68, 68, 0.4)' : '#1a2336'};">
+      <div style="display:flex; justify-content:space-between; font-size:0.7rem;">
+        <span style="font-weight:600;">${name}</span>
+        <span style="color:${color}; font-weight:700;">${cur} / ${max}d (${pct}%) ${isDanger ? '⚠️ 60% Danger' : ''}</span>
+      </div>
+      <div class="meter-track" style="margin:4px 0; height:4px; background:#141c2c; border-radius:999px; overflow:hidden;">
+        <div class="meter-fill" style="width:${pct}%; background:${color}; height:100%;"></div>
+      </div>
+      <div style="font-size:0.6rem; color:#64748b;">${crisis}</div>
     </div>
   `;
 }
