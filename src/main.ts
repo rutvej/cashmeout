@@ -21,6 +21,9 @@ import { renderLifeScreen } from './ui/screens/life';
 import { renderHealthRing } from './ui/components/health-ring';
 import { EventScheduler } from './events/event-scheduler';
 import { ActiveEventCard } from './events/event-types';
+import { UnlockManager } from './progression/unlock-manager';
+import { showUnlockToast } from './ui/components/unlock-toast';
+import { createUnlockMilestoneCard } from './progression/unlock-events';
 
 // Modals
 import { showTimeAllocationModal, showDietModal, showStockTradeModal } from './ui/modals/all-modals';
@@ -31,13 +34,18 @@ class App {
   private gameLoop: GameLoop;
   private appEl: HTMLElement;
   private eventScheduler: EventScheduler;
+  private unlockManager: UnlockManager;
   private activeCards: ActiveEventCard[] = [];
 
   constructor() {
     this.appEl = document.getElementById('app')!;
     this.state = loadGame();
     this.eventScheduler = new EventScheduler();
+    this.unlockManager = new UnlockManager();
     this.activeCards = this.eventScheduler.generateCardsForDay(this.state);
+
+    // Initial check for any unlocks
+    this.checkAndTriggerUnlocks();
 
     // Init game loop
     this.gameLoop = new GameLoop(
@@ -138,7 +146,7 @@ class App {
         ));
         break;
       case 'status':
-        container.appendChild(renderStatusPanelScreen(this.state, onAction));
+        container.appendChild(renderStatusPanelScreen(this.state, onAction, this.unlockManager));
         break;
       case 'dashboard':
         container.appendChild(renderDashboardScreen(this.state, onAction));
@@ -163,6 +171,7 @@ class App {
 
   private handleCardChoice(card: ActiveEventCard, choiceId: string): void {
     this.eventScheduler.resolveCardChoice(card, choiceId, this.state);
+    this.checkAndTriggerUnlocks();
     saveGame(this.state);
     this.updateHeader();
     this.renderActiveTab();
@@ -175,9 +184,24 @@ class App {
   private onDayTick(_day: number, healthEmergency?: HealthConsequenceResult): void {
     const newCards = this.eventScheduler.generateCardsForDay(this.state, healthEmergency);
     this.activeCards = [...newCards, ...this.activeCards.filter(c => !c.resolved)];
+    this.checkAndTriggerUnlocks();
     saveGame(this.state);
     this.updateHeader();
     this.renderActiveTab();
+  }
+
+  private checkAndTriggerUnlocks(): void {
+    const newUnlocks = this.unlockManager.checkNewUnlocks(this.state);
+    newUnlocks.forEach(feature => {
+      showUnlockToast(feature);
+      const card = createUnlockMilestoneCard(feature, this.state.player.currentDay);
+      this.activeCards.unshift(card);
+      this.state.player.eventLog.unshift({
+        day: this.state.player.currentDay,
+        text: `🔓 Feature Unlocked: ${feature.name} (${feature.tagline})`,
+        type: 'achievement'
+      });
+    });
   }
 
   private onRender(): void {
