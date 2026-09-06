@@ -28,7 +28,7 @@ class App {
     this.state = loadGame();
 
     // Check offline catch-up
-    this.handleOfflineCatchup();
+    // this.handleOfflineCatchup();
 
     // Init game loop
     this.gameLoop = new GameLoop(
@@ -40,6 +40,11 @@ class App {
     this.renderAppShell();
     this.renderActiveTab();
     this.gameLoop.start();
+
+    // Run catchup asynchronously so UI is already rendered
+    setTimeout(() => {
+      this.handleOfflineCatchup();
+    }, 200);
   }
 
   private handleOfflineCatchup(): void {
@@ -454,6 +459,25 @@ class App {
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  new App();
-});
+
+function initApp() {
+  try {
+    new App();
+  } catch (err) {
+    console.error('App initialization error:', err);
+    const appEl = document.getElementById('app');
+    if (appEl) {
+      appEl.innerHTML = `<div style="color:#ef4444;padding:24px;font-family:sans-serif;">
+        <h3>Error starting game:</h3>
+        <pre>${String(err instanceof Error ? err.stack || err.message : err)}</pre>
+        <button onclick="localStorage.clear();location.reload();" style="padding:8px 16px;background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;cursor:pointer;margin-top:12px;">Reset Save Data & Reload</button>
+      </div>`;
+    }
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
