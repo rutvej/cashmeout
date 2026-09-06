@@ -2,7 +2,7 @@ import { GameState } from '../../types/game';
 import { calculateNetWorth } from '../../engine/economy-engine';
 import { formatCurrency } from '../components/format';
 import { exportSaveFile, resetGame } from '../../save/save-manager';
-import { ALL_JOBS, FOOD_TIERS } from '../../data/static-data';
+import { ALL_JOBS, FOOD_TIERS, COURSES } from '../../data/static-data';
 import { HEALTH_INSURANCE_TIERS } from '../../data/insurance-plans';
 import { UnlockManager } from '../../progression/unlock-manager';
 import { FeatureUnlockDef } from '../../progression/unlock-types';
@@ -60,13 +60,13 @@ export function renderStatusPanelScreen(
     container.appendChild(docCard);
   }
 
-  // 2. Career, Occupation & Schedule Card (Always Unlocked)
+  // 2. Career, Occupation & Schedule Card
   const careerCard = document.createElement('div');
   careerCard.className = 'card';
   const foodTier = FOOD_TIERS[p.lifestyle.foodTier];
   careerCard.innerHTML = `
     <div class="card-title">
-      <span>💼 Career, Diet & Schedule</span>
+      <span>💼 Current Occupation & Routine</span>
       <button class="btn btn-primary btn-sm" id="btn-status-time-alloc">Reallocate Time</button>
     </div>
     
@@ -75,7 +75,7 @@ export function renderStatusPanelScreen(
         <div style="font-weight:700; font-size:0.85rem;">${p.job.title}</div>
         <div style="font-size:0.7rem; color:var(--text-muted);">Salary: ${formatCurrency(p.job.salaryPerCycle)} / 15d • Takes ${p.job.timeSlotsCost} slots</div>
       </div>
-      <span class="badge badge-green">Active Job</span>
+      <span class="badge badge-green">Active Position</span>
     </div>
 
     <div style="background:#0b0f19; padding:8px 10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
@@ -84,19 +84,6 @@ export function renderStatusPanelScreen(
         <div style="font-size:0.7rem; color:var(--text-muted);">${formatCurrency(foodTier.costPerDay)}/day • ${foodTier.physicalDelta >= 0 ? '+' : ''}${foodTier.physicalDelta} health/day</div>
       </div>
       <button class="btn btn-sm" id="btn-status-change-diet">Change Diet</button>
-    </div>
-
-    <!-- Career Opportunities -->
-    <div style="margin-top:10px;">
-      <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Available Positions:</div>
-      <div style="display:flex; flex-direction:column; gap:4px;">
-        ${ALL_JOBS.slice(0, 3).map(j => `
-          <div style="background:#0b0f19; padding:6px 8px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
-            <span>${j.title} (${formatCurrency(j.salaryPerCycle)}/15d)</span>
-            ${p.job.id === j.id ? '<span class="badge badge-green">Current</span>' : `<button class="btn btn-sm btn-switch-job-status" data-id="${j.id}" style="padding:2px 6px;">Switch</button>`}
-          </div>
-        `).join('')}
-      </div>
     </div>
 
     <!-- Consequence Risk Trackers -->
@@ -113,6 +100,87 @@ export function renderStatusPanelScreen(
     </div>
   `;
   container.appendChild(careerCard);
+
+  // 2b. Skills, Study Material & Certifications Catalog Card
+  const skillsCard = document.createElement('div');
+  skillsCard.className = 'card';
+  skillsCard.innerHTML = `
+    <div class="card-title">
+      <span>🎓 Study Material & Skills Catalog</span>
+      <span style="font-size:0.7rem; color:var(--text-muted);">Certify to Unlock High-Paying Jobs</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      ${COURSES.map(c => {
+        const isCertified = p.educationProgress[c.id] === 100;
+        const trackBadge = c.track === 'finance' ? 'badge-blue' : (c.track === 'tech' ? 'badge-green' : 'badge-gold');
+        return `
+          <div style="background:#0b0f19; padding:8px 10px; border-radius:8px; border:1px solid ${isCertified ? 'rgba(34, 197, 94, 0.3)' : '#1a2336'};">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <span class="badge ${trackBadge}" style="text-transform:uppercase; font-size:0.6rem;">${c.track} • Tier ${c.tier}</span>
+                <span style="font-weight:700; font-size:0.8rem; margin-left:4px;">${c.name}</span>
+              </div>
+              ${isCertified
+                ? '<span class="badge badge-green">✅ Certified</span>'
+                : `<button class="btn btn-primary btn-sm btn-enroll-course" data-id="${c.id}" ${p.money < c.fee ? 'disabled' : ''}>Enroll (${formatCurrency(c.fee)})</button>`
+              }
+            </div>
+            <div style="font-size:0.65rem; color:#94a3b8; margin:4px 0;">${c.description}</div>
+            <div style="font-size:0.7rem; color:#38bdf8; font-weight:600;">
+              ✨ Unlocks Job: <strong>${c.unlocksJobTitle}</strong> (${formatCurrency(c.unlocksJobSalary)} / 15d)
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  container.appendChild(skillsCard);
+
+  // 2c. Career Ladder & High-Paying Openings
+  const jobsCard = document.createElement('div');
+  jobsCard.className = 'card';
+  jobsCard.innerHTML = `
+    <div class="card-title">
+      <span>💼 High-Paying Career Openings</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      ${ALL_JOBS.map(j => {
+        const isCurrent = p.job.id === j.id;
+        const reqCourse = j.requiredCourse ? COURSES.find(c => c.id === j.requiredCourse) : undefined;
+        const hasCourse = !j.requiredCourse || p.educationProgress[j.requiredCourse] === 100;
+        const hasNetWorth = !j.requiredMinNetWorth || netWorth >= j.requiredMinNetWorth;
+        const isQualified = hasCourse && hasNetWorth;
+
+        return `
+          <div style="background:#0b0f19; padding:8px 10px; border-radius:8px; border:1px solid ${isCurrent ? '#38bdf8' : (isQualified ? '#1e293b' : '#141a29')}; opacity:${isQualified || isCurrent ? '1' : '0.65'};">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <div style="font-weight:700; font-size:0.8rem;">${j.title}</div>
+                <div style="font-size:0.7rem; color:var(--accent-green); font-weight:700;">
+                  ${formatCurrency(j.salaryPerCycle)} / 15d <span style="color:#64748b; font-weight:400;">(${j.timeSlotsCost} slots • ${j.stressPerDay} stress/d)</span>
+                </div>
+              </div>
+              ${isCurrent
+                ? '<span class="badge badge-green">Current Role</span>'
+                : (isQualified
+                  ? `<button class="btn btn-success btn-sm btn-switch-job-status" data-id="${j.id}">Switch Job</button>`
+                  : `<span class="badge" style="background:#1e293b; color:#94a3b8;">🔒 Locked</span>`
+                )
+              }
+            </div>
+            ${!isQualified && (reqCourse || j.requiredMinNetWorth) ? `
+              <div style="font-size:0.65rem; color:#f87171; margin-top:3px;">
+                Requires: ${reqCourse ? `🎓 ${reqCourse.name}` : ''} ${j.requiredMinNetWorth ? `• Net Worth ${formatCurrency(j.requiredMinNetWorth)}` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  container.appendChild(jobsCard);
 
   // 3. Banking & Debt Desk Card (Gated behind 'banking', 'loans', 'insurance')
   const bankCard = document.createElement('div');
@@ -275,7 +343,14 @@ export function renderStatusPanelScreen(
   careerCard.querySelector('#btn-status-time-alloc')?.addEventListener('click', () => onAction('open-time-modal'));
   careerCard.querySelector('#btn-status-change-diet')?.addEventListener('click', () => onAction('open-diet-modal'));
 
-  careerCard.querySelectorAll('.btn-switch-job-status').forEach(btn => {
+  skillsCard.querySelectorAll('.btn-enroll-course').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+      onAction('enroll-course', { courseId: id });
+    });
+  });
+
+  jobsCard.querySelectorAll('.btn-switch-job-status').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
       onAction('switch-job', { jobId: id });

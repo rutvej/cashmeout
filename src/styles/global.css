@@ -532,6 +532,63 @@ body {
   opacity: 0.8;
 }
 
+.advance-buttons-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.fast-forward-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+}
+
+.btn-fast-forward {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.btn-fast-forward:hover {
+  background: #1e293b;
+  border-color: #38bdf8;
+  color: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.btn-ff-month {
+  border-color: #334155;
+  background: #111827;
+}
+
+.btn-ff-month:hover {
+  border-color: #a855f7;
+  color: #f3e8ff;
+}
+
+.sub-pill {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.2px;
+}
+
 .section-title-sub {
   font-size: 0.75rem;
   font-weight: 700;
@@ -713,6 +770,9 @@ body {
 .badge-green { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
 .badge-red { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
 .badge-gold { background: rgba(251, 191, 36, 0.15); color: #fde047; border: 1px solid rgba(251, 191, 36, 0.3); }
+.badge-blue { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }
+.badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+.badge-emerald { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
 
 /* Modal */
 .modal-backdrop {

@@ -8,7 +8,8 @@ export function renderEventFeedScreen(
   state: GameState,
   activeCards: ActiveEventCard[],
   onChoiceSelected: (card: ActiveEventCard, choiceId: string) => void,
-  onAdvanceDay: () => void
+  onAdvanceDay: () => void,
+  onFastForwardDays?: (days: number) => void
 ): HTMLElement {
   const container = document.createElement('div');
   container.className = 'screen-content event-feed-screen';
@@ -58,19 +59,41 @@ export function renderEventFeedScreen(
     allDoneBox.className = 'all-events-resolved-card';
     allDoneBox.innerHTML = `
       <div class="resolved-celebrate-icon">✨</div>
-      <h3 class="all-done-title">All Choices Made for Day ${state.player.currentDay}!</h3>
+      <h3 class="all-done-title">All Decisions Made for Day ${state.player.currentDay}!</h3>
       <p class="all-done-desc">
-        Your daily routine is running smoothly. Ready to see what tomorrow brings?
+        Your routine is running smoothly. Ready to see tomorrow or fast-forward through the calendar?
       </p>
-      <button class="btn-advance-day-large pop-press" id="btn-advance-day">
-        <span class="advance-icon">⚡</span>
-        <span class="advance-text">Advance to Next Day</span>
-        <span class="advance-sub">Next Day ➔</span>
-      </button>
+      
+      <div class="advance-buttons-group">
+        <button class="btn-advance-day-large pop-press" id="btn-advance-day">
+          <span class="advance-icon">⚡</span>
+          <span class="advance-text">Next Day</span>
+          <span class="advance-sub">+1 Day ➔</span>
+        </button>
+        
+        <div class="fast-forward-row">
+          <button class="btn btn-sm btn-fast-forward pop-press" id="btn-skip-week">
+            <span>⏩ Skip 7 Days</span>
+            <span class="sub-pill">1 Week</span>
+          </button>
+          <button class="btn btn-sm btn-fast-forward btn-ff-month pop-press" id="btn-skip-month">
+            <span>🗓️ Skip 30 Days</span>
+            <span class="sub-pill">Monthly Pay & Rent</span>
+          </button>
+        </div>
+      </div>
     `;
 
     allDoneBox.querySelector('#btn-advance-day')?.addEventListener('click', () => {
       onAdvanceDay();
+    });
+
+    allDoneBox.querySelector('#btn-skip-week')?.addEventListener('click', () => {
+      if (onFastForwardDays) onFastForwardDays(7);
+    });
+
+    allDoneBox.querySelector('#btn-skip-month')?.addEventListener('click', () => {
+      if (onFastForwardDays) onFastForwardDays(30);
     });
 
     container.appendChild(allDoneBox);

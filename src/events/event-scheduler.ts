@@ -2,6 +2,7 @@ import { GameState } from '../types/game';
 import { ActiveEventCard, EventCardDef, ChoiceResult } from './event-types';
 import { ALL_EVENT_DEFS, getEventDefById } from './event-pool';
 import { HealthConsequenceResult, HealthWarning } from '../engine/health-engine';
+import { COURSES, ALL_JOBS } from '../data/static-data';
 
 export class EventScheduler {
   private seenEvents: Map<string, number> = new Map(); // defId -> lastDaySeen
@@ -240,6 +241,34 @@ export class EventScheduler {
         card.outcomeText = `You brushed off the physician's warning. The risk continues building toward an emergency...`;
         return { outcomeText: card.outcomeText };
       }
+    }
+
+    // If it's a course certification milestone card
+    if (card.defId.startsWith('cert-')) {
+      const courseId = card.defId.replace('cert-', '');
+      card.resolved = true;
+      card.selectedChoiceId = choiceId;
+
+      if (choiceId === 'switch-now') {
+        const course = COURSES.find(c => c.id === courseId);
+        if (course) {
+          const job = ALL_JOBS.find(j => j.id === course.unlocksJobId);
+          if (job) {
+            state.player.job = {
+              id: job.id,
+              title: job.title,
+              salaryPerCycle: job.salaryPerCycle,
+              payCycleDays: job.payCycleDays,
+              stressPerDay: job.stressPerDay,
+              timeSlotsCost: job.timeSlotsCost
+            };
+            card.outcomeText = `Congratulations! You accepted the offer as ${job.title} earning ₹${job.salaryPerCycle.toLocaleString('en-IN')} / 15d!`;
+            return { outcomeText: card.outcomeText };
+          }
+        }
+      }
+      card.outcomeText = `Certification safely added to your resume! You can switch into this high-paying role anytime from your Life Status panel.`;
+      return { outcomeText: card.outcomeText };
     }
 
     const def = getEventDefById(card.defId);

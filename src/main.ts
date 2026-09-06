@@ -142,7 +142,8 @@ class App {
           this.state,
           this.activeCards,
           (card, choiceId) => this.handleCardChoice(card, choiceId),
-          () => this.handleAdvanceDay()
+          () => this.handleAdvanceDay(),
+          (days) => this.handleFastForwardDays(days)
         ));
         break;
       case 'status':
@@ -179,6 +180,49 @@ class App {
 
   private handleAdvanceDay(): void {
     this.gameLoop.simulateSingleDay();
+  }
+
+  private handleFastForwardDays(days: number): void {
+    const report = this.gameLoop.simulateMultipleDays(days);
+    this.checkAndTriggerUnlocks();
+    saveGame(this.state);
+    this.updateHeader();
+    this.renderActiveTab();
+
+    const incomeStr = report.moneyDelta >= 0 ? `+${formatCurrency(report.moneyDelta)}` : formatCurrency(report.moneyDelta);
+    const nwStr = report.netWorthDelta >= 0 ? `+${formatCurrency(report.netWorthDelta)}` : formatCurrency(report.netWorthDelta);
+
+    const toastContainerId = 'unlock-toast-container';
+    let container = document.getElementById(toastContainerId);
+    if (!container) {
+      container = document.createElement('div');
+      container.id = toastContainerId;
+      container.className = 'unlock-toast-container';
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'unlock-toast-item fast-forward-summary-toast';
+    toast.innerHTML = `
+      <div class="toast-glow-bar" style="background:linear-gradient(90deg, #38bdf8, #818cf8);"></div>
+      <div class="toast-content-row">
+        <span class="toast-feature-icon">🗓️</span>
+        <div class="toast-text-col">
+          <div class="toast-tag" style="color:#38bdf8;">⏩ FAST-FORWARD COMPLETE (${days} DAYS)</div>
+          <div class="toast-title">Advanced to Day ${report.endDay}</div>
+          <div class="toast-desc">
+            Cash Delta: <strong style="color:${report.moneyDelta >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'};">${incomeStr}</strong> •
+            Net Worth: <strong style="color:#38bdf8;">${nwStr}</strong>
+            ${report.healthEmergency?.name ? ` • ⚠️ ${report.healthEmergency.name}` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.classList.add('toast-exit');
+      setTimeout(() => toast.remove(), 300);
+    }, 4500);
   }
 
   private onDayTick(_day: number, healthEmergency?: HealthConsequenceResult): void {
@@ -476,7 +520,47 @@ class App {
           this.state.player.money -= course.fee;
           this.state.player.educationProgress[course.id] = 100; // instant completed certification
           this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Earned certification in ${course.name}`, type: 'achievement' });
+          
+          if (course.unlocksJobId) {
+            const unlockedJob = ALL_JOBS.find(j => j.id === course.unlocksJobId);
+            if (unlockedJob) {
+              const certCard: ActiveEventCard = {
+                instanceId: `card-cert-${course.id}-${Date.now()}`,
+                defId: `cert-${course.id}`,
+                category: 'milestone',
+                title: `🎓 Certified: ${course.name}!`,
+                emoji: '📜',
+                narrative: `Congratulations! You mastered ${course.name}. An executive recruiter was impressed by your credential and extended an offer for ${unlockedJob.title} paying ₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d!`,
+                day: this.state.player.currentDay,
+                choices: [
+                  {
+                    id: 'switch-now',
+                    label: `Accept Offer (₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d)`,
+                    emoji: '💼',
+                    preview: [
+                      { text: `Salary: ₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d`, type: 'positive' },
+                      { text: `Promoted to ${unlockedJob.title}`, type: 'positive' }
+                    ]
+                  },
+                  {
+                    id: 'keep-current',
+                    label: 'Stay at Current Job for Now',
+                    emoji: '🚶',
+                    preview: [
+                      { text: 'Keep current position', type: 'neutral' },
+                      { text: 'Can switch anytime in Status tab', type: 'neutral' }
+                    ]
+                  }
+                ],
+                resolved: false
+              };
+              this.activeCards.unshift(certCard);
+            }
+          }
+
+          this.checkAndTriggerUnlocks();
           saveGame(this.state);
+          this.updateHeader();
           this.renderActiveTab();
         } else {
           alert('Insufficient funds for enrollment fee.');

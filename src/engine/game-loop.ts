@@ -1,10 +1,24 @@
 import { GameState } from '../types/game';
 import { SeededRNG } from './prng';
 import { MS_PER_GAME_DAY } from './time-system';
-import { processDayEconomy } from './economy-engine';
-import { processHealthAndConsequences, HealthConsequenceResult } from './health-engine';
+import { processDayEconomy, calculateNetWorth } from './economy-engine';
+import { processHealthAndConsequences, HealthConsequenceResult, HealthWarning } from './health-engine';
 import { tickMarket } from './market-engine';
 import { tickNpcs } from './npc-engine';
+
+export interface SimulationReport {
+  startDay: number;
+  endDay: number;
+  daysAdvanced: number;
+  startMoney: number;
+  endMoney: number;
+  moneyDelta: number;
+  startNetWorth: number;
+  endNetWorth: number;
+  netWorthDelta: number;
+  healthEmergency?: HealthConsequenceResult;
+  doctorWarning?: HealthWarning;
+}
 
 export class GameLoop {
   private state: GameState;
@@ -14,16 +28,15 @@ export class GameLoop {
   private isRunning = false;
   private onRenderCallback: () => void;
   private onDayTickCallback: (day: number, healthEmergency?: HealthConsequenceResult) => void;
-
   constructor(
     state: GameState,
-    onDayTick: (day: number, healthEmergency?: HealthConsequenceResult) => void,
-    onRender: () => void
+    onDayTick?: (day: number, healthEmergency?: HealthConsequenceResult) => void,
+    onRender?: () => void
   ) {
     this.state = state;
     this.rng = new SeededRNG(state.gameSeed + state.player.currentDay);
-    this.onDayTickCallback = onDayTick;
-    this.onRenderCallback = onRender;
+    this.onDayTickCallback = onDayTick || (() => {});
+    this.onRenderCallback = onRender || (() => {});
   }
 
   public start(): void {
@@ -67,6 +80,62 @@ export class GameLoop {
     this.checkAchievements();
 
     this.onDayTickCallback(nextDay, healthRes);
+  }
+
+  public simulateMultipleDays(count: number): SimulationReport {
+    const startDay = this.state.player.currentDay;
+    const startMoney = this.state.player.money;
+    const startNetWorth = calculateNetWorth(this.state);
+    let lastEmergency: HealthConsequenceResult | undefined;
+    let lastWarning: HealthWarning | undefined;
+
+    for (let i = 0; i < count; i++) {
+      const nextDay = this.state.player.currentDay + 1;
+      this.state.player.currentDay = nextDay;
+      this.state.player.lastActiveTimestamp = Date.now();
+
+      const p = this.state.player;
+      if (p.timeAllocation.sideHustle > 0) {
+        const hasLaptop = p.lifestyleAssets.some(a => a.id === 'laptop');
+        const sideIncome = p.timeAllocation.sideHustle * (hasLaptop ? 500 : 250);
+        p.money += sideIncome;
+        p.taxes.incomeThisCycle += sideIncome;
+      }
+
+      const healthRes = processHealthAndConsequences(this.state, nextDay);
+      if (healthRes.triggered) lastEmergency = healthRes;
+      if (healthRes.warning) lastWarning = healthRes.warning;
+
+      processDayEconomy(this.state, nextDay);
+      tickMarket(this.state, nextDay, this.rng);
+      tickNpcs(this.state, nextDay, this.rng);
+      this.checkAchievements();
+    }
+
+    const endDay = this.state.player.currentDay;
+    const endMoney = this.state.player.money;
+    const endNetWorth = calculateNetWorth(this.state);
+
+    const report: SimulationReport = {
+      startDay,
+      endDay,
+      daysAdvanced: count,
+      startMoney,
+      endMoney,
+      moneyDelta: endMoney - startMoney,
+      startNetWorth,
+      endNetWorth,
+      netWorthDelta: endNetWorth - startNetWorth,
+      healthEmergency: lastEmergency,
+      doctorWarning: lastWarning
+    };
+
+    const finalCallbackArg = lastEmergency
+      ? lastEmergency
+      : (lastWarning ? { triggered: false, warning: lastWarning } : undefined);
+
+    this.onDayTickCallback(endDay, finalCallbackArg);
+    return report;
   }
 
   private frame(timestamp: number): void {
