@@ -5,8 +5,11 @@ import { GameLoop } from './engine/game-loop';
 import { calculateElapsedGameDays, getOfflineCatchUpPlan, applyAggregateOfflineSimulation } from './engine/time-system';
 import { formatCurrency } from './ui/components/format';
 import { ASSET_CATALOG, ALL_JOBS, COURSES } from './data/static-data';
+import { HealthConsequenceResult } from './engine/health-engine';
 
 // Screens
+import { renderEventFeedScreen } from './ui/screens/event-feed';
+import { renderStatusPanelScreen } from './ui/screens/status-panel';
 import { renderDashboardScreen } from './ui/screens/dashboard';
 import { renderMarketScreen } from './ui/screens/market';
 import { renderAssetsScreen } from './ui/screens/assets';
@@ -14,26 +17,32 @@ import { renderBusinessScreen } from './ui/screens/business';
 import { renderBankScreen } from './ui/screens/bank';
 import { renderLifeScreen } from './ui/screens/life';
 
+// Components & Events
+import { renderHealthRing } from './ui/components/health-ring';
+import { EventScheduler } from './events/event-scheduler';
+import { ActiveEventCard } from './events/event-types';
+
 // Modals
 import { showTimeAllocationModal, showDietModal, showStockTradeModal } from './ui/modals/all-modals';
 
 class App {
   private state: GameState;
-  private currentTab = 'dashboard';
+  private currentTab = 'story';
   private gameLoop: GameLoop;
   private appEl: HTMLElement;
+  private eventScheduler: EventScheduler;
+  private activeCards: ActiveEventCard[] = [];
 
   constructor() {
     this.appEl = document.getElementById('app')!;
     this.state = loadGame();
-
-    // Check offline catch-up
-    // this.handleOfflineCatchup();
+    this.eventScheduler = new EventScheduler();
+    this.activeCards = this.eventScheduler.generateCardsForDay(this.state);
 
     // Init game loop
     this.gameLoop = new GameLoop(
       this.state,
-      (day) => this.onDayTick(day),
+      (day, healthEmergency) => this.onDayTick(day, healthEmergency),
       () => this.onRender()
     );
 
@@ -67,49 +76,26 @@ class App {
   private renderAppShell(): void {
     this.appEl.innerHTML = `
       <header class="top-nav">
-        <div class="top-nav-row">
-          <div>
-            <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Available Cash</div>
+        <div class="top-nav-left">
+          <div style="font-size: 0.65rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Available Cash</div>
+          <div class="top-cash-row">
             <div class="cash-display" id="top-cash">₹0</div>
+            <div class="day-badge" id="top-day">Day 1</div>
           </div>
-          <div class="day-badge" id="top-day">Day 1</div>
         </div>
-        <div class="health-meters-row">
-          <div class="meter-box">
-            <div class="label"><span>Physical</span><span id="txt-physical">85%</span></div>
-            <div class="meter-track"><div class="meter-fill physical" id="bar-physical" style="width: 85%;"></div></div>
-          </div>
-          <div class="meter-box">
-            <div class="label"><span>Mental</span><span id="txt-mental">80%</span></div>
-            <div class="meter-track"><div class="meter-fill mental" id="bar-mental" style="width: 80%;"></div></div>
-          </div>
-          <div class="meter-box">
-            <div class="label"><span>Energy</span><span id="txt-energy">75%</span></div>
-            <div class="meter-track"><div class="meter-fill energy" id="bar-energy" style="width: 75%;"></div></div>
-          </div>
+        <div id="top-health-ring-container">
+          ${renderHealthRing(this.state.player)}
         </div>
       </header>
 
       <main class="screen-container" id="screen-container"></main>
 
       <nav class="bottom-nav">
-        <button class="nav-tab active" data-tab="dashboard">
-          <span class="icon">🏠</span><span>Home</span>
+        <button class="nav-tab active" data-tab="story">
+          <span class="icon">📖</span><span>Life Story</span>
         </button>
-        <button class="nav-tab" data-tab="market">
-          <span class="icon">📈</span><span>Market</span>
-        </button>
-        <button class="nav-tab" data-tab="assets">
-          <span class="icon">🏢</span><span>Assets</span>
-        </button>
-        <button class="nav-tab" data-tab="business">
-          <span class="icon">💼</span><span>Biz</span>
-        </button>
-        <button class="nav-tab" data-tab="bank">
-          <span class="icon">🏦</span><span>Bank</span>
-        </button>
-        <button class="nav-tab" data-tab="life">
-          <span class="icon">❤️</span><span>Life</span>
+        <button class="nav-tab" data-tab="status">
+          <span class="icon">📊</span><span>Life Status</span>
         </button>
       </nav>
       <div id="modal-container"></div>
@@ -143,6 +129,17 @@ class App {
     const onAction = (action: string, payload?: any) => this.handleAction(action, payload);
 
     switch (this.currentTab) {
+      case 'story':
+        container.appendChild(renderEventFeedScreen(
+          this.state,
+          this.activeCards,
+          (card, choiceId) => this.handleCardChoice(card, choiceId),
+          () => this.handleAdvanceDay()
+        ));
+        break;
+      case 'status':
+        container.appendChild(renderStatusPanelScreen(this.state, onAction));
+        break;
       case 'dashboard':
         container.appendChild(renderDashboardScreen(this.state, onAction));
         break;
@@ -164,7 +161,20 @@ class App {
     }
   }
 
-  private onDayTick(_day: number): void {
+  private handleCardChoice(card: ActiveEventCard, choiceId: string): void {
+    this.eventScheduler.resolveCardChoice(card, choiceId, this.state);
+    saveGame(this.state);
+    this.updateHeader();
+    this.renderActiveTab();
+  }
+
+  private handleAdvanceDay(): void {
+    this.gameLoop.simulateSingleDay();
+  }
+
+  private onDayTick(_day: number, healthEmergency?: HealthConsequenceResult): void {
+    const newCards = this.eventScheduler.generateCardsForDay(this.state, healthEmergency);
+    this.activeCards = [...newCards, ...this.activeCards.filter(c => !c.resolved)];
     saveGame(this.state);
     this.updateHeader();
     this.renderActiveTab();
@@ -181,17 +191,10 @@ class App {
     if (cashEl) cashEl.innerText = formatCurrency(p.money);
     if (dayEl) dayEl.innerText = `Day ${p.currentDay}`;
 
-    const setMeter = (barId: string, txtId: string, val: number) => {
-      const b = document.getElementById(barId);
-      const t = document.getElementById(txtId);
-      const rounded = Math.round(Math.max(0, Math.min(100, val)));
-      if (b) b.style.width = `${rounded}%`;
-      if (t) t.innerText = `${rounded}%`;
-    };
-
-    setMeter('bar-physical', 'txt-physical', p.health.physical);
-    setMeter('bar-mental', 'txt-mental', p.health.mental);
-    setMeter('bar-energy', 'txt-energy', p.health.energy);
+    const healthContainer = document.getElementById('top-health-ring-container');
+    if (healthContainer) {
+      healthContainer.innerHTML = renderHealthRing(p);
+    }
   }
 
   private handleAction(action: string, payload?: any): void {

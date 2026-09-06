@@ -2,7 +2,7 @@ import { GameState } from '../types/game';
 import { SeededRNG } from './prng';
 import { MS_PER_GAME_DAY } from './time-system';
 import { processDayEconomy } from './economy-engine';
-import { processHealthAndConsequences } from './health-engine';
+import { processHealthAndConsequences, HealthConsequenceResult } from './health-engine';
 import { tickMarket } from './market-engine';
 import { tickNpcs } from './npc-engine';
 
@@ -13,11 +13,11 @@ export class GameLoop {
   private accumulatedMs = 0;
   private isRunning = false;
   private onRenderCallback: () => void;
-  private onDayTickCallback: (day: number) => void;
+  private onDayTickCallback: (day: number, healthEmergency?: HealthConsequenceResult) => void;
 
   constructor(
     state: GameState,
-    onDayTick: (day: number) => void,
+    onDayTick: (day: number, healthEmergency?: HealthConsequenceResult) => void,
     onRender: () => void
   ) {
     this.state = state;
@@ -52,7 +52,7 @@ export class GameLoop {
     }
 
     // 2. Health & Lifestyle Consequences
-    processHealthAndConsequences(this.state, nextDay);
+    const healthRes = processHealthAndConsequences(this.state, nextDay);
 
     // 3. Economy (Living costs, salary, rent, debt, taxes)
     processDayEconomy(this.state, nextDay);
@@ -66,7 +66,7 @@ export class GameLoop {
     // 6. Check achievements
     this.checkAchievements();
 
-    this.onDayTickCallback(nextDay);
+    this.onDayTickCallback(nextDay, healthRes);
   }
 
   private frame(timestamp: number): void {
