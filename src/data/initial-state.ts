@@ -186,6 +186,7 @@ export function createInitialState(seed = 42): GameState {
       ],
       achievements: [],
       educationProgress: {},
+      activeCourseId: null,
       lastActiveTimestamp: Date.now()
     },
     npcs: INITIAL_NPCS,

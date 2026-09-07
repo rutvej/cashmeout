@@ -3,6 +3,7 @@ import { ActiveEventCard } from '../../events/event-types';
 import { renderEventCard } from '../components/event-card';
 import { formatCurrency } from '../components/format';
 import { calculateNetWorth } from '../../engine/economy-engine';
+import { COURSES } from '../../data/static-data';
 
 export function renderEventFeedScreen(
   state: GameState,
@@ -13,6 +14,7 @@ export function renderEventFeedScreen(
   isAutoPlaying?: boolean,
   onToggleAutoPlay?: () => void
 ): HTMLElement {
+  const p = state.player;
   const container = document.createElement('div');
   container.className = 'screen-content event-feed-screen';
 
@@ -20,18 +22,18 @@ export function renderEventFeedScreen(
   const resolvedCards = activeCards.filter(c => c.resolved);
   const netWorth = calculateNetWorth(state);
 
-  // 1. Day Banner
+  // 1. ARCADE HUD DAY BANNER
   const banner = document.createElement('div');
   banner.className = 'feed-day-banner';
   banner.innerHTML = `
     <div class="banner-day-col">
-      <span class="banner-sub">Current Timeline</span>
-      <h2 class="banner-day-title">📅 Day ${state.player.currentDay}</h2>
+      <span class="banner-sub">TIMELINE • THE GRIND</span>
+      <h2 class="banner-day-title">⚡ DAY ${p.currentDay}</h2>
     </div>
     <div class="banner-stats-col">
       <div class="banner-stat-chip">
-        <span class="chip-label">Cash</span>
-        <span class="chip-val green">${formatCurrency(state.player.money)}</span>
+        <span class="chip-label">Liquid Bag</span>
+        <span class="chip-val green">${formatCurrency(p.money)}</span>
       </div>
       <div class="banner-stat-chip">
         <span class="chip-label">Net Worth</span>
@@ -41,28 +43,60 @@ export function renderEventFeedScreen(
   `;
   container.appendChild(banner);
 
-  // 2. Auto-play ribbon (shown when auto-playing)
-  if (isAutoPlaying) {
-    const ribbon = document.createElement('div');
-    ribbon.className = 'autoplay-ribbon';
-    ribbon.innerHTML = `
-      <div class="autoplay-icon">⚡</div>
-      <div class="autoplay-text-col">
-        <div class="autoplay-label">⚡ Auto-Play Active — Days Flowing</div>
-        <div class="autoplay-day-text">Processing Day ${state.player.currentDay}…</div>
-        <div class="autoplay-progress-track">
-          <div class="autoplay-progress-fill" style="width:60%;"></div>
+  // 2. ACTIVE STUDY ARC (If grinding a course)
+  if (p.activeCourseId) {
+    const course = COURSES.find(c => c.id === p.activeCourseId);
+    if (course) {
+      const progress = p.educationProgress[course.id] ?? 0;
+      const studyRate = 1.0 + ((p.timeAllocation.education || 0) * 0.5);
+      const daysLeft = Math.max(1, Math.ceil(((100 - progress) / 100) * (course.slotsRequired / studyRate)));
+
+      const studyWidget = document.createElement('div');
+      studyWidget.className = 'active-study-hud-card';
+      studyWidget.innerHTML = `
+        <div class="study-header-row">
+          <span class="study-tag">📚 GRINDING CERTIFICATION • ${Math.round(progress)}%</span>
+          <span class="badge badge-purple" style="font-size:0.6rem;">${studyRate > 1 ? `${studyRate}x BOOST ⚡` : '1x SPEED'}</span>
         </div>
-      </div>
-      <button class="autoplay-stop-btn" id="btn-stop-autoplay">⏹ Stop</button>
-    `;
-    ribbon.querySelector('#btn-stop-autoplay')?.addEventListener('click', () => {
-      if (onToggleAutoPlay) onToggleAutoPlay();
-    });
-    container.appendChild(ribbon);
+        <div class="study-course-title">${course.name}</div>
+        <div class="study-xp-track">
+          <div class="study-xp-fill" style="width: ${Math.max(4, progress)}%;"></div>
+        </div>
+        <div class="study-footer-row">
+          <span>⏳ ~${daysLeft} days to qualify</span>
+          <span style="color:var(--neon-cyan); font-weight:800;">💼 Unlocks ${course.unlocksJobTitle} (₹${course.unlocksJobSalary.toLocaleString('en-IN')}/15d)</span>
+        </div>
+      `;
+      container.appendChild(studyWidget);
+    }
   }
 
-  // 3. Pending Cards Section or All-Done box
+  // 3. PENDING QUEST CARDS OR SPEEDRUN STATUS
+  const pendingDecisions = pendingCards.filter(c => c.choices.length >= 2);
+
+  if (pendingDecisions.length > 0) {
+    // If waiting for decision, show alert badge
+    const alertBox = document.createElement('div');
+    alertBox.style.cssText = `
+      background: linear-gradient(90deg, rgba(255,51,102,0.18), rgba(255,0,127,0.12));
+      border: 1.5px solid var(--neon-coral);
+      border-radius: 14px;
+      padding: 9px 13px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 0.78rem;
+      font-weight: 900;
+      color: #ffffff;
+      box-shadow: 0 0 16px rgba(255,51,102,0.25);
+    `;
+    alertBox.innerHTML = `
+      <span style="font-size:1.1rem; animation: flamePulse 1.2s infinite ease-in-out;">🚨</span>
+      <span>DECISION TIME! Select an option below — speedrun will auto-resume!</span>
+    `;
+    container.appendChild(alertBox);
+  }
+
   if (pendingCards.length > 0) {
     const cardsSection = document.createElement('div');
     cardsSection.className = 'event-cards-stack';
@@ -77,62 +111,63 @@ export function renderEventFeedScreen(
 
     container.appendChild(cardsSection);
   } else {
-    // All cards resolved → show advance options
+    // All cards resolved / clean day
     const allDoneBox = document.createElement('div');
     allDoneBox.className = 'all-events-resolved-card';
+
     allDoneBox.innerHTML = `
-      <div class="resolved-celebrate-icon">${isAutoPlaying ? '⚡' : '✨'}</div>
-      <h3 class="all-done-title">${isAutoPlaying ? 'Auto-Playing…' : `All Done for Day ${state.player.currentDay}!`}</h3>
+      <div class="resolved-celebrate-icon">${isAutoPlaying ? '🚀' : '✨'}</div>
+      <h3 class="all-done-title">${isAutoPlaying ? 'SPEEDRUNNING IN PROGRESS...' : `Day ${p.currentDay} Cleared!`}</h3>
       <p class="all-done-desc">
         ${isAutoPlaying
-          ? 'Days are automatically advancing. Stop anytime if a decision needs your attention.'
-          : 'All decisions made. Ready to see tomorrow or let time flow automatically?'
+          ? 'Days are cruising automatically. Salary, interest, and course progress are ticking up! Tap Pause to stop.'
+          : 'Zero pending choices. Ready to blast into tomorrow or let Auto-Play grind for you?'
         }
       </p>
 
       <div class="advance-buttons-group">
-        ${!isAutoPlaying ? `
-          <button class="btn-autoplay pop-press" id="btn-start-autoplay">
-            <span>⚡</span>
-            <span>Auto-Play Days</span>
+        ${isAutoPlaying ? `
+          <button class="btn-3d btn-3d-coral" id="btn-stop-autoplay">
+            <span>⏸️</span>
+            <span>PAUSE SPEEDRUN</span>
           </button>
-          <button class="btn-advance-day-large pop-press" id="btn-advance-day">
-            <span class="advance-icon">▶️</span>
-            <span class="advance-text">Next Day</span>
-            <span class="advance-sub">+1 Day →</span>
+        ` : `
+          <button class="btn-3d btn-3d-lime" id="btn-start-autoplay">
+            <span>⚡</span>
+            <span>AUTO-PLAY DAYS (SPEEDRUN)</span>
+          </button>
+          <button class="btn-3d btn-3d-cyan" id="btn-advance-day">
+            <span>▶️</span>
+            <span>NEXT DAY (+1D)</span>
           </button>
           <div class="fast-forward-row">
-            <button class="btn btn-sm btn-fast-forward pop-press" id="btn-skip-week">
-              <span>⏩ Skip 7 Days</span>
+            <button class="btn-fast-forward" id="btn-skip-week">
+              <span>⏩ Skip 7D</span>
               <span class="sub-pill">1 Week</span>
             </button>
-            <button class="btn btn-sm btn-fast-forward btn-ff-month pop-press" id="btn-skip-month">
-              <span>🗓️ Skip 30 Days</span>
-              <span class="sub-pill">Monthly Cycle</span>
+            <button class="btn-fast-forward" id="btn-skip-month">
+              <span>🗓️ Skip 30D</span>
+              <span class="sub-pill">Monthly</span>
             </button>
-            <button class="btn btn-sm btn-fast-forward pop-press" id="btn-skip-year">
-              <span>📅 Skip 1 Year</span>
+            <button class="btn-fast-forward" id="btn-skip-year">
+              <span>📅 Skip 1Y</span>
               <span class="sub-pill">365 Days</span>
             </button>
           </div>
-        ` : `
-          <button class="autoplay-stop-btn" id="btn-stop-autoplay2" style="font-size:0.85rem; padding:12px 28px; border-radius:12px;">
-            ⏹ Stop Auto-Play
-          </button>
         `}
       </div>
     `;
-
-    allDoneBox.querySelector('#btn-advance-day')?.addEventListener('click', () => {
-      onAdvanceDay();
-    });
 
     allDoneBox.querySelector('#btn-start-autoplay')?.addEventListener('click', () => {
       if (onToggleAutoPlay) onToggleAutoPlay();
     });
 
-    allDoneBox.querySelector('#btn-stop-autoplay2')?.addEventListener('click', () => {
+    allDoneBox.querySelector('#btn-stop-autoplay')?.addEventListener('click', () => {
       if (onToggleAutoPlay) onToggleAutoPlay();
+    });
+
+    allDoneBox.querySelector('#btn-advance-day')?.addEventListener('click', () => {
+      onAdvanceDay();
     });
 
     allDoneBox.querySelector('#btn-skip-week')?.addEventListener('click', () => {
@@ -150,12 +185,17 @@ export function renderEventFeedScreen(
     container.appendChild(allDoneBox);
   }
 
-  // 4. Resolved Cards from Today
+  // 4. RESOLVED DECISIONS TODAY
   if (resolvedCards.length > 0) {
     const resolvedSection = document.createElement('div');
-    resolvedSection.className = 'resolved-history-section';
+    resolvedSection.style.display = 'flex';
+    resolvedSection.style.flexDirection = 'column';
+    resolvedSection.style.gap = '8px';
+    resolvedSection.style.opacity = '0.88';
     resolvedSection.innerHTML = `
-      <div class="section-title-sub">✅ Decisions Made Today (${resolvedCards.length})</div>
+      <div style="font-size:0.68rem; font-weight:900; color:var(--neon-lime); text-transform:uppercase; letter-spacing:0.8px;">
+        ✅ Moves Made Today (${resolvedCards.length})
+      </div>
     `;
 
     resolvedCards.forEach(card => {
@@ -166,19 +206,19 @@ export function renderEventFeedScreen(
     container.appendChild(resolvedSection);
   }
 
-  // 5. Life Journal Stream (Recent 5 entries)
+  // 5. LIVE ACTIVITY FEED (TIKTOK / DISCORD STREAM STYLE)
   const journalBox = document.createElement('div');
-  journalBox.className = 'quick-journal-card';
+  journalBox.className = 'card';
   journalBox.innerHTML = `
-    <div class="card-title" style="font-size: 0.82rem;">
-      <span>📜 Recent Highlights</span>
-      <span style="font-size: 0.6rem; color: var(--text-muted);">Live Feed</span>
+    <div class="card-title" style="font-size: 0.85rem;">
+      <span>📜 Live Activity Stream</span>
+      <span class="badge badge-purple" style="font-size:0.58rem;">Real-Time</span>
     </div>
-    <div class="quick-journal-list">
-      ${state.player.eventLog.slice(0, 5).map(e => `
-        <div class="quick-journal-item type-${e.type}">
-          <span class="journal-day">Day ${e.day}</span>
-          <span class="journal-text">${e.text}</span>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      ${p.eventLog.slice(0, 5).map(e => `
+        <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:7px 10px; display:flex; gap:9px; align-items:center;">
+          <span style="font-size:0.62rem; font-weight:900; color:var(--neon-cyan); min-width:44px;">Day ${e.day}</span>
+          <span style="font-size:0.76rem; font-weight:600; color:#e2e8f0;">${e.text}</span>
         </div>
       `).join('')}
     </div>

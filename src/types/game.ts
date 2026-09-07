@@ -166,6 +166,7 @@ export interface PlayerState {
   eventLog: EventLogEntry[];
   achievements: string[];
   educationProgress: Record<string, number>;
+  activeCourseId: string | null;        // currently studying course
   lastActiveTimestamp: number;
 }
 

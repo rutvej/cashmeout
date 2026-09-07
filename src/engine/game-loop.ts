@@ -5,6 +5,7 @@ import { processDayEconomy, calculateNetWorth } from './economy-engine';
 import { processHealthAndConsequences, HealthConsequenceResult, HealthWarning } from './health-engine';
 import { tickMarket } from './market-engine';
 import { tickNpcs } from './npc-engine';
+import { COURSES } from '../data/static-data';
 
 export interface SimulationReport {
   startDay: number;
@@ -55,7 +56,7 @@ export class GameLoop {
     this.state.player.currentDay = nextDay;
     this.state.player.lastActiveTimestamp = Date.now();
 
-    // 1. Process time allocation side effects (side hustle income, education progress)
+    // 1. Process time allocation side effects
     const p = this.state.player;
     if (p.timeAllocation.sideHustle > 0) {
       const hasLaptop = p.lifestyleAssets.some(a => a.id === 'laptop');
@@ -63,6 +64,9 @@ export class GameLoop {
       p.money += sideIncome;
       p.taxes.incomeThisCycle += sideIncome;
     }
+
+    // 1b. Daily course study progress
+    this.processCourseProgress(nextDay);
 
     // 2. Health & Lifestyle Consequences
     const healthRes = processHealthAndConsequences(this.state, nextDay);
@@ -101,6 +105,8 @@ export class GameLoop {
         p.money += sideIncome;
         p.taxes.incomeThisCycle += sideIncome;
       }
+
+      this.processCourseProgress(nextDay);
 
       const healthRes = processHealthAndConsequences(this.state, nextDay);
       if (healthRes.triggered) lastEmergency = healthRes;
@@ -152,6 +158,36 @@ export class GameLoop {
 
     this.onRenderCallback();
     requestAnimationFrame(t => this.frame(t));
+  }
+
+  /** Called each simulated day to advance the active course study progress. */
+  private processCourseProgress(_day: number): void {
+    const p = this.state.player;
+    if (!p.activeCourseId) return;
+
+    const course = COURSES.find(c => c.id === p.activeCourseId);
+    if (!course) {
+      p.activeCourseId = null;
+      return;
+    }
+
+    // Each education slot per day gives 1 study point. Default 1 if none allocated.
+    const studySlots = Math.max(1, p.timeAllocation.education);
+    const progressPerDay = (studySlots / course.slotsRequired) * 100;
+    const current = p.educationProgress[course.id] ?? 0;
+    const newProgress = Math.min(100, current + progressPerDay);
+    p.educationProgress[course.id] = Math.round(newProgress * 10) / 10;
+
+    if (newProgress >= 100 && current < 100) {
+      // Course completed!
+      p.educationProgress[course.id] = 100;
+      p.activeCourseId = null;
+      p.eventLog.unshift({
+        day: p.currentDay,
+        text: `🎓 Certification Complete: ${course.name}! You are now qualified.`,
+        type: 'achievement'
+      });
+    }
   }
 
   private checkAchievements(): void {

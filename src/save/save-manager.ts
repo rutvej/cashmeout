@@ -17,6 +17,10 @@ export function loadGame(): GameState {
       saveGame(fresh);
       return fresh;
     }
+    // Migrate: fill in missing fields added after initial release
+    if (parsed.player.activeCourseId === undefined) {
+      parsed.player.activeCourseId = null;
+    }
     return parsed;
   } catch (err) {
     console.error('Failed to parse save file, creating new game', err);
