@@ -21,6 +21,58 @@ export function loadGame(): GameState {
     if (parsed.player.activeCourseId === undefined) {
       parsed.player.activeCourseId = null;
     }
+    if (parsed.player.onboardingComplete === undefined) {
+      parsed.player.onboardingComplete = false;
+    }
+    if (parsed.player.startingAge === undefined) {
+      parsed.player.startingAge = 22;
+    }
+    if (!parsed.player.careerHistory) {
+      parsed.player.careerHistory = [
+        {
+          jobId: parsed.player.job.id,
+          title: parsed.player.job.title,
+          startDay: 1,
+          endDay: null,
+          salary: parsed.player.job.salaryPerCycle
+        }
+      ];
+    }
+    if (!parsed.player.behavioralCounters) {
+      parsed.player.behavioralCounters = {
+        impulseBuyCounter: 1.5,
+        junkFoodCounter: 1.5,
+        gymSkipCounter: 1.5,
+        sleepDebtCounter: 1.5,
+        cryptoFomoCounter: 1.0,
+        lifestyleCreepCounter: 1.0,
+        lateNightWorkCounter: 1.0
+      };
+    }
+    if (!parsed.player.lifeGoals) {
+      parsed.player.lifeGoals = {
+        wealth: 'six-figure-net-worth',
+        health: 'olympic-resilience',
+        lifestyle: 'homeowner-pride'
+      };
+    }
+    if (!parsed.player.lifeGoalStats) {
+      parsed.player.lifeGoalStats = {
+        burnoutEpisodes: 0,
+        totalGymSessions: 0,
+        totalDaysTracked: parsed.player.currentDay || 1
+      };
+    }
+    if (!parsed.player.salaryDayPreferences) {
+      parsed.player.salaryDayPreferences = {
+        autoRunBlueprint: false,
+        emergencyBufferAllocPct: 30,
+        sipAllocPct: 30,
+        debtPaydownAllocPct: 20,
+        discretionaryAllocPct: 20,
+        lastEvaluatedMonth: 0
+      };
+    }
     return parsed;
   } catch (err) {
     console.error('Failed to parse save file, creating new game', err);

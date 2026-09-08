@@ -104,7 +104,9 @@ export function createInitialState(seed = 42): GameState {
     inflationRate: 0.06,
     player: {
       id: 'player',
-      name: 'Player',
+      name: 'Alex Morgan',
+      onboardingComplete: false,
+      startingAge: 22,
       money: 15000,
       savingsBalance: 5000,
       currentDay: 1,
@@ -116,16 +118,53 @@ export function createInitialState(seed = 42): GameState {
         stressPerDay: 0.8,
         timeSlotsCost: 2
       },
+      careerHistory: [
+        {
+          jobId: 'junior-analyst',
+          title: 'Junior Analyst',
+          startDay: 1,
+          endDay: null,
+          salary: 2800
+        }
+      ],
       housing: {
         type: 'rent',
-        amountPerCycle: 800,
+        amountPerCycle: 540,
         cycleDays: 30,
-        lastPaidDay: 1
+        lastPaidDay: 1,
+        locationTier: 'near-office'
       },
       health: {
         physical: 85,
         mental: 80,
         energy: 75
+      },
+      behavioralCounters: {
+        impulseBuyCounter: 1.5,
+        junkFoodCounter: 1.5,
+        gymSkipCounter: 1.5,
+        sleepDebtCounter: 1.5,
+        cryptoFomoCounter: 1.0,
+        lifestyleCreepCounter: 1.0,
+        lateNightWorkCounter: 1.0
+      },
+      lifeGoals: {
+        wealth: 'six-figure-net-worth',
+        health: 'olympic-resilience',
+        lifestyle: 'homeowner-pride'
+      },
+      lifeGoalStats: {
+        burnoutEpisodes: 0,
+        totalGymSessions: 0,
+        totalDaysTracked: 1
+      },
+      salaryDayPreferences: {
+        autoRunBlueprint: false,
+        emergencyBufferAllocPct: 30,
+        sipAllocPct: 30,
+        debtPaydownAllocPct: 20,
+        discretionaryAllocPct: 20,
+        lastEvaluatedMonth: 0
       },
       consequenceMeters: {
         cheapFoodDays: 0,

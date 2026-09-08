@@ -84,19 +84,61 @@ export interface EventLogEntry {
   type: 'income' | 'expense' | 'investment' | 'event' | 'achievement';
 }
 
+export interface BehavioralCounters {
+  impulseBuyCounter: number;    // 1.0 to 10.0, floor 1.0
+  junkFoodCounter: number;      // 1.0 to 10.0, floor 1.0
+  gymSkipCounter: number;       // 1.0 to 10.0, floor 1.0
+  sleepDebtCounter: number;     // 1.0 to 10.0, floor 1.0
+  cryptoFomoCounter: number;    // 1.0 to 10.0, floor 1.0
+  lifestyleCreepCounter: number;// 1.0 to 10.0, floor 1.0
+  lateNightWorkCounter: number; // 1.0 to 10.0, floor 1.0
+}
+
+export type WealthGoalId = 'safety-fortress' | 'six-figure-net-worth' | 'quarter-million' | 'debt-free' | 'passive-freedom';
+export type HealthGoalId = 'olympic-resilience' | 'burnout-inoculation' | 'iron-consistency' | 'youthful-vitality';
+export type LifestyleGoalId = 'homeowner-pride' | 'thriving-entrepreneur' | 'executive-leader' | 'balanced-life';
+
+export interface LifeGoals {
+  wealth: WealthGoalId;
+  health: HealthGoalId;
+  lifestyle: LifestyleGoalId;
+}
+
+export interface CareerHistoryEntry {
+  jobId: string;
+  title: string;
+  startDay: number;
+  endDay: number | null;
+  salary: number;
+  reasonLeft?: string;
+}
+
+export interface SalaryDayPreferences {
+  autoRunBlueprint: boolean;
+  emergencyBufferAllocPct: number;
+  sipAllocPct: number;
+  debtPaydownAllocPct: number;
+  discretionaryAllocPct: number;
+  lastEvaluatedMonth: number;
+}
+
 export interface PlayerState {
   id: 'player';
   name: string;
+  onboardingComplete: boolean;
+  startingAge: number; // 22
   money: number;
   savingsBalance: number;
   currentDay: number;
 
   job: Job;
+  careerHistory: CareerHistoryEntry[];
   housing: {
     type: 'rent' | 'own';
     amountPerCycle: number;
     cycleDays: number;
     lastPaidDay: number;
+    locationTier?: 'near-office' | 'distant';
   };
 
   health: {
@@ -104,6 +146,16 @@ export interface PlayerState {
     mental: number;   // 0-100
     energy: number;   // 0-100
   };
+
+  behavioralCounters: BehavioralCounters;
+  lifeGoals: LifeGoals;
+  lifeGoalStats: {
+    burnoutEpisodes: number;
+    totalGymSessions: number;
+    totalDaysTracked: number;
+  };
+
+  salaryDayPreferences: SalaryDayPreferences;
 
   consequenceMeters: {
     cheapFoodDays: number;

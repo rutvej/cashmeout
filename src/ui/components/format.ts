@@ -1,16 +1,7 @@
 export function formatCurrency(amount: number): string {
   const isNegative = amount < 0;
   const abs = Math.abs(amount);
-  let res = '';
-
-  if (abs >= 10000000) {
-    res = `₹${(abs / 10000000).toFixed(2)} Cr`;
-  } else if (abs >= 100000) {
-    res = `₹${(abs / 100000).toFixed(2)} L`;
-  } else {
-    res = `₹${Math.round(abs).toLocaleString('en-IN')}`;
-  }
-
+  const res = `$${Math.round(abs).toLocaleString('en-US')}`;
   return isNegative ? `-${res}` : res;
 }
 

@@ -4,23 +4,26 @@ import { loadGame, saveGame } from './save/save-manager';
 import { GameLoop } from './engine/game-loop';
 import { calculateElapsedGameDays, getOfflineCatchUpPlan, applyAggregateOfflineSimulation } from './engine/time-system';
 import { formatCurrency } from './ui/components/format';
-import { ASSET_CATALOG, ALL_JOBS, COURSES } from './data/static-data';
+import { ALL_JOBS, COURSES } from './data/static-data';
 import { HealthConsequenceResult } from './engine/health-engine';
 
 // Screens
 import { renderEventFeedScreen } from './ui/screens/event-feed';
-import { renderStatusPanelScreen } from './ui/screens/status-panel';
-import { renderAccountScreen } from './ui/screens/account';
+import { renderProfileResumeScreen } from './ui/screens/profile-resume';
+import { renderJobBoardScreen } from './ui/screens/job-board';
+import { renderInvestmentsScreen } from './ui/screens/investments';
+import { renderPropertyScreen } from './ui/screens/property';
+import { renderOnboardingWizard } from './ui/screens/onboarding';
+import { renderSalaryDayCard } from './ui/screens/salary-day';
 
-// Components & Events
-import { renderHealthRing } from './ui/components/health-ring';
+// HUD & Modals
+import { renderTopHud, showLifeGoalsModal } from './ui/components/hud';
 import { EventScheduler } from './events/event-scheduler';
 import { ActiveEventCard } from './events/event-types';
 import { UnlockManager } from './progression/unlock-manager';
 import { showUnlockToast } from './ui/components/unlock-toast';
 import { createUnlockMilestoneCard } from './progression/unlock-events';
 
-// Modals
 import { showTimeAllocationModal, showDietModal, showStockTradeModal } from './ui/modals/all-modals';
 
 class App {
@@ -35,8 +38,9 @@ class App {
   // ─── Auto-Play Turbo Engine ───
   private autoPlayActive = false;
   private autoPlayWaitingForChoice = false;
-  private autoPlaySpeedMs = 600; // default 1x fast speed
+  private autoPlaySpeedMs = 600;
   private autoPlayTimerId: ReturnType<typeof setTimeout> | null = null;
+  private isModalActive = false;
 
   constructor() {
     this.appEl = document.getElementById('app')!;
@@ -45,10 +49,8 @@ class App {
     this.unlockManager = new UnlockManager();
     this.activeCards = this.eventScheduler.generateCardsForDay(this.state);
 
-    // Initial check for any unlocks
     this.checkAndTriggerUnlocks();
 
-    // Init game loop
     this.gameLoop = new GameLoop(
       this.state,
       (day, healthEmergency) => this.onDayTick(day, healthEmergency),
@@ -57,32 +59,93 @@ class App {
 
     this.renderAppShell();
     this.renderActiveTab();
+
+    // Check Onboarding or Salary Day
+    this.checkOnboardingFlow();
+
     this.gameLoop.start();
 
-    // Run catchup asynchronously so UI is already rendered
+    // Run catchup asynchronously
     setTimeout(() => {
       this.handleOfflineCatchup();
-    }, 200);
+    }, 250);
   }
 
-  // ─── AUTO-PLAY ENGINE (CONTINUES ALWAYS, PAUSES ONLY FOR CHOICES) ───
+  // ─── ONBOARDING & SALARY DAY CHECKS ─────────────────────────
+  private checkOnboardingFlow(): void {
+    if (!this.state.player.onboardingComplete) {
+      this.pauseAutoPlay();
+      this.isModalActive = true;
+      const modalCont = document.getElementById('modal-container')!;
+      modalCont.innerHTML = '';
+      modalCont.appendChild(
+        renderOnboardingWizard(this.state, () => {
+          this.isModalActive = false;
+          modalCont.innerHTML = '';
+          this.updateHeader();
+          this.renderActiveTab();
+          // After onboarding, Day 1 Salary Day triggers!
+          this.checkSalaryDay();
+        })
+      );
+    } else {
+      this.checkSalaryDay();
+    }
+  }
+
+  private checkSalaryDay(): void {
+    const p = this.state.player;
+    const currentMonth = Math.floor((p.currentDay - 1) / 30) + 1;
+    const lastEval = p.salaryDayPreferences?.lastEvaluatedMonth || 0;
+    const isDay1 = (p.currentDay - 1) % 30 === 0;
+
+    if (isDay1 && lastEval < currentMonth && !this.isModalActive) {
+      this.pauseAutoPlay();
+      this.isModalActive = true;
+      const modalCont = document.getElementById('modal-container')!;
+      modalCont.innerHTML = '';
+      modalCont.appendChild(
+        renderSalaryDayCard(this.state, () => {
+          this.isModalActive = false;
+          modalCont.innerHTML = '';
+          this.updateHeader();
+          this.renderActiveTab();
+        })
+      );
+    }
+  }
+
+  // ─── AUTO-PLAY TURBO ENGINE ─────────────────────────────────
   public toggleAutoPlay(): void {
+    if (this.isModalActive) return;
     this.autoPlayActive = !this.autoPlayActive;
     this.autoPlayWaitingForChoice = false;
 
     if (this.autoPlayActive) {
       this.scheduleNextAutoPlayStep(100);
-      this.showToast('⚡', 'Auto-Run activated! Days flowing...', 'var(--neon-lime)');
+      this.showToast('⚡', 'Auto-Play activated! Days advancing...', 'var(--emerald)');
     } else {
       if (this.autoPlayTimerId !== null) {
         clearTimeout(this.autoPlayTimerId);
         this.autoPlayTimerId = null;
       }
-      this.showToast('⏸️', 'Auto-Run paused.', 'var(--text-muted)');
+      this.showToast('⏸️', 'Auto-Play paused.', 'var(--text-muted)');
     }
 
     this.updateHeader();
     this.renderActiveTab();
+  }
+
+  public pauseAutoPlay(): void {
+    if (this.autoPlayActive) {
+      this.autoPlayActive = false;
+      this.autoPlayWaitingForChoice = false;
+      if (this.autoPlayTimerId !== null) {
+        clearTimeout(this.autoPlayTimerId);
+        this.autoPlayTimerId = null;
+      }
+      this.updateHeader();
+    }
   }
 
   public setAutoPlaySpeed(speedMs: number): void {
@@ -91,11 +154,10 @@ class App {
       this.scheduleNextAutoPlayStep(100);
     }
     this.updateHeader();
-    this.renderActiveTab();
   }
 
   private scheduleNextAutoPlayStep(delayMs: number = this.autoPlaySpeedMs): void {
-    if (!this.autoPlayActive) return;
+    if (!this.autoPlayActive || this.isModalActive) return;
     if (this.autoPlayTimerId !== null) {
       clearTimeout(this.autoPlayTimerId);
       this.autoPlayTimerId = null;
@@ -107,38 +169,31 @@ class App {
   }
 
   private executeAutoPlayStep(): void {
-    if (!this.autoPlayActive) return;
+    if (!this.autoPlayActive || this.isModalActive) return;
 
-    // 1. Auto-resolve single choice cards (e.g. milestones, acknowledgments)
     this.autoResolveSingleChoiceCards();
 
-    // 2. Check if any card has 2+ choices and is unresolved (genuine player decision)
     const pendingDecisions = this.activeCards.filter(
       c => !c.resolved && c.choices.length >= 2
     );
 
     if (pendingDecisions.length > 0) {
-      // Pause tick, wait for player to pick
       this.autoPlayWaitingForChoice = true;
       this.updateHeader();
       this.renderActiveTab();
       return;
     }
 
-    // 3. All clear! No decision required -> Advance day seamlessly!
     this.autoPlayWaitingForChoice = false;
     this.gameLoop.simulateSingleDay();
 
-    // 4. If on story tab, update active view smoothly
     if (this.currentTab === 'story') {
       this.renderActiveTab();
     }
 
-    // 5. Keep auto-playing continuously!
     this.scheduleNextAutoPlayStep();
   }
 
-  /** Auto-resolves cards that only have ONE choice (no real player dilemma) */
   private autoResolveSingleChoiceCards(): void {
     const singleChoiceCards = this.activeCards.filter(
       c => !c.resolved && c.choices.length === 1
@@ -153,8 +208,9 @@ class App {
     }
   }
 
-  // ─── OFFLINE CATCHUP ──────────────────────────────────────
+  // ─── OFFLINE CATCHUP ───────────────────────────────────────
   private handleOfflineCatchup(): void {
+    if (!this.state.player.onboardingComplete) return;
     const elapsedDays = calculateElapsedGameDays(this.state.player.lastActiveTimestamp);
     if (elapsedDays > 0) {
       const plan = getOfflineCatchUpPlan(elapsedDays);
@@ -162,37 +218,22 @@ class App {
         for (let d = 0; d < plan.days; d++) {
           this.gameLoop?.simulateSingleDay();
         }
-        this.showToast('🗓️', `Welcome back! Fast-simulated ${plan.days} days while away.`, 'var(--neon-cyan)');
+        this.showToast('🗓️', `Fast-simulated ${plan.days} days while away.`, 'var(--sky)');
       } else if (plan.mode === 'aggregate') {
         const notes = applyAggregateOfflineSimulation(this.state, plan.days);
-        this.showToast('🗓️', `Offline report: ${notes[0] || 'Progress synced!'}`, 'var(--neon-gold)');
+        this.showToast('🗓️', `Offline sync: ${notes[0] || 'Progress updated!'}`, 'var(--amber)');
       }
       saveGame(this.state);
     }
   }
 
-  // ─── APP SHELL (GEN Z / GEN ALPHA ARCADE HUD) ──────────────
+  // ─── APP SHELL & NAVIGATION ────────────────────────────────
   private renderAppShell(): void {
-    const p = this.state.player;
     this.appEl.innerHTML = `
-      <header class="top-nav">
-        <div class="top-hud-main-row">
-          <div class="top-hud-left">
-            <div class="hud-streak-badge">
-              <span class="flame-icon">🔥</span>
-              <span id="top-day">DAY ${p.currentDay}</span>
-            </div>
-            <div class="hud-cash-box">
-              <span class="hud-cash-label">THE BAG 💰</span>
-              <div class="cash-display" id="top-cash">₹${p.money.toLocaleString('en-IN')}</div>
-            </div>
-          </div>
-          <div id="top-health-ring-container">
-            ${renderHealthRing(p)}
-          </div>
-        </div>
+      <header class="top-nav" id="top-nav-header">
+        ${renderTopHud(this.state)}
 
-        <!-- Persistent Turbo Auto-Play HUD -->
+        <!-- Turbo Auto-Play HUD -->
         <div class="turbo-hud-bar ${this.autoPlayActive ? 'active' : ''} ${this.autoPlayWaitingForChoice ? 'waiting' : ''}" id="turbo-hud-bar">
           <div class="turbo-info-col">
             <span class="turbo-status-pill ${this.autoPlayWaitingForChoice ? 'pill-turbo-wait' : (this.autoPlayActive ? 'pill-turbo-on' : 'pill-turbo-off')}">
@@ -200,17 +241,17 @@ class App {
             </span>
             <span class="turbo-status-msg" id="turbo-msg">
               ${this.autoPlayWaitingForChoice 
-                ? 'Action needed! Pick an option below.' 
-                : (this.autoPlayActive ? 'Auto-playing... Days flowing!' : 'Auto-Run paused. Tap Run to grind.')
+                ? 'Action needed! Select an option below.' 
+                : (this.autoPlayActive ? 'Auto-playing... Days flowing!' : 'Auto-Run paused. Tap Run to simulate.')
               }
             </span>
           </div>
 
           <div class="turbo-controls-row">
             <div class="speed-pills-group">
-              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 900 ? 'active' : ''}" data-speed="900" title="1x Normal Speed">1x</button>
-              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 550 ? 'active' : ''}" data-speed="550" title="2x Turbo Speed">2x</button>
-              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 250 ? 'active' : ''}" data-speed="250" title="5x Warp Speed">5x 🚀</button>
+              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 900 ? 'active' : ''}" data-speed="900">1x</button>
+              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 550 ? 'active' : ''}" data-speed="550">2x</button>
+              <button class="btn-speed-pill ${this.autoPlaySpeedMs === 250 ? 'active' : ''}" data-speed="250">5x 🚀</button>
             </div>
             <button class="btn-turbo-toggle ${this.autoPlayActive ? 'btn-pause' : ''}" id="btn-toggle-turbo">
               ${this.autoPlayActive ? '⏸️ PAUSE' : '⚡ RUN'}
@@ -223,17 +264,27 @@ class App {
 
       <nav class="bottom-nav">
         <button class="nav-tab active" data-tab="story">
-          <span class="icon">📖</span><span>Daily Lore</span>
+          <span class="icon">📖</span><span>Timeline</span>
         </button>
-        <button class="nav-tab" data-tab="account">
-          <span class="icon">🏦</span><span>The Vault</span>
+        <button class="nav-tab" data-tab="profile">
+          <span class="icon">👤</span><span>Profile</span>
         </button>
-        <button class="nav-tab" data-tab="status">
-          <span class="icon">🎮</span><span>Profile</span>
+        <button class="nav-tab" data-tab="job">
+          <span class="icon">💼</span><span>Job Board</span>
+        </button>
+        <button class="nav-tab" data-tab="investments">
+          <span class="icon">📈</span><span>Invest</span>
+        </button>
+        <button class="nav-tab" data-tab="property">
+          <span class="icon">🏠</span><span>Property</span>
         </button>
       </nav>
+
       <div id="modal-container"></div>
     `;
+
+    // Top HUD life goal click handler
+    this.attachHudListeners();
 
     // Speed pills
     this.appEl.querySelectorAll('.btn-speed-pill').forEach(btn => {
@@ -255,6 +306,26 @@ class App {
         this.setTab(target);
       });
     });
+  }
+
+  private attachHudListeners(): void {
+    this.appEl.querySelector('#hud-goals-btn')?.addEventListener('click', () => {
+      this.openGoalsModal();
+    });
+    this.appEl.querySelector('#btn-inspect-goals')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.openGoalsModal();
+    });
+  }
+
+  public openGoalsModal(): void {
+    const modalCont = document.getElementById('modal-container')!;
+    modalCont.innerHTML = '';
+    modalCont.appendChild(
+      showLifeGoalsModal(this.state, () => {
+        modalCont.innerHTML = '';
+      })
+    );
   }
 
   private setTab(tab: string): void {
@@ -288,16 +359,22 @@ class App {
           () => this.toggleAutoPlay()
         ));
         break;
-      case 'account':
-        container.appendChild(renderAccountScreen(this.state));
+      case 'profile':
+        container.appendChild(renderProfileResumeScreen(this.state, onAction));
         break;
-      case 'status':
-        container.appendChild(renderStatusPanelScreen(this.state, onAction, this.unlockManager));
+      case 'job':
+        container.appendChild(renderJobBoardScreen(this.state, onAction));
+        break;
+      case 'investments':
+        container.appendChild(renderInvestmentsScreen(this.state, onAction));
+        break;
+      case 'property':
+        container.appendChild(renderPropertyScreen(this.state, onAction));
         break;
     }
   }
 
-  // ─── GAME EVENTS & CARD SELECTION ─────────────────────────
+  // ─── GAME EVENTS & CARD SELECTION ──────────────────────────
   private handleCardChoice(card: ActiveEventCard, choiceId: string): void {
     this.eventScheduler.resolveCardChoice(card, choiceId, this.state);
     this.checkAndTriggerUnlocks();
@@ -305,8 +382,6 @@ class App {
     this.updateHeader();
     this.renderActiveTab();
 
-    // If auto-play is enabled: check if any pending multi-choice decisions remain.
-    // If all clear, AUTOMATICALLY CONTINUE auto-play after 350ms!
     if (this.autoPlayActive) {
       const stillPendingDecisions = this.activeCards.filter(
         c => !c.resolved && c.choices.length >= 2
@@ -332,7 +407,7 @@ class App {
     this.renderActiveTab();
 
     const incomeStr = report.moneyDelta >= 0 ? `+${formatCurrency(report.moneyDelta)}` : formatCurrency(report.moneyDelta);
-    this.showToast('⏩', `Fast-forwarded ${days} days! Cash Δ: ${incomeStr}`, 'var(--neon-cyan)');
+    this.showToast('⏩', `Advanced ${days} days! Cash Δ: ${incomeStr}`, 'var(--sky)');
   }
 
   private onDayTick(_day: number, healthEmergency?: HealthConsequenceResult): void {
@@ -340,13 +415,14 @@ class App {
     this.activeCards = [...newCards, ...this.activeCards.filter(c => !c.resolved)];
     this.checkAndTriggerUnlocks();
 
-    // Check if any course hit 100% completion
     this.checkCourseCompletions();
+
+    // Check Salary Day trigger on Day 1 of each month
+    this.checkSalaryDay();
 
     saveGame(this.state);
     this.updateHeader();
 
-    // Auto-play: if new cards with 2+ choices appear, pause the loop for user input
     const hasPendingDecisions = this.activeCards.some(
       c => !c.resolved && c.choices.length >= 2
     );
@@ -356,7 +432,6 @@ class App {
     }
   }
 
-  /** Spawn a celebratory job-offer card when a certification hits 100% */
   private checkCourseCompletions(): void {
     const p = this.state.player;
     for (const [courseId, progress] of Object.entries(p.educationProgress)) {
@@ -382,32 +457,32 @@ class App {
       instanceId: `card-cert-${course.id}-${Date.now()}`,
       defId: `cert-${course.id}`,
       category: 'milestone',
-      title: `🎓 CERTIFICATION COMPLETE: ${course.name}!`,
+      title: `🎓 Certification Complete: ${course.name}!`,
       emoji: '📜',
-      narrative: `Massive W! You completed ${course.name}. ${
+      narrative: `You completed ${course.name}. ${
         unlockedJob
-          ? `Top recruiters extended an official offer for ${unlockedJob.title} paying ₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d!`
-          : 'You are now certified and ready for high-tier career moves!'
+          ? `You are fully qualified for ${unlockedJob.title} paying ${formatCurrency(unlockedJob.salaryPerCycle * 2)}/mo!`
+          : 'Your resume score increased and you unlocked higher career rungs.'
       }`,
       day: this.state.player.currentDay,
       choices: unlockedJob
         ? [
             {
               id: 'switch-now',
-              label: `Accept Offer (₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d)`,
+              label: `Accept Offer (${formatCurrency(unlockedJob.salaryPerCycle * 2)}/mo)`,
               emoji: '💼',
               preview: [
-                { text: `Salary: ₹${unlockedJob.salaryPerCycle.toLocaleString('en-IN')}/15d`, type: 'positive' },
+                { text: `Salary: ${formatCurrency(unlockedJob.salaryPerCycle * 2)}/mo`, type: 'positive' },
                 { text: `Promoted to ${unlockedJob.title}`, type: 'positive' }
               ]
             },
             {
               id: 'keep-current',
-              label: 'Keep Current Job (Switch anytime in Profile)',
+              label: 'Keep Current Role (Switch anytime in Job Board)',
               emoji: '🚶',
               preview: [
                 { text: 'Stay in current role', type: 'neutral' },
-                { text: 'Role unlocked in Profile tab', type: 'neutral' }
+                { text: 'Job unlocked in Job Board', type: 'neutral' }
               ]
             }
           ]
@@ -416,14 +491,14 @@ class App {
               id: 'claim-cert',
               label: 'Claim Certification 📜',
               emoji: '✨',
-              preview: [{ text: 'Level up unlocked!', type: 'positive' }]
+              preview: [{ text: '+6 Resume Points!', type: 'positive' }]
             }
           ],
       resolved: false
     };
 
     this.activeCards.unshift(card);
-    this.showToast('🎓', `Level Up! Completed ${course.name}`, 'var(--neon-gold)');
+    this.showToast('🎓', `Level Up! Completed ${course.name}`, 'var(--amber)');
   }
 
   private checkAndTriggerUnlocks(): void {
@@ -445,26 +520,28 @@ class App {
   }
 
   private updateHeader(): void {
-    const p = this.state.player;
-    const cashEl = document.getElementById('top-cash');
-    const dayEl = document.getElementById('top-day');
-    if (cashEl) cashEl.innerText = formatCurrency(p.money);
-    if (dayEl) dayEl.innerText = `DAY ${p.currentDay}`;
+    const headerEl = document.getElementById('top-nav-header');
+    if (!headerEl) return;
 
-    const healthContainer = document.getElementById('top-health-ring-container');
-    if (healthContainer) {
-      healthContainer.innerHTML = renderHealthRing(p);
-    }
-
-    // Update Turbo bar status
+    // Preserve turbo bar state
     const turboBar = document.getElementById('turbo-hud-bar');
     const turboMsg = document.getElementById('turbo-msg');
     const toggleBtn = document.getElementById('btn-toggle-turbo');
 
+    // Re-render Top HUD portion
+    const existingHud = headerEl.querySelector('.hud-container');
+    if (existingHud) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = renderTopHud(this.state);
+      const newHud = tempDiv.firstElementChild!;
+      headerEl.replaceChild(newHud, existingHud);
+      this.attachHudListeners();
+    }
+
     if (turboBar && turboMsg && toggleBtn) {
       if (this.autoPlayWaitingForChoice) {
         turboBar.className = 'turbo-hud-bar waiting';
-        turboMsg.innerText = '🚨 Decision Required! Pick an option below to resume.';
+        turboMsg.innerText = '🚨 Decision Required! Select an option below.';
         toggleBtn.className = 'btn-turbo-toggle btn-pause';
         toggleBtn.innerText = '⏸️ PAUSE';
       } else if (this.autoPlayActive) {
@@ -474,12 +551,11 @@ class App {
         toggleBtn.innerText = '⏸️ PAUSE';
       } else {
         turboBar.className = 'turbo-hud-bar';
-        turboMsg.innerText = 'Auto-Run paused. Tap Run to grind!';
+        turboMsg.innerText = 'Auto-Run paused. Tap Run to simulate.';
         toggleBtn.className = 'btn-turbo-toggle';
         toggleBtn.innerText = '⚡ RUN';
       }
 
-      // Update speed pill active states
       this.appEl.querySelectorAll('.btn-speed-pill').forEach(btn => {
         const speed = parseInt((btn as HTMLElement).getAttribute('data-speed') || '600', 10);
         if (speed === this.autoPlaySpeedMs) {
@@ -491,7 +567,7 @@ class App {
     }
   }
 
-  // ─── TOAST NOTIFICATION SYSTEM ────────────────────────────
+  // ─── TOAST NOTIFICATION ────────────────────────────────────
   private showToast(icon: string, message: string, color: string): void {
     const toastContainerId = 'unlock-toast-container';
     let tc = document.getElementById(toastContainerId);
@@ -504,14 +580,10 @@ class App {
 
     const toast = document.createElement('div');
     toast.className = 'unlock-toast-item';
+    toast.style.borderLeft = `3px solid ${color}`;
     toast.innerHTML = `
-      <div class="toast-glow-bar" style="background:${color};"></div>
-      <div class="toast-content-row">
-        <span class="toast-feature-icon">${icon}</span>
-        <div class="toast-text-col">
-          <div class="toast-desc">${message}</div>
-        </div>
-      </div>
+      <span class="toast-feature-icon">${icon}</span>
+      <div class="toast-desc">${message}</div>
     `;
     tc.appendChild(toast);
     setTimeout(() => {
@@ -520,11 +592,16 @@ class App {
     }, 3200);
   }
 
-  // ─── GAME ACTIONS DISPATCHER ──────────────────────────────
+  // ─── ACTIONS DISPATCHER ────────────────────────────────────
   private handleAction(action: string, payload?: any): void {
     const modalContainer = document.getElementById('modal-container')!;
 
     switch (action) {
+      case 'refresh-property':
+        this.updateHeader();
+        this.renderActiveTab();
+        break;
+
       case 'open-time-modal':
         modalContainer.appendChild(
           showTimeAllocationModal(
@@ -588,9 +665,10 @@ class App {
                   lastInvestedDay: this.state.player.currentDay,
                   active: true
                 });
-                this.showToast('📈', `SIP created! ₹1,000 auto-invested in ${ticker.name} every 15 days.`, 'var(--neon-lime)');
+                this.showToast('📈', `SIP active: ${formatCurrency(1000)} auto-invested every 15 days in ${ticker.name}.`, 'var(--emerald)');
               }
               saveGame(this.state);
+              this.updateHeader();
               this.renderActiveTab();
             }
           )
@@ -608,9 +686,10 @@ class App {
               this.state.player.goldHoldings.grams += g;
               this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Bought ${g}g of gold for ${formatCurrency(cost)}`, type: 'investment' });
               saveGame(this.state);
+              this.updateHeader();
               this.renderActiveTab();
             } else {
-              this.showToast('❌', 'Insufficient cash for gold purchase.', 'var(--neon-coral)');
+              this.showToast('❌', 'Insufficient cash for gold purchase.', 'var(--rose)');
             }
           }
         } else {
@@ -622,144 +701,37 @@ class App {
             this.state.player.goldHoldings.grams -= g;
             this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Sold ${g}g of gold for ${formatCurrency(earned)}`, type: 'investment' });
             saveGame(this.state);
+            this.updateHeader();
             this.renderActiveTab();
           }
         }
         break;
-
-      case 'buy-property': {
-        const prop = this.state.market.properties.find(p => p.id === payload.propertyId);
-        if (prop && this.state.player.money >= prop.price) {
-          if (confirm(`Acquire ${prop.name} for ${formatCurrency(prop.price)}?`)) {
-            this.state.player.money -= prop.price;
-            prop.owner = 'player';
-            this.state.player.properties.push({
-              id: prop.id,
-              purchasePrice: prop.price,
-              riskStatus: prop.riskProfile.legalStatus,
-              mortgage: null
-            });
-            this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Acquired property: ${prop.name}`, type: 'investment' });
-            saveGame(this.state);
-            this.renderActiveTab();
-          }
-        } else {
-          this.showToast('❌', 'Insufficient funds to buy property!', 'var(--neon-coral)');
-        }
-        break;
-      }
-
-      case 'buy-lifestyle-asset': {
-        const item = ASSET_CATALOG.find(a => a.id === payload.assetId);
-        if (item && this.state.player.money >= item.price) {
-          if (confirm(`Purchase ${item.name} for ${formatCurrency(item.price)}?`)) {
-            this.state.player.money -= item.price;
-            this.state.player.lifestyleAssets.push({
-              id: item.id,
-              purchasePrice: item.price,
-              currentValue: item.price,
-              purchasedOnDay: this.state.player.currentDay,
-              monthlyMaintenance: item.monthlyUpkeep
-            });
-            if (item.id === 'scooter') this.state.player.lifestyle.transportMode = 'scooter';
-            if (item.id === 'car') this.state.player.lifestyle.transportMode = 'car';
-            if (item.id === 'bicycle') this.state.player.lifestyle.transportMode = 'bicycle';
-            this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Acquired asset: ${item.name}`, type: 'investment' });
-            saveGame(this.state);
-            this.renderActiveTab();
-          }
-        } else {
-          this.showToast('❌', 'Insufficient cash for this asset.', 'var(--neon-coral)');
-        }
-        break;
-      }
-
-      case 'claim-business-slot': {
-        const sec = this.state.market.businessSectors.find(s => s.id === payload.sectorId);
-        if (sec && this.state.player.money >= sec.startupCost) {
-          const slot = sec.slots.find(s => s.owner === null);
-          if (slot && confirm(`Launch venture in ${sec.name} for ${formatCurrency(sec.startupCost)}?`)) {
-            this.state.player.money -= sec.startupCost;
-            slot.owner = 'player';
-            this.state.player.businesses.push({
-              sectorId: sec.id,
-              slotId: slot.id,
-              startedDay: this.state.player.currentDay,
-              cashInvested: sec.startupCost
-            });
-            this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Started business in ${sec.name}!`, type: 'investment' });
-            saveGame(this.state);
-            this.renderActiveTab();
-          }
-        } else {
-          this.showToast('❌', 'Insufficient capital for this venture.', 'var(--neon-coral)');
-        }
-        break;
-      }
 
       case 'deposit-savings': {
-        const dep = prompt(`Amount to deposit to savings (Cash: ${formatCurrency(this.state.player.money)}):`, '1000');
+        const dep = prompt(`Amount to deposit to savings (Cash: ${formatCurrency(this.state.player.money)}):`, '500');
         const dAmt = parseInt(dep || '0', 10);
         if (dAmt > 0 && this.state.player.money >= dAmt) {
           this.state.player.money -= dAmt;
           this.state.player.savingsBalance += dAmt;
           this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Deposited ${formatCurrency(dAmt)} to savings`, type: 'investment' });
           saveGame(this.state);
+          this.updateHeader();
           this.renderActiveTab();
         }
         break;
       }
 
       case 'withdraw-savings': {
-        const wit = prompt(`Amount to withdraw (Balance: ${formatCurrency(this.state.player.savingsBalance)}):`, '1000');
+        const wit = prompt(`Amount to withdraw (Balance: ${formatCurrency(this.state.player.savingsBalance)}):`, '500');
         const wAmt = parseInt(wit || '0', 10);
         if (wAmt > 0 && this.state.player.savingsBalance >= wAmt) {
           this.state.player.savingsBalance -= wAmt;
           this.state.player.money += wAmt;
           this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Withdrew ${formatCurrency(wAmt)} from savings`, type: 'expense' });
           saveGame(this.state);
+          this.updateHeader();
           this.renderActiveTab();
         }
-        break;
-      }
-
-      case 'open-loan-modal': {
-        const loanAmtStr = prompt('Enter requested loan amount (Max ₹1,00,000 at 12% APR):', '25000');
-        const lAmt = parseInt(loanAmtStr || '0', 10);
-        if (lAmt > 0 && lAmt <= 100000) {
-          const emi = Math.round((lAmt / 12) + (lAmt * 0.01));
-          this.state.player.money += lAmt;
-          this.state.player.loans.push({
-            id: `loan-${Date.now()}`,
-            name: `Personal Credit ₹${lAmt.toLocaleString('en-IN')}`,
-            type: 'personal',
-            principalRemaining: lAmt,
-            interestRate: 0.12,
-            emiAmount: emi,
-            cycleDays: 30,
-            lastPaidDay: this.state.player.currentDay,
-            missedPayments: 0
-          });
-          this.showToast('💳', `Approved! +${formatCurrency(lAmt)} added. EMI: ${formatCurrency(emi)}/30d`, 'var(--neon-gold)');
-          saveGame(this.state);
-          this.renderActiveTab();
-        }
-        break;
-      }
-
-      case 'select-insurance-tier': {
-        const tier = payload.tier;
-        if (tier === 'none') {
-          this.state.player.insurance.health = { tier: 'none', premiumPerMonth: 0, coveragePct: 0 };
-        } else if (tier === 'basic') {
-          this.state.player.insurance.health = { tier: 'basic', premiumPerMonth: 500, coveragePct: 0.5 };
-        } else if (tier === 'standard') {
-          this.state.player.insurance.health = { tier: 'standard', premiumPerMonth: 1200, coveragePct: 0.8 };
-        } else if (tier === 'premium') {
-          this.state.player.insurance.health = { tier: 'premium', premiumPerMonth: 2500, coveragePct: 0.95 };
-        }
-        saveGame(this.state);
-        this.renderActiveTab();
         break;
       }
 
@@ -774,25 +746,32 @@ class App {
             stressPerDay: targetJob.stressPerDay,
             timeSlotsCost: targetJob.timeSlotsCost
           };
-          this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Started new job: ${targetJob.title}`, type: 'income' });
-          this.showToast('💼', `Promoted! New role: ${targetJob.title}`, 'var(--neon-lime)');
+          if (!this.state.player.careerHistory) this.state.player.careerHistory = [];
+          this.state.player.careerHistory.push({
+            jobId: targetJob.id,
+            title: targetJob.title,
+            startDay: this.state.player.currentDay,
+            endDay: null,
+            salary: targetJob.salaryPerCycle
+          });
+          this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Promoted/Switched to ${targetJob.title} (${formatCurrency(targetJob.salaryPerCycle * 2)}/mo)`, type: 'income' });
+          this.showToast('💼', `Role updated: ${targetJob.title}!`, 'var(--emerald)');
           saveGame(this.state);
+          this.updateHeader();
           this.renderActiveTab();
         }
         break;
       }
 
-      // ─── Real-Time Course Study Enrollment ───
       case 'enroll-course': {
         const course = COURSES.find(c => c.id === payload.courseId);
         if (!course) break;
 
         if (this.state.player.money < course.fee) {
-          this.showToast('❌', `Need ₹${course.fee.toLocaleString('en-IN')} cash for enrollment!`, 'var(--neon-coral)');
+          this.showToast('❌', `Need ${formatCurrency(course.fee)} cash for enrollment!`, 'var(--rose)');
           break;
         }
 
-        // Deduct fee and start active study
         this.state.player.money -= course.fee;
         this.state.player.activeCourseId = course.id;
         if (this.state.player.educationProgress[course.id] === undefined) {
@@ -805,7 +784,7 @@ class App {
           type: 'achievement'
         });
 
-        this.showToast('📚', `Enrolled in ${course.name}! Grinding begins (~${course.slotsRequired} days).`, 'var(--neon-cyan)');
+        this.showToast('📚', `Enrolled in ${course.name}!`, 'var(--sky)');
         saveGame(this.state);
         this.updateHeader();
         this.renderActiveTab();
@@ -814,25 +793,9 @@ class App {
 
       case 'pause-course': {
         this.state.player.activeCourseId = null;
-        this.showToast('⏸️', 'Course study paused. Resume anytime from Profile!', 'var(--text-muted)');
+        this.showToast('⏸️', 'Course study paused.', 'var(--text-muted)');
         saveGame(this.state);
         this.updateHeader();
-        this.renderActiveTab();
-        break;
-      }
-
-      case 'set-transport': {
-        this.state.player.lifestyle.transportMode = payload.mode;
-        this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Transport mode changed to ${payload.mode}`, type: 'event' });
-        saveGame(this.state);
-        this.renderActiveTab();
-        break;
-      }
-
-      case 'set-housing': {
-        this.state.player.housing.amountPerCycle = payload.amount;
-        this.state.player.eventLog.unshift({ day: this.state.player.currentDay, text: `Housing budget set to ${formatCurrency(payload.amount)}/mo`, type: 'expense' });
-        saveGame(this.state);
         this.renderActiveTab();
         break;
       }
@@ -847,7 +810,7 @@ function initApp() {
     console.error('App initialization error:', err);
     const appEl = document.getElementById('app');
     if (appEl) {
-      appEl.innerHTML = `<div style="color:#ff3366;padding:24px;font-family:sans-serif;">
+      appEl.innerHTML = `<div style="color:#f43f5e;padding:24px;font-family:sans-serif;">
         <h3>Error starting game:</h3>
         <pre>${String(err instanceof Error ? err.stack || err.message : err)}</pre>
         <button onclick="localStorage.clear();location.reload();" style="padding:8px 16px;background:#1e293b;color:white;border:1px solid #334155;border-radius:6px;cursor:pointer;margin-top:12px;">Reset Save Data & Reload</button>

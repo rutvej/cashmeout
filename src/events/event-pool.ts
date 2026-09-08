@@ -6,9 +6,11 @@ import { OPPORTUNITY_EVENTS } from './pools/opportunity';
 import { MARKET_EVENTS } from './pools/market-events';
 import { NPC_EVENTS } from './pools/npc-events';
 import { MILESTONE_EVENTS } from './pools/milestones';
+import { BEHAVIORAL_EVENTS } from './pools/behavioral-events';
 
 export const ALL_EVENT_DEFS: EventCardDef[] = [
   ...MILESTONE_EVENTS,
+  ...BEHAVIORAL_EVENTS,
   ...HEALTH_TRIGGER_EVENTS,
   ...OPPORTUNITY_EVENTS,
   ...MARKET_EVENTS,

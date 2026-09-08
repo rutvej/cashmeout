@@ -88,26 +88,48 @@ export class EventScheduler {
       return true;
     });
 
-    // Sort by priority descending
-    eligibleDefs.sort((a, b) => b.priority - a.priority);
+    // Score events with dynamic behavioral multiplier
+    const b = state.player.behavioralCounters;
+    const scoredDefs = eligibleDefs.map(def => {
+      let weightBoost = 0;
+      if (b) {
+        if (def.id.includes('flash-sale') || def.id.includes('impulse')) {
+          weightBoost = (b.impulseBuyCounter - 1.0) * 8;
+        } else if (def.id.includes('food-delivery') || def.id.includes('junk')) {
+          weightBoost = (b.junkFoodCounter - 1.0) * 8;
+        } else if (def.id.includes('gym') || def.id.includes('inertia')) {
+          weightBoost = (b.gymSkipCounter - 1.0) * 8;
+        } else if (def.id.includes('sleep') || def.id.includes('binge')) {
+          weightBoost = (b.sleepDebtCounter - 1.0) * 8;
+        } else if (def.id.includes('crypto') || def.id.includes('fomo') || def.id.includes('revenge-trade')) {
+          weightBoost = (b.cryptoFomoCounter - 1.0) * 8;
+        } else if (def.id.includes('lifestyle-creep') || def.id.includes('lease')) {
+          weightBoost = (b.lifestyleCreepCounter - 1.0) * 8;
+        }
+      }
+      return { def, effectivePriority: def.priority + weightBoost };
+    });
+
+    // Sort by effective priority descending
+    scoredDefs.sort((a, b) => b.effectivePriority - a.effectivePriority);
 
     // Pick top high-priority card (priority >= 80, e.g. milestones) if present
-    const highPri = eligibleDefs.find(d => d.priority >= 80);
+    const highPri = scoredDefs.find(d => d.def.priority >= 80);
     if (highPri) {
-      cards.push(this.instantiateCard(highPri, state, currentDay));
-      if (highPri.once) this.onceTriggered.add(highPri.id);
-      this.seenEvents.set(highPri.id, currentDay);
+      cards.push(this.instantiateCard(highPri.def, state, currentDay));
+      if (highPri.def.once) this.onceTriggered.add(highPri.def.id);
+      this.seenEvents.set(highPri.def.id, currentDay);
     }
 
-    // Pick 1 regular event (dilemma, daily, opportunity, market, npc) if we haven't reached 2 cards
-    const remaining = eligibleDefs.filter(d => !cards.some(c => c.defId === d.id) && d.priority < 80);
+    // Pick 1 regular event (dilemma, daily, opportunity, market, npc, behavioral) if we haven't reached 2 cards
+    const remaining = scoredDefs.filter(d => !cards.some(c => c.defId === d.def.id) && d.def.priority < 80);
     if (remaining.length > 0 && cards.length < 2) {
-      // Weighted shuffle among top 5 eligible to keep it varied
-      const candidatePool = remaining.slice(0, 6);
+      // Top 5 candidate pool weighted by effective priority
+      const candidatePool = remaining.slice(0, 5);
       const chosen = candidatePool[Math.floor(Math.random() * candidatePool.length)];
-      cards.push(this.instantiateCard(chosen, state, currentDay));
-      if (chosen.once) this.onceTriggered.add(chosen.id);
-      this.seenEvents.set(chosen.id, currentDay);
+      cards.push(this.instantiateCard(chosen.def, state, currentDay));
+      if (chosen.def.once) this.onceTriggered.add(chosen.def.id);
+      this.seenEvents.set(chosen.def.id, currentDay);
     }
 
     this.saveHistory();
