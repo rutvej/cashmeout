@@ -1,315 +1,209 @@
-import { GameState } from '../types/game';
-import { calculateNetWorth } from '../engine/economy-engine';
-import { formatCurrency } from '../ui/components/format';
+import { GameState, LifeGoalDefinition } from '../types/game';
 
-export interface LifeGoalDef {
-  id: string;
-  category: 'wealth' | 'health' | 'lifestyle';
-  title: string;
-  emoji: string;
-  targetDescription: string;
-  getProgress: (state: GameState) => {
-    current: number;
-    target: number;
-    pct: number;
-    currentLabel: string;
-    targetLabel: string;
-    isMet: boolean;
-  };
-}
-
-export const WEALTH_GOALS: LifeGoalDef[] = [
+export const LIFE_GOALS: LifeGoalDefinition[] = [
+  // Category A: Wealth Ambitions (Spec 10)
   {
     id: 'safety-fortress',
     category: 'wealth',
     title: 'The Safety Fortress',
-    emoji: '🏰',
-    targetDescription: 'Accumulate at least $50,000 in liquid cash & savings',
-    getProgress: (state) => {
-      const current = state.player.money + state.player.savingsBalance;
-      const target = 50000;
-      const pct = Math.min(100, Math.round((current / target) * 100));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: formatCurrency(current),
-        targetLabel: formatCurrency(target),
-        isMet: current >= target
-      };
+    targetDescription: 'Accumulate at least $50,000 in liquid, debt-free cash/emergency savings.',
+    checkCompletion: (s: GameState) => {
+      const liquid = s.resources.cashOnHand + s.resources.emergencyFund;
+      const totalDebt = s.liabilities.loans.reduce((sum, l) => sum + l.balance, 0);
+      return liquid >= 50000 && totalDebt === 0;
+    },
+    getProgressPct: (s: GameState) => {
+      const liquid = s.resources.cashOnHand + s.resources.emergencyFund;
+      return Math.min(100, Math.round((liquid / 50000) * 100));
     }
   },
   {
     id: 'six-figure-net-worth',
     category: 'wealth',
-    title: 'Six-Figure Net Worth',
-    emoji: '💎',
-    targetDescription: 'Achieve a verifiable Net Worth of $100,000+',
-    getProgress: (state) => {
-      const current = calculateNetWorth(state);
-      const target = 100000;
-      const pct = Math.min(100, Math.max(0, Math.round((current / target) * 100)));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: formatCurrency(current),
-        targetLabel: formatCurrency(target),
-        isMet: current >= target
-      };
+    title: 'The Six-Figure Net Worth',
+    targetDescription: 'Achieve a total verifiable Net Worth of $100,000+.',
+    checkCompletion: (s: GameState) => calculateTotalNetWorth(s) >= 100000,
+    getProgressPct: (s: GameState) => {
+      const nw = calculateTotalNetWorth(s);
+      return Math.max(0, Math.min(100, Math.round((nw / 100000) * 100)));
     }
   },
   {
-    id: 'quarter-million',
+    id: 'quarter-million-tycoon',
     category: 'wealth',
-    title: 'Quarter-Million Tycoon',
-    emoji: '👑',
-    targetDescription: 'Attain a total Net Worth exceeding $250,000',
-    getProgress: (state) => {
-      const current = calculateNetWorth(state);
-      const target = 250000;
-      const pct = Math.min(100, Math.max(0, Math.round((current / target) * 100)));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: formatCurrency(current),
-        targetLabel: formatCurrency(target),
-        isMet: current >= target
-      };
+    title: 'The Quarter-Million Tycoon',
+    targetDescription: 'Attain a net worth exceeding $250,000 through business equity, stocks, or real estate.',
+    checkCompletion: (s: GameState) => calculateTotalNetWorth(s) >= 250000,
+    getProgressPct: (s: GameState) => {
+      const nw = calculateTotalNetWorth(s);
+      return Math.max(0, Math.min(100, Math.round((nw / 250000) * 100)));
     }
   },
   {
-    id: 'debt-free',
+    id: 'debt-elimination',
     category: 'wealth',
     title: 'Complete Debt Elimination',
-    emoji: '🕊️',
-    targetDescription: 'Own all assets with $0 total outstanding debt/loans',
-    getProgress: (state) => {
-      const totalDebt = state.player.loans.reduce((s, l) => s + l.principalRemaining, 0);
-      const pct = totalDebt === 0 ? 100 : Math.max(10, Math.round((1 - Math.min(1, totalDebt / 50000)) * 100));
-      return {
-        current: totalDebt,
-        target: 0,
-        pct,
-        currentLabel: totalDebt === 0 ? '$0 Debt' : `${formatCurrency(totalDebt)} debt`,
-        targetLabel: '$0 Debt',
-        isMet: totalDebt === 0
-      };
+    targetDescription: 'Own all assets with $0 in total outstanding debt/loans.',
+    checkCompletion: (s: GameState) => {
+      const loanDebt = s.liabilities.loans.reduce((sum, l) => sum + l.balance, 0);
+      const mortgageDebt = s.property.ownedProperties.reduce((sum, p) => sum + p.mortgageBalance, 0);
+      return (loanDebt + mortgageDebt) === 0;
+    },
+    getProgressPct: (s: GameState) => {
+      const totalDebt = s.liabilities.loans.reduce((sum, l) => sum + l.balance, 0) +
+        s.property.ownedProperties.reduce((sum, p) => sum + p.mortgageBalance, 0);
+      return totalDebt === 0 ? 100 : Math.max(0, Math.round(100 - (totalDebt / 500)));
     }
   },
   {
     id: 'passive-freedom',
     category: 'wealth',
     title: 'Passive Freedom',
-    emoji: '🏖️',
-    targetDescription: 'Generate $1,500+/month in non-labor passive income',
-    getProgress: (state) => {
-      let rentalIncome = 0;
-      for (const prop of state.player.properties) {
-        const def = state.market.properties.find(p => p.id === prop.id);
-        if (def) {
-          rentalIncome += (def.price * (def.rentYieldPct / 100)) / 12;
-        }
-      }
-      let dividendIncome = 0;
-      for (const [tickerId, entry] of Object.entries(state.player.portfolio)) {
-        const t = state.market.tickers.find(x => x.id === tickerId);
-        if (t && t.dividendYieldPct) {
-          dividendIncome += (entry.shares * t.price * t.dividendYieldPct) / 12;
-        }
-      }
-      const current = Math.round(rentalIncome + dividendIncome);
-      const target = 1500;
-      const pct = Math.min(100, Math.round((current / target) * 100));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: `${formatCurrency(current)}/mo`,
-        targetLabel: `${formatCurrency(target)}/mo`,
-        isMet: current >= target
-      };
+    targetDescription: 'Generate $1,500+/month in non-labor passive income (dividends + rental profit).',
+    checkCompletion: (s: GameState) => calculateMonthlyPassiveIncome(s) >= 1500,
+    getProgressPct: (s: GameState) => {
+      const pass = calculateMonthlyPassiveIncome(s);
+      return Math.min(100, Math.round((pass / 1500) * 100));
     }
-  }
-];
+  },
 
-export const HEALTH_GOALS: LifeGoalDef[] = [
+  // Category B: Health Ambitions (Spec 10)
   {
     id: 'olympic-resilience',
     category: 'health',
     title: 'Olympic Resilience',
-    emoji: '💪',
-    targetDescription: 'Maintain Physical Health at 85% or higher',
-    getProgress: (state) => {
-      const current = Math.round(state.player.health.physical);
-      const target = 85;
-      const pct = Math.min(100, Math.round((current / target) * 100));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: `${current}%`,
-        targetLabel: `≥ ${target}%`,
-        isMet: current >= target
-      };
-    }
+    targetDescription: 'Maintain Physical Health above 85% with zero hospitalizations.',
+    checkCompletion: (s: GameState) => s.resources.physicalHealth >= 85 && s.simulation.hospitalizationCount === 0,
+    getProgressPct: (s: GameState) => Math.min(100, Math.round((s.resources.physicalHealth / 85) * 100))
   },
   {
     id: 'burnout-inoculation',
     category: 'health',
     title: 'Burnout Inoculation',
-    emoji: '🛡️',
-    targetDescription: 'Zero clinical burnout episodes or mental breakdowns',
-    getProgress: (state) => {
-      const episodes = state.player.lifeGoalStats?.burnoutEpisodes || 0;
-      const isMet = episodes === 0;
-      return {
-        current: episodes,
-        target: 0,
-        pct: isMet ? 100 : Math.max(0, 100 - episodes * 40),
-        currentLabel: episodes === 0 ? '0 Burnouts' : `${episodes} episodes`,
-        targetLabel: '0 Burnouts',
-        isMet
-      };
-    }
+    targetDescription: 'Never trigger a single clinical burnout, mental collapse, or forced stress leave.',
+    checkCompletion: (s: GameState) => s.simulation.burnoutEpisodeCount === 0 && s.resources.mentalHealth >= 50,
+    getProgressPct: (s: GameState) => s.simulation.burnoutEpisodeCount > 0 ? 0 : Math.min(100, Math.round(s.resources.mentalHealth))
   },
   {
     id: 'iron-consistency',
     category: 'health',
     title: 'Iron Consistency',
-    emoji: '🏋️',
-    targetDescription: 'Maintain gym habit consistency (≥ 3.5 sessions/week)',
-    getProgress: (state) => {
-      const sessions = state.player.lifeGoalStats?.totalGymSessions || 0;
-      const days = Math.max(7, state.player.lifeGoalStats?.totalDaysTracked || state.player.currentDay);
-      const weeks = days / 7;
-      const currentAvg = Math.round((sessions / weeks) * 10) / 10;
-      const target = 3.5;
-      const pct = Math.min(100, Math.round((currentAvg / target) * 100));
-      return {
-        current: currentAvg,
-        target,
-        pct,
-        currentLabel: `${currentAvg}/wk`,
-        targetLabel: `≥ ${target}/wk`,
-        isMet: currentAvg >= target
-      };
-    }
+    targetDescription: 'Maintain average gym attendance of at least 3.5 sessions per week (1,820 total).',
+    checkCompletion: (s: GameState) => s.simulation.lifetimeGymSessions >= 1800,
+    getProgressPct: (s: GameState) => Math.min(100, Math.round((s.simulation.lifetimeGymSessions / 1800) * 100))
   },
   {
     id: 'youthful-vitality',
     category: 'health',
     title: 'Youthful Vitality',
-    emoji: '⚡',
-    targetDescription: 'Sustain daily Energy levels at 80% or higher',
-    getProgress: (state) => {
-      const current = Math.round(state.player.health.energy);
-      const target = 80;
-      const pct = Math.min(100, Math.round((current / target) * 100));
-      return {
-        current,
-        target,
-        pct,
-        currentLabel: `${current}%`,
-        targetLabel: `≥ ${target}%`,
-        isMet: current >= target
-      };
-    }
-  }
-];
+    targetDescription: 'Conclude Year 10 with Energy levels above 80% and Mental Health above 75%.',
+    checkCompletion: (s: GameState) => s.resources.energy >= 80 && s.resources.mentalHealth >= 75,
+    getProgressPct: (s: GameState) => Math.min(100, Math.round(((s.resources.energy + s.resources.mentalHealth) / 155) * 100))
+  },
 
-export const LIFESTYLE_GOALS: LifeGoalDef[] = [
+  // Category C: Lifestyle Ambitions (Spec 10)
   {
     id: 'homeowner-pride',
     category: 'lifestyle',
     title: 'Homeowner Pride',
-    emoji: '🏡',
-    targetDescription: 'Own a primary residential home with positive equity',
-    getProgress: (state) => {
-      const ownsHome = state.player.housing.type === 'own' || state.player.properties.length > 0;
-      const pct = ownsHome ? 100 : 0;
-      return {
-        current: ownsHome ? 1 : 0,
-        target: 1,
-        pct,
-        currentLabel: ownsHome ? 'Homeowner' : 'Renting',
-        targetLabel: 'Own Home',
-        isMet: ownsHome
-      };
+    targetDescription: 'Own a primary residential home with positive equity.',
+    checkCompletion: (s: GameState) => s.property.ownedProperties.some(p => p.type === 'home' && (p.currentValue - p.mortgageBalance) > 0),
+    getProgressPct: (s: GameState) => {
+      const home = s.property.ownedProperties.find(p => p.type === 'home');
+      if (!home) return 0;
+      const equity = home.currentValue - home.mortgageBalance;
+      return equity > 0 ? 100 : 50;
     }
   },
   {
     id: 'thriving-entrepreneur',
     category: 'lifestyle',
     title: 'Thriving Entrepreneur',
-    emoji: '🚀',
-    targetDescription: 'Build a venture generating $4,000+/month in net profit',
-    getProgress: (state) => {
-      let bizRev = 0;
-      for (const b of state.player.businesses) {
-        const sec = state.market.businessSectors.find(s => s.id === b.sectorId);
-        if (sec) {
-          bizRev += sec.baseRevenuePerCycle - sec.slotUpkeepPerCycle;
-        }
-      }
-      const target = 4000;
-      const pct = Math.min(100, Math.round((bizRev / target) * 100));
-      return {
-        current: bizRev,
-        target,
-        pct,
-        currentLabel: `${formatCurrency(bizRev)}/mo`,
-        targetLabel: `${formatCurrency(target)}/mo`,
-        isMet: bizRev >= target
-      };
+    targetDescription: 'Build and operate a venture producing $4,000+/month in net profits.',
+    checkCompletion: (s: GameState) => s.business.activeBusinesses.some(b => (b.currentMonthlyRevenue - b.currentMonthlyOpsCost) >= 4000),
+    getProgressPct: (s: GameState) => {
+      const topProfit = Math.max(0, ...s.business.activeBusinesses.map(b => b.currentMonthlyRevenue - b.currentMonthlyOpsCost));
+      return Math.min(100, Math.round((topProfit / 4000) * 100));
     }
   },
   {
     id: 'executive-leader',
     category: 'lifestyle',
     title: 'Executive Leader',
-    emoji: '👔',
-    targetDescription: 'Reach Director, VP or C-Suite corporate rank',
-    getProgress: (state) => {
-      const title = state.player.job.title.toLowerCase();
-      const isExec = title.includes('director') || title.includes('vp') || title.includes('chief') || title.includes('officer') || title.includes('partner');
-      const isSenior = title.includes('senior') || title.includes('lead') || title.includes('manager');
-      const pct = isExec ? 100 : (isSenior ? 60 : 25);
-      return {
-        current: isExec ? 1 : 0,
-        target: 1,
-        pct,
-        currentLabel: state.player.job.title,
-        targetLabel: 'Director / VP',
-        isMet: isExec
-      };
+    targetDescription: 'Reach Director or VP rank (Rung 5) in corporate hierarchy.',
+    checkCompletion: (s: GameState) => s.career.currentJob ? s.career.currentJob.salaryMonthly >= 11000 : false,
+    getProgressPct: (s: GameState) => {
+      if (!s.career.currentJob) return 0;
+      return Math.min(100, Math.round((s.career.currentJob.salaryMonthly / 12000) * 100));
     }
   },
   {
     id: 'balanced-life',
     category: 'lifestyle',
     title: 'The Balanced Life',
-    emoji: '🧘',
-    targetDescription: 'Maintain Mental Health and Happiness score ≥ 75%',
-    getProgress: (state) => {
-      const avg = Math.round((state.player.health.mental + state.player.stats.happiness) / 2);
-      const target = 75;
-      const pct = Math.min(100, Math.round((avg / target) * 100));
-      return {
-        current: avg,
-        target,
-        pct,
-        currentLabel: `${avg}%`,
-        targetLabel: `≥ ${target}%`,
-        isMet: avg >= target
-      };
-    }
+    targetDescription: 'Maintain average Mental Health and Energy above 75% with low debt.',
+    checkCompletion: (s: GameState) => s.resources.mentalHealth >= 75 && s.resources.energy >= 70,
+    getProgressPct: (s: GameState) => Math.min(100, Math.round(((s.resources.mentalHealth + s.resources.energy) / 145) * 100))
   }
 ];
 
-export function getGoalDef(category: 'wealth' | 'health' | 'lifestyle', id: string): LifeGoalDef | undefined {
-  if (category === 'wealth') return WEALTH_GOALS.find(g => g.id === id);
-  if (category === 'health') return HEALTH_GOALS.find(g => g.id === id);
-  return LIFESTYLE_GOALS.find(g => g.id === id);
+export function calculateTotalNetWorth(state: GameState): number {
+  const cash = state.resources.cashOnHand + state.resources.emergencyFund;
+  
+  // Stocks equity
+  let stocksValue = 0;
+  // Fallback prices if market engine not imported yet
+  for (const [_, holding] of Object.entries(state.investments.stocksOwned)) {
+    stocksValue += holding.shares * holding.averageCost;
+  }
+
+  // Crypto equity
+  let cryptoValue = 0;
+  for (const [_, holding] of Object.entries(state.investments.cryptoOwned)) {
+    cryptoValue += holding.units * holding.averageCost;
+  }
+
+  // Mutual funds
+  let mfValue = 0;
+  for (const [_, holding] of Object.entries(state.investments.mutualFundUnits)) {
+    mfValue += holding.investedAmount;
+  }
+
+  // Fixed deposits
+  const fdValue = state.investments.fixedDeposits.reduce((sum, fd) => sum + fd.principal, 0);
+
+  // Property equity
+  let propertyEquity = 0;
+  for (const prop of state.property.ownedProperties) {
+    propertyEquity += (prop.currentValue - prop.mortgageBalance);
+  }
+
+  // Business valuation (e.g. 12x monthly profit or base assets)
+  let businessValue = 0;
+  for (const biz of state.business.activeBusinesses) {
+    const monthlyNet = Math.max(0, biz.currentMonthlyRevenue - biz.currentMonthlyOpsCost);
+    businessValue += monthlyNet * 12 + (biz.scaleLevel * 5000);
+  }
+
+  // Liabilities
+  const totalLoanDebt = state.liabilities.loans.reduce((sum, loan) => sum + loan.balance, 0);
+
+  return cash + stocksValue + cryptoValue + mfValue + fdValue + propertyEquity + businessValue - totalLoanDebt;
+}
+
+export function calculateMonthlyPassiveIncome(state: GameState): number {
+  let rentalIncome = 0;
+  for (const prop of state.property.ownedProperties) {
+    if (prop.type === 'rental' && !prop.isVacant) {
+      rentalIncome += Math.max(0, prop.tenantMonthlyRent - prop.monthlyEMI);
+    }
+  }
+
+  // Estimated dividend / FD interest yield (~2.5% to 3.5% / 12)
+  let dividendYield = 0;
+  for (const [_, holding] of Object.entries(state.investments.stocksOwned)) {
+    dividendYield += (holding.shares * holding.averageCost * 0.025) / 12;
+  }
+
+  return Math.round(rentalIncome + dividendYield);
 }

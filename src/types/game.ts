@@ -1,293 +1,287 @@
-export type FoodTierId = 'street' | 'basic' | 'home-cooked' | 'restaurant';
-export type TransportModeId = 'walk' | 'bicycle' | 'scooter' | 'car';
+export type ResourceBar = number; // 0 to 100
 
-export interface Job {
+export type JobRung = 1 | 2 | 3 | 4 | 5;
+
+export interface CompanyProfile {
+  id: string;
+  name: string;
+  industry: string;
+  cultureStars: number; // 1 to 5
+  overtimeFrequency: number; // 0.0 to 1.0 probability
+  growthOpportunity: number; // 0.0 to 1.0 chance at appraisal
+  layoffRisk: number; // 0.0 to 1.0
+  vacationDays: number; // 5 to 30
+}
+
+export interface JobDefinition {
   id: string;
   title: string;
-  salaryPerCycle: number;
-  payCycleDays: number;
-  stressPerDay: number;
-  timeSlotsCost: number;
-  requirements?: {
-    course?: string;
-    minDays?: number;
-    minNetWorth?: number;
-  };
+  rung: JobRung;
+  salaryMonthly: number;
+  stressMonthly: number;
+  cultureStars: number;
+  requiredExpYears: number;
+  requiredCourseIds: string[];
+}
+
+export interface ActiveJob {
+  id: string;
+  title: string;
+  company: CompanyProfile;
+  salaryMonthly: number;
+  stressMonthly: number;
+  monthsInRole: number;
+  performanceRating: number; // 1 to 5
+  consecutiveLowReviews: number;
+}
+
+export interface Course {
+  id: string;
+  title: string;
+  category: 'finance' | 'tech' | 'marketing' | 'management';
+  cost: number;
+  durationMonths: number;
+  description: string;
+  unlocksRungs: JobRung[];
+}
+
+export interface StockTicker {
+  symbol: string;
+  name: string;
+  sector: string;
+  basePrice: number;
+  currentPrice: number;
+  volatility: number;
+  dividendYield: number; // e.g. 0.025 for 2.5%
+  priceHistory: number[];
+}
+
+export interface CryptoToken {
+  symbol: string;
+  name: string;
+  currentPrice: number;
+  volatility: number;
+  priceHistory: number[];
+}
+
+export interface MutualFund {
+  id: string;
+  name: string;
+  category: 'broad' | 'growth' | 'balanced';
+  expenseRatio: number;
+  expectedAnnualReturn: number;
+  riskTier: 'low' | 'medium' | 'high';
+  currentNAV: number;
+}
+
+export interface FixedDeposit {
+  id: string;
+  principal: number;
+  interestRate: number; // annual
+  startMonth: number;
+  durationMonths: number; // 6, 12, or 36
+}
+
+export interface BusinessType {
+  id: string;
+  name: string;
+  startupCost: number;
+  monthlyOpsCost: number;
+  minRevenue: number;
+  maxRevenue: number;
+  timeSlots: number;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  prerequisiteCourseId?: string;
+}
+
+export interface ActiveBusiness {
+  id: string;
+  typeId: string;
+  name: string;
+  stage: 'PLANNING' | 'SIDE_HUSTLE' | 'FULL_TIME';
+  currentMonthlyRevenue: number;
+  currentMonthlyOpsCost: number;
+  timeSlots: number;
+  scaleLevel: number; // 1 to 5
+  totalProfitGenerated: number;
+  employeesCount: number;
+}
+
+export type RentalTierId = 'shared' | 'studio' | '1bhk' | '2bhk';
+
+export interface RentalTier {
+  id: RentalTierId;
+  name: string;
+  monthlyCostYear1: number;
+  commuteHoursDaily: number;
+  mentalHealthImpact: number; // e.g. -5 for shared
+}
+
+export interface Property {
+  id: string;
+  name: string;
+  type: 'home' | 'rental';
+  purchasePrice: number;
+  currentValue: number;
+  mortgageBalance: number;
+  monthlyEMI: number;
+  downPayment: number;
+  isInsured: boolean;
+  tenantMonthlyRent: number; // 0 if personal home
+  isVacant: boolean;
 }
 
 export interface Loan {
   id: string;
   name: string;
-  type: 'personal' | 'vehicle' | 'mortgage' | 'business';
-  principalRemaining: number;
-  interestRate: number; // annual (e.g. 0.12)
-  emiAmount: number;
-  cycleDays: number;
-  lastPaidDay: number;
-  missedPayments: number;
+  principal: number;
+  balance: number;
+  annualInterestRate: number;
+  monthlyEMI: number;
+  remainingMonths: number;
 }
 
-export interface FixedDeposit {
-  id: string;
-  amount: number;
-  interestRate: number; // annual
-  startDay: number;
-  maturityDay: number;
+export interface DailySchedule {
+  sleepHours: number;      // 5 to 9 (default: 7.5)
+  workHours: number;       // usually 8
+  commuteHours: number;    // 0 to 2.5
+  gymHours: number;        // 0 to 2 (default: 1)
+  mealDisciplineHours: number; // 0 to 1.5
+  studySideHustleHours: number; // 0 to 4
+  leisureHours: number;    // remainder to make exactly 24
 }
 
-export interface SIP {
-  id: string;
-  tickerId: string;
-  amountPerCycle: number;
-  cycleDays: number;
-  lastInvestedDay: number;
-  active: boolean;
+export interface HabitCounters {
+  impulseBuyCounter: number;    // scale 1.0 to 10.0
+  junkFoodCounter: number;      // scale 1.0 to 10.0
+  gymSkipCounter: number;       // scale 1.0 to 10.0
+  sleepDebtCounter: number;      // scale 1.0 to 10.0
+  cryptoFomoCounter: number;    // scale 1.0 to 10.0
+  lifestyleCreepCounter: number;// scale 1.0 to 10.0
+  lateNightWorkCounter: number; // scale 1.0 to 10.0
 }
-
-export interface InsurancePolicies {
-  health: { tier: 'none' | 'basic' | 'standard' | 'premium'; premiumPerMonth: number; coveragePct: number };
-  vehicle: { active: boolean; premiumPerMonth: number };
-  property: { active: boolean; premiumPerMonth: number };
-  life: { active: boolean; premiumPerMonth: number };
-}
-
-export interface OwnedAsset {
-  id: string;
-  purchasePrice: number;
-  currentValue: number;
-  purchasedOnDay: number;
-  monthlyMaintenance: number;
-}
-
-export interface PortfolioEntry {
-  shares: number;
-  avgCost: number;
-}
-
-export interface OwnedProperty {
-  id: string;
-  purchasePrice: number;
-  riskStatus: 'clear' | 'minor-dispute' | 'major-dispute';
-  mortgage: Loan | null;
-}
-
-export interface OwnedBusiness {
-  sectorId: string;
-  slotId: string;
-  startedDay: number;
-  cashInvested: number;
-}
-
-export interface EventLogEntry {
-  day: number;
-  text: string;
-  type: 'income' | 'expense' | 'investment' | 'event' | 'achievement';
-}
-
-export interface BehavioralCounters {
-  impulseBuyCounter: number;    // 1.0 to 10.0, floor 1.0
-  junkFoodCounter: number;      // 1.0 to 10.0, floor 1.0
-  gymSkipCounter: number;       // 1.0 to 10.0, floor 1.0
-  sleepDebtCounter: number;     // 1.0 to 10.0, floor 1.0
-  cryptoFomoCounter: number;    // 1.0 to 10.0, floor 1.0
-  lifestyleCreepCounter: number;// 1.0 to 10.0, floor 1.0
-  lateNightWorkCounter: number; // 1.0 to 10.0, floor 1.0
-}
-
-export type WealthGoalId = 'safety-fortress' | 'six-figure-net-worth' | 'quarter-million' | 'debt-free' | 'passive-freedom';
-export type HealthGoalId = 'olympic-resilience' | 'burnout-inoculation' | 'iron-consistency' | 'youthful-vitality';
-export type LifestyleGoalId = 'homeowner-pride' | 'thriving-entrepreneur' | 'executive-leader' | 'balanced-life';
 
 export interface LifeGoals {
-  wealth: WealthGoalId;
-  health: HealthGoalId;
-  lifestyle: LifestyleGoalId;
+  wealthGoalId: string;
+  healthGoalId: string;
+  lifestyleGoalId: string;
 }
 
-export interface CareerHistoryEntry {
-  jobId: string;
+export interface LifeGoalDefinition {
+  id: string;
+  category: 'wealth' | 'health' | 'lifestyle';
   title: string;
-  startDay: number;
-  endDay: number | null;
-  salary: number;
-  reasonLeft?: string;
+  targetDescription: string;
+  checkCompletion: (state: GameState) => boolean;
+  getProgressPct: (state: GameState) => number;
 }
 
-export interface SalaryDayPreferences {
-  autoRunBlueprint: boolean;
-  emergencyBufferAllocPct: number;
-  sipAllocPct: number;
-  debtPaydownAllocPct: number;
-  discretionaryAllocPct: number;
-  lastEvaluatedMonth: number;
-}
-
-export interface PlayerState {
-  id: 'player';
-  name: string;
-  onboardingComplete: boolean;
-  startingAge: number; // 22
-  money: number;
-  savingsBalance: number;
-  currentDay: number;
-
-  job: Job;
-  careerHistory: CareerHistoryEntry[];
-  housing: {
-    type: 'rent' | 'own';
-    amountPerCycle: number;
-    cycleDays: number;
-    lastPaidDay: number;
-    locationTier?: 'near-office' | 'distant';
-  };
-
-  health: {
-    physical: number; // 0-100
-    mental: number;   // 0-100
-    energy: number;   // 0-100
-  };
-
-  behavioralCounters: BehavioralCounters;
-  lifeGoals: LifeGoals;
-  lifeGoalStats: {
-    burnoutEpisodes: number;
-    totalGymSessions: number;
-    totalDaysTracked: number;
-  };
-
-  salaryDayPreferences: SalaryDayPreferences;
-
-  consequenceMeters: {
-    cheapFoodDays: number;
-    noExerciseDays: number;
-    highStressDays: number;
-    lowEnergyDays: number;
-    noRestDays: number;
-    unhealthyDays: number;
-  };
-
-  timeAllocation: {
-    job: number;
-    commute: number;
-    exercise: number;
-    cooking: number;
-    sideHustle: number;
-    education: number;
-    rest: number;
-    free: number;
-  };
-
-  lifestyle: {
-    foodTier: FoodTierId;
-    transportMode: TransportModeId;
-  };
-
-  loans: Loan[];
-  fixedDeposits: FixedDeposit[];
-  sips: SIP[];
-  insurance: InsurancePolicies;
-
-  taxes: {
-    lastPaidDay: number;
-    cycleDays: number;
-    incomeThisCycle: number;
-    capitalGainsThisCycle: number;
-    dividendIncomeThisCycle: number;
-  };
-
-  portfolio: Record<string, PortfolioEntry>;
-  goldHoldings: { grams: number; avgCostPerGram: number };
-
-  properties: OwnedProperty[];
-  businesses: OwnedBusiness[];
-  lifestyleAssets: OwnedAsset[];
-
-  family: {
-    married: boolean;
-    marriedOnDay: number | null;
-    spouseIncome: number;
-    children: number;
-    childBornOnDays: number[];
-  };
-
-  stats: {
-    stress: number;    // 0-100
-    happiness: number; // 0-100
-  };
-
-  eventLog: EventLogEntry[];
-  achievements: string[];
-  educationProgress: Record<string, number>;
-  activeCourseId: string | null;        // currently studying course
-  lastActiveTimestamp: number;
-}
-
-export interface TickerDef {
-  id: string;
-  name: string;
-  sector: 'consumer' | 'tech' | 'energy' | 'finance';
-  price: number;
-  trendBias: number;
-  volatility: number;
-  dividendYieldPct: number;
-  dividendPerShare?: number;
-  history: number[];
-}
-
-export interface PropertyDef {
-  id: string;
-  name: string;
-  location: string;
-  price: number;
-  rentYieldPct: number;
-  appreciationPct: number;
-  owner: string | null; // 'player' | npcId | null
-  riskProfile: {
-    legalStatus: 'clear' | 'minor-dispute' | 'major-dispute';
-    issueChancePct: number;
-    issueCost: number;
-  };
-}
-
-export interface BusinessSectorDef {
-  id: string;
-  name: string;
-  capacity: number;
-  startupCost: number;
-  baseRevenuePerCycle: number;
-  slotUpkeepPerCycle: number;
-  revenueCycleDays: number;
-  slots: { id: string; owner: string | null }[];
-  specialMechanic?: 'lending';
-}
-
-export interface NpcState {
-  id: string;
-  name: string;
-  archetype: 'aggressive-investor' | 'cautious-saver' | 'serial-entrepreneur' | 'landlord';
-  money: number;
-  portfolio: Record<string, PortfolioEntry>;
-  properties: string[]; // property IDs
-  businesses: { sectorId: string; slotId: string }[];
-  loans: Loan[];
-  decisionLog: { day: number; action: string; detail: string }[];
-}
-
-export interface MarketState {
-  tickers: TickerDef[];
-  goldPricePerGram: number;
-  goldHistory: number[];
-  cycleBias: number;
-  properties: PropertyDef[];
-  businessSectors: BusinessSectorDef[];
-}
+export type MacroEconomyPhase = 'BULL_RUN' | 'PEAK' | 'RECESSION' | 'RECOVERY' | 'SUPER_BULL';
 
 export interface GameState {
-  schemaVersion: number;
-  gameSeed: number;
-  inflationMultiplier: number;
-  inflationRate: number; // annual, e.g. 0.06
-  player: PlayerState;
-  npcs: NpcState[];
-  market: MarketState;
+  player: {
+    name: string;
+    startingAge: number;
+    currentAge: number;
+    currentDay: number; // 1 to 3650 (365 days / 12 months = 30 days/month)
+    currentMonth: number; // 1 to 120
+    currentYear: number; // 1 to 10
+    onboardingComplete: boolean;
+    gameOver: boolean;
+    lifeGoals: LifeGoals;
+  };
+
+  resources: {
+    // Health (0 - 100)
+    physicalHealth: ResourceBar;
+    mentalHealth: ResourceBar;
+    energy: ResourceBar;
+
+    // Money
+    cashOnHand: number;
+    emergencyFund: number; // High Yield Savings Account (3.5% APY)
+    creditScore: number;   // 350 to 850
+    annualTaxPaid: number;
+    currentYearTaxableIncome: number;
+    taxEscrowAccount: number;
+
+    // Daily Time Budget (sum must equal 24)
+    dailySchedule: DailySchedule;
+  };
+
+  career: {
+    currentJob: ActiveJob | null;
+    completedCourseIds: string[];
+    activeCourse: { courseId: string; monthsRemaining: number } | null;
+    yearsOfExperience: number;
+    unemploymentMonths: number;
+    consecutiveEmploymentMonths: number;
+    activeJobApplications: { jobId: string; daysRemaining: number }[];
+  };
+
+  investments: {
+    stocksOwned: Record<string, { shares: number; averageCost: number }>;
+    cryptoOwned: Record<string, { units: number; averageCost: number }>;
+    sipMonthlyAllocations: Record<string, number>; // fundId -> monthly $
+    mutualFundUnits: Record<string, { units: number; investedAmount: number }>;
+    fixedDeposits: FixedDeposit[];
+    realizedShortTermGains: number;
+    realizedLongTermGains: number;
+  };
+
+  business: {
+    activeBusinesses: ActiveBusiness[];
+    totalVentureEarnings: number;
+  };
+
+  property: {
+    isRenting: boolean;
+    rentalTier: RentalTierId;
+    currentMonthlyRent: number;
+    ownedProperties: Property[];
+  };
+
+  liabilities: {
+    loans: Loan[];
+  };
+
+  insurance: {
+    healthInsuranceTier: 'none' | 'basic' | 'standard' | 'premium';
+    hasVehicleInsurance: boolean;
+    hasTermLifeInsurance: boolean;
+    hasPropertyInsurance: boolean;
+  };
+
+  behavioral: HabitCounters;
+
+  simulation: {
+    isPaused: boolean;
+    simulationSpeed: 1 | 2 | 4; // 1x, 2x, 4x
+    macroPhase: MacroEconomyPhase;
+    autoRunMonthlyBlueprint: boolean;
+    activeEventCards: ScenarioCard[];
+    recentLogs: { day: number; message: string; type: 'info' | 'positive' | 'warning' | 'negative' }[];
+    milestonesAchieved: string[];
+    emergencyFundSpiralActive: boolean;
+    burnoutEpisodeCount: number;
+    lifetimeGymSessions: number;
+    hospitalizationCount: number;
+  };
+}
+
+export interface ScenarioChoice {
+  id: string;
+  label: string;
+  description: string;
+  immediateImpactPreview: string;
+  apply: (state: GameState) => { outcomeText: string; notificationType: 'info' | 'positive' | 'warning' | 'negative' };
+}
+
+export interface ScenarioCard {
+  id: string;
+  category: 'career' | 'financial' | 'health' | 'market' | 'life' | 'business' | 'property' | 'behavioral' | 'emergency';
+  title: string;
+  description: string;
+  condition?: (state: GameState) => boolean;
+  choices: ScenarioChoice[];
 }

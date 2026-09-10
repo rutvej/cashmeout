@@ -1,413 +1,160 @@
-import { GameState, WealthGoalId, HealthGoalId, LifestyleGoalId } from '../../types/game';
-import { WEALTH_GOALS, HEALTH_GOALS, LIFESTYLE_GOALS } from '../../data/life-goals';
+import { GameState } from '../../types/game';
+import { LIFE_GOALS } from '../../data/life-goals';
+import { COMPANIES, JOB_DEFINITIONS } from '../../data/jobs';
+import { RENTAL_TIERS } from '../../data/properties';
 import { formatCurrency } from '../components/format';
-import { saveGame } from '../../save/save-manager';
 
-export interface StarterJobChoice {
-  id: string;
-  title: string;
-  salaryMonthly: number;
-  salaryPerCycle: number;
-  payCycleDays: number;
-  stressPerDay: number;
-  timeSlotsCost: number;
-  cultureRating: string;
-  description: string;
+export interface OnboardingCallbacks {
+  onComplete: () => void;
 }
 
-export const STARTER_JOBS: StarterJobChoice[] = [
-  {
-    id: 'junior-analyst',
-    title: 'Junior Financial Analyst',
-    salaryMonthly: 1800,
-    salaryPerCycle: 900,
-    payCycleDays: 15,
-    stressPerDay: 0.6,
-    timeSlotsCost: 2,
-    cultureRating: '★★★☆☆',
-    description: 'Corporate finance entry role. Moderate workload, good baseline for finance ladder.'
-  },
-  {
-    id: 'junior-dev',
-    title: 'Junior Software Developer',
-    salaryMonthly: 2200,
-    salaryPerCycle: 1100,
-    payCycleDays: 15,
-    stressPerDay: 0.8,
-    timeSlotsCost: 2,
-    cultureRating: '★★★☆☆',
-    description: 'Tech startup engineering role. Higher starting compensation with occasional crunch.'
-  },
-  {
-    id: 'customer-support',
-    title: 'Customer Support Specialist',
-    salaryMonthly: 1400,
-    salaryPerCycle: 700,
-    payCycleDays: 15,
-    stressPerDay: 0.7,
-    timeSlotsCost: 2,
-    cultureRating: '★★★★☆',
-    description: 'Client success & operations. Supportive culture, predictable hours, steady rhythm.'
-  }
-];
+export function renderOnboardingWizard(state: GameState, callbacks: OnboardingCallbacks): HTMLElement {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
 
-export interface HousingOption {
-  id: 'near-office' | 'distant';
-  title: string;
-  rentMonthly: number;
-  commuteDailyHours: number;
-  energyDrainPerDay: number;
-  freeSlotsImpact: string;
-  description: string;
-}
+  const wealthGoals = LIFE_GOALS.filter(g => g.category === 'wealth');
+  const healthGoals = LIFE_GOALS.filter(g => g.category === 'health');
+  const lifestyleGoals = LIFE_GOALS.filter(g => g.category === 'lifestyle');
 
-export const HOUSING_OPTIONS: HousingOption[] = [
-  {
-    id: 'near-office',
-    title: '1BHK Near Downtown Office',
-    rentMonthly: 540,
-    commuteDailyHours: 0.5,
-    energyDrainPerDay: 0,
-    freeSlotsImpact: '+1.5 Free Hours Daily',
-    description: 'Short 15-minute walk. Zero transit stress, gives you precious hours for gym & study.'
-  },
-  {
-    id: 'distant',
-    title: 'Suburban Studio Rental',
-    rentMonthly: 380,
-    commuteDailyHours: 2.0,
-    energyDrainPerDay: 2,
-    freeSlotsImpact: '-2 Hours Commute Transit',
-    description: 'Saves $160/mo in rent, but burns 2 hours in daily public transit with passive energy drain.'
-  }
-];
+  const starterJobs = JOB_DEFINITIONS.filter(j => j.rung === 1).slice(0, 3);
 
-export function renderOnboardingWizard(
-  state: GameState,
-  onComplete: () => void
-): HTMLElement {
-  const container = document.createElement('div');
-  container.className = 'onboarding-backdrop';
-
-  let currentStep = 1;
-  let selectedName = state.player.name || 'Alex Morgan';
-  let selectedJob = STARTER_JOBS[0];
-  let selectedHousing = HOUSING_OPTIONS[0];
-  let selectedWealth: WealthGoalId = 'six-figure-net-worth';
-  let selectedHealth: HealthGoalId = 'olympic-resilience';
-  let selectedLifestyle: LifestyleGoalId = 'homeowner-pride';
-
-  function renderStep() {
-    container.innerHTML = `
-      <div class="onboarding-modal">
-        <!-- Progress Steps Tracker -->
-        <div class="onboarding-header">
-          <div class="onboarding-brand">
-            <span class="brand-badge">PHASE 1 FOUNDATION</span>
-            <h1 class="brand-title">Life Architect Onboarding</h1>
-            <p class="brand-subtitle">Age 22 · Configure your 10-year journey</p>
-          </div>
-          <div class="wizard-stepper">
-            <div class="wizard-step ${currentStep >= 1 ? 'active' : ''} ${currentStep > 1 ? 'complete' : ''}">
-              <span class="step-num">1</span>
-              <span class="step-lbl">Career</span>
-            </div>
-            <div class="wizard-step-line ${currentStep >= 2 ? 'active' : ''}"></div>
-            <div class="wizard-step ${currentStep >= 2 ? 'active' : ''} ${currentStep > 2 ? 'complete' : ''}">
-              <span class="step-num">2</span>
-              <span class="step-lbl">Housing</span>
-            </div>
-            <div class="wizard-step-line ${currentStep >= 3 ? 'active' : ''}"></div>
-            <div class="wizard-step ${currentStep === 3 ? 'active' : ''}">
-              <span class="step-num">3</span>
-              <span class="step-lbl">3 Goals</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Step Content -->
-        <div class="onboarding-body" id="onboarding-body">
-          ${renderStepContent()}
-        </div>
-
-        <!-- Stepper Navigation Buttons -->
-        <div class="onboarding-footer">
-          ${currentStep > 1 ? `<button class="btn btn-secondary" id="btn-wizard-prev">← Back</button>` : `<div></div>`}
-          <button class="btn btn-primary" id="btn-wizard-next">
-            ${currentStep === 3 ? 'Confirm & Begin Journey 🚀' : 'Next Step →'}
-          </button>
-        </div>
-      </div>
-    `;
-
-    attachEvents();
-  }
-
-  function renderStepContent(): string {
-    if (currentStep === 1) {
-      return `
-        <div class="step-section">
-          <div class="step-title-row">
-            <h2 class="step-title">Identity & Starting Career</h2>
-            <span class="step-hint">Step 1 of 3</span>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="player-name-input">Your Name</label>
-            <input type="text" class="form-input" id="player-name-input" value="${selectedName}" placeholder="Alex Morgan" maxlength="28" />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Select Starting Job (Age 22 Entry Level)</label>
-            <div class="selection-grid">
-              ${STARTER_JOBS.map(job => `
-                <div class="selectable-card ${selectedJob.id === job.id ? 'selected' : ''}" data-job-id="${job.id}">
-                  <div class="card-radio-row">
-                    <span class="card-option-title">${job.title}</span>
-                    <span class="card-option-badge">${job.cultureRating} Culture</span>
-                  </div>
-                  <div class="card-stat-highlight">
-                    ${formatCurrency(job.salaryMonthly)} / month
-                    <span class="card-sub-stat">(${formatCurrency(job.salaryPerCycle)} / 15 days)</span>
-                  </div>
-                  <p class="card-desc">${job.description}</p>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      `;
-    }
-
-    if (currentStep === 2) {
-      return `
-        <div class="step-section">
-          <div class="step-title-row">
-            <h2 class="step-title">Starting Residence & Commute</h2>
-            <span class="step-hint">Step 2 of 3</span>
-          </div>
-          <p class="step-subtitle">
-            Housing is a foundational trade-off between <strong>cashflow</strong> and <strong>daily time & energy</strong>.
-          </p>
-
-          <div class="selection-grid">
-            ${HOUSING_OPTIONS.map(opt => `
-              <div class="selectable-card ${selectedHousing.id === opt.id ? 'selected' : ''}" data-housing-id="${opt.id}">
-                <div class="card-radio-row">
-                  <span class="card-option-title">${opt.title}</span>
-                  <span class="badge ${opt.id === 'near-office' ? 'badge-green' : 'badge-sky'}">
-                    ${opt.id === 'near-office' ? '⚡ High Time Surplus' : '💰 Low Outflow'}
-                  </span>
-                </div>
-                <div class="card-stat-highlight">
-                  ${formatCurrency(opt.rentMonthly)} / month
-                  <span class="card-sub-stat">Commute: ${opt.commuteDailyHours}h / day</span>
-                </div>
-                <div class="housing-impact-pill">${opt.freeSlotsImpact}</div>
-                <p class="card-desc">${opt.description}</p>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Step 3: Life Goals
-    return `
-      <div class="step-section">
-        <div class="step-title-row">
-          <h2 class="step-title">Select Your 3 Decade Life Ambitions</h2>
-          <span class="step-hint">Step 3 of 3</span>
-        </div>
-        <p class="step-subtitle">
-          At Year 10 (Age 32), your final retrospective evaluates whether you achieved these targets.
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width: 680px;">
+      <div style="text-align: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 16px;">
+        <h1 style="font-size: 1.6rem; font-weight: 800; color: #fff;">CashFlow Life Sim</h1>
+        <p style="font-size: 0.88rem; color: var(--accent-cyan); margin-top: 4px;">
+          10 Years • 120 Months • Every decision compounds
         </p>
+      </div>
 
-        <!-- Category A: Wealth -->
-        <div class="form-group">
-          <label class="form-label">💰 1. Wealth & Financial Ambition</label>
-          <div class="goals-selection-list">
-            ${WEALTH_GOALS.map(g => `
-              <div class="goal-option-item ${selectedWealth === g.id ? 'selected' : ''}" data-goal-category="wealth" data-goal-id="${g.id}">
-                <span class="goal-opt-icon">${g.emoji}</span>
-                <div class="goal-opt-info">
-                  <div class="goal-opt-name">${g.title}</div>
-                  <div class="goal-opt-desc">${g.targetDescription}</div>
-                </div>
-                <div class="goal-radio-circle"></div>
+      <!-- Step 1: Identity & Starter Job -->
+      <div>
+        <label style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Character Name</label>
+        <input type="text" id="inp-player-name" value="${state.player.name}" style="width: 100%; background: var(--bg-card); color: #fff; border: 1px solid var(--border-subtle); padding: 10px 14px; border-radius: var(--radius-md); font-size: 1rem; margin-top: 6px;" />
+      </div>
+
+      <div>
+        <label style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Starting Career (Age 22 Entry Level)</label>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 6px;">
+          ${starterJobs.map((job, idx) => `
+            <div class="list-item starter-job-card ${idx === 0 ? 'selected' : ''}" data-job-id="${job.id}" style="cursor: pointer; border-color: ${idx === 0 ? 'var(--accent-cyan)' : 'var(--border-subtle)'};">
+              <div>
+                <div style="font-weight: 700; font-size: 0.92rem;">${job.title}</div>
+                <div style="font-size: 0.8rem; color: var(--accent-green); margin-top: 2px;">${formatCurrency(job.salaryMonthly)}/mo</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Culture: ${'★'.repeat(job.cultureStars)}</div>
               </div>
-            `).join('')}
-          </div>
+            </div>
+          `).join('')}
         </div>
+      </div>
 
-        <!-- Category B: Health -->
-        <div class="form-group">
-          <label class="form-label">🏥 2. Health & Vitality Ambition</label>
-          <div class="goals-selection-list">
-            ${HEALTH_GOALS.map(g => `
-              <div class="goal-option-item ${selectedHealth === g.id ? 'selected' : ''}" data-goal-category="health" data-goal-id="${g.id}">
-                <span class="goal-opt-icon">${g.emoji}</span>
-                <div class="goal-opt-info">
-                  <div class="goal-opt-name">${g.title}</div>
-                  <div class="goal-opt-desc">${g.targetDescription}</div>
-                </div>
-                <div class="goal-radio-circle"></div>
+      <!-- Step 2: Living Arrangement -->
+      <div>
+        <label style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Initial Housing</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px;">
+          ${RENTAL_TIERS.slice(0, 2).map((tier, idx) => `
+            <div class="list-item starter-rent-card ${idx === 1 ? 'selected' : ''}" data-rent-id="${tier.id}" style="cursor: pointer; border-color: ${idx === 1 ? 'var(--accent-cyan)' : 'var(--border-subtle)'};">
+              <div>
+                <div style="font-weight: 700; font-size: 0.92rem;">${tier.name}</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">${formatCurrency(tier.monthlyCostYear1)}/mo • ${tier.commuteHoursDaily}h commute</div>
               </div>
-            `).join('')}
-          </div>
+            </div>
+          `).join('')}
         </div>
+      </div>
 
-        <!-- Category C: Lifestyle -->
-        <div class="form-group">
-          <label class="form-label">🌟 3. Lifestyle & Career Ambition</label>
-          <div class="goals-selection-list">
-            ${LIFESTYLE_GOALS.map(g => `
-              <div class="goal-option-item ${selectedLifestyle === g.id ? 'selected' : ''}" data-goal-category="lifestyle" data-goal-id="${g.id}">
-                <span class="goal-opt-icon">${g.emoji}</span>
-                <div class="goal-opt-info">
-                  <div class="goal-opt-name">${g.title}</div>
-                  <div class="goal-opt-desc">${g.targetDescription}</div>
-                </div>
-                <div class="goal-radio-circle"></div>
-              </div>
-            `).join('')}
+      <!-- Step 3: Life Goals (Spec 10) -->
+      <div>
+        <label style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Select Your 3 Life Goals (Year 10 Audit)</label>
+        
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+          <div>
+            <span style="font-size: 0.8rem; color: var(--accent-green); font-weight: 600;">💰 Wealth Ambition:</span>
+            <select id="sel-goal-wealth" style="width: 100%; background: var(--bg-card); color: #fff; border: 1px solid var(--border-subtle); padding: 8px; border-radius: var(--radius-sm); margin-top: 4px;">
+              ${wealthGoals.map(g => `<option value="${g.id}">${g.title} (${g.targetDescription})</option>`).join('')}
+            </select>
+          </div>
+
+          <div>
+            <span style="font-size: 0.8rem; color: var(--accent-purple); font-weight: 600;">🏥 Health Ambition:</span>
+            <select id="sel-goal-health" style="width: 100%; background: var(--bg-card); color: #fff; border: 1px solid var(--border-subtle); padding: 8px; border-radius: var(--radius-sm); margin-top: 4px;">
+              ${healthGoals.map(g => `<option value="${g.id}">${g.title} (${g.targetDescription})</option>`).join('')}
+            </select>
+          </div>
+
+          <div>
+            <span style="font-size: 0.8rem; color: var(--accent-cyan); font-weight: 600;">🏖️ Lifestyle Ambition:</span>
+            <select id="sel-goal-lifestyle" style="width: 100%; background: var(--bg-card); color: #fff; border: 1px solid var(--border-subtle); padding: 8px; border-radius: var(--radius-sm); margin-top: 4px;">
+              ${lifestyleGoals.map(g => `<option value="${g.id}">${g.title} (${g.targetDescription})</option>`).join('')}
+            </select>
           </div>
         </div>
       </div>
-    `;
-  }
 
-  function attachEvents() {
-    // Step 1 Job Selection
-    container.querySelectorAll('[data-job-id]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const id = (e.currentTarget as HTMLElement).getAttribute('data-job-id');
-        const match = STARTER_JOBS.find(j => j.id === id);
-        if (match) {
-          selectedJob = match;
-          renderStep();
-        }
-      });
+      <!-- Launch Button -->
+      <div style="margin-top: 10px; border-top: 1px solid var(--border-subtle); padding-top: 16px; text-align: center;">
+        <button id="btn-launch-sim" class="btn-action success" style="width: 100%; padding: 12px; font-size: 1.05rem; font-weight: 800;">
+          Launch 10-Year Life Simulation 🚀
+        </button>
+      </div>
+    </div>
+  `;
+
+  let selectedJobId = starterJobs[0].id;
+  let selectedRentId = 'studio';
+
+  // Selection handlers
+  overlay.querySelectorAll('.starter-job-card').forEach(card => {
+    card.addEventListener('click', () => {
+      overlay.querySelectorAll('.starter-job-card').forEach(c => (c as HTMLElement).style.borderColor = 'var(--border-subtle)');
+      (card as HTMLElement).style.borderColor = 'var(--accent-cyan)';
+      selectedJobId = (card as HTMLElement).dataset.jobId!;
     });
+  });
 
-    // Step 2 Housing Selection
-    container.querySelectorAll('[data-housing-id]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const id = (e.currentTarget as HTMLElement).getAttribute('data-housing-id');
-        const match = HOUSING_OPTIONS.find(h => h.id === id);
-        if (match) {
-          selectedHousing = match;
-          renderStep();
-        }
-      });
+  overlay.querySelectorAll('.starter-rent-card').forEach(card => {
+    card.addEventListener('click', () => {
+      overlay.querySelectorAll('.starter-rent-card').forEach(c => (c as HTMLElement).style.borderColor = 'var(--border-subtle)');
+      (card as HTMLElement).style.borderColor = 'var(--accent-cyan)';
+      selectedRentId = (card as HTMLElement).dataset.rentId!;
     });
+  });
 
-    // Step 3 Goal Selection
-    container.querySelectorAll('[data-goal-id]').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const cat = (e.currentTarget as HTMLElement).getAttribute('data-goal-category');
-        const id = (e.currentTarget as HTMLElement).getAttribute('data-goal-id')!;
-        if (cat === 'wealth') selectedWealth = id as WealthGoalId;
-        if (cat === 'health') selectedHealth = id as HealthGoalId;
-        if (cat === 'lifestyle') selectedLifestyle = id as LifestyleGoalId;
-        renderStep();
-      });
-    });
+  // Launch button handler
+  overlay.querySelector('#btn-launch-sim')?.addEventListener('click', () => {
+    const nameInput = overlay.querySelector('#inp-player-name') as HTMLInputElement;
+    const wealthSel = overlay.querySelector('#sel-goal-wealth') as HTMLSelectElement;
+    const healthSel = overlay.querySelector('#sel-goal-health') as HTMLSelectElement;
+    const lifestyleSel = overlay.querySelector('#sel-goal-lifestyle') as HTMLSelectElement;
 
-    // Prev Button
-    container.querySelector('#btn-wizard-prev')?.addEventListener('click', () => {
-      if (currentStep > 1) {
-        currentStep--;
-        renderStep();
-      }
-    });
-
-    // Next Button
-    container.querySelector('#btn-wizard-next')?.addEventListener('click', () => {
-      if (currentStep === 1) {
-        const nameInput = container.querySelector('#player-name-input') as HTMLInputElement;
-        if (nameInput && nameInput.value.trim()) {
-          selectedName = nameInput.value.trim();
-        }
-        currentStep = 2;
-        renderStep();
-      } else if (currentStep === 2) {
-        currentStep = 3;
-        renderStep();
-      } else if (currentStep === 3) {
-        // Complete onboarding and commit state
-        commitOnboarding();
-      }
-    });
-  }
-
-  function commitOnboarding() {
-    const p = state.player;
-    p.name = selectedName;
-    p.onboardingComplete = true;
-    p.startingAge = 22;
-
-    // Apply job
-    p.job = {
-      id: selectedJob.id,
-      title: selectedJob.title,
-      salaryPerCycle: selectedJob.salaryPerCycle,
-      payCycleDays: selectedJob.payCycleDays,
-      stressPerDay: selectedJob.stressPerDay,
-      timeSlotsCost: selectedJob.timeSlotsCost
+    state.player.name = nameInput.value.trim() || 'Alex Morgan';
+    state.player.lifeGoals = {
+      wealthGoalId: wealthSel.value,
+      healthGoalId: healthSel.value,
+      lifestyleGoalId: lifestyleSel.value
     };
 
-    p.careerHistory = [
-      {
-        jobId: selectedJob.id,
-        title: selectedJob.title,
-        startDay: 1,
-        endDay: null,
-        salary: selectedJob.salaryPerCycle
-      }
-    ];
-
-    // Apply housing
-    p.housing = {
-      type: 'rent',
-      amountPerCycle: selectedHousing.rentMonthly,
-      cycleDays: 30,
-      lastPaidDay: 1,
-      locationTier: selectedHousing.id
+    const starterJob = JOB_DEFINITIONS.find(j => j.id === selectedJobId) || JOB_DEFINITIONS[0];
+    state.career.currentJob = {
+      id: starterJob.id,
+      title: starterJob.title,
+      company: COMPANIES[1],
+      salaryMonthly: starterJob.salaryMonthly,
+      stressMonthly: starterJob.stressMonthly,
+      monthsInRole: 0,
+      performanceRating: 3.5,
+      consecutiveLowReviews: 0
     };
 
-    // Apply daily schedule defaults
-    const commuteSlots = selectedHousing.id === 'near-office' ? 0.5 : 2.0;
-    p.timeAllocation.commute = commuteSlots;
-    p.timeAllocation.job = 2; // 8 hours core work
-    p.timeAllocation.exercise = 1; // 1 hr gym
-    p.timeAllocation.cooking = selectedHousing.id === 'near-office' ? 1 : 0.5;
-    p.timeAllocation.free = Math.max(1, 4 - commuteSlots);
+    const rentTier = RENTAL_TIERS.find(t => t.id === selectedRentId) || RENTAL_TIERS[1];
+    state.property.rentalTier = rentTier.id;
+    state.property.currentMonthlyRent = rentTier.monthlyCostYear1;
+    state.resources.dailySchedule.commuteHours = rentTier.commuteHoursDaily;
 
-    // Apply life goals
-    p.lifeGoals = {
-      wealth: selectedWealth,
-      health: selectedHealth,
-      lifestyle: selectedLifestyle
-    };
+    state.player.onboardingComplete = true;
+    overlay.remove();
+    callbacks.onComplete();
+  });
 
-    p.lifeGoalStats = {
-      burnoutEpisodes: 0,
-      totalGymSessions: 0,
-      totalDaysTracked: 1
-    };
-
-    p.eventLog.unshift({
-      day: 1,
-      text: `🎉 Started life journey at Age 22 as ${selectedJob.title}! Targets set for 10-year Life Report.`,
-      type: 'achievement'
-    });
-
-    saveGame(state);
-    container.remove();
-    onComplete();
-  }
-
-  renderStep();
-  return container;
+  return overlay;
 }

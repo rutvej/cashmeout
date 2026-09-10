@@ -1,68 +1,64 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../src/data/initial-state';
-import { calculateNetWorth, processDayEconomy } from '../src/engine/economy-engine';
-import { processHealthAndConsequences } from '../src/engine/health-engine';
-import { SeededRNG } from '../src/engine/prng';
-import { tickMarket } from '../src/engine/market-engine';
-import { tickNpcs } from '../src/engine/npc-engine';
+import { GameLoop } from '../src/engine/game-loop';
+import { tickDailyHealth } from '../src/engine/health';
+import { updateMarketPricesMonthly } from '../src/engine/market';
 
-describe('Cashflow Life-Economy Engine', () => {
-  it('calculates initial net worth accurately', () => {
+describe('Game Simulation Engine & Loop', () => {
+  it('advances days and updates timeline info', () => {
     const state = createInitialState();
-    const netWorth = calculateNetWorth(state);
-    expect(netWorth).toBeGreaterThan(0);
-    expect(state.player.money).toBe(15000);
-    expect(state.player.savingsBalance).toBe(5000);
+    let renders = 0;
+    const loop = new GameLoop(state, {
+      onRender: () => { renders++; },
+      onSalaryDay: () => {},
+      onYearEndTax: () => {},
+      onGameOver: () => {}
+    });
+
+    expect(state.player.currentDay).toBe(1);
+    loop.stepDay();
+    expect(state.player.currentDay).toBe(2);
+    expect(renders).toBe(1);
   });
 
-  it('deducts daily living expenses and handles salary pay cycles', () => {
+  it('triggers cascading health burnout when mental drops <= 20', () => {
     const state = createInitialState();
-    const initialMoney = state.player.money;
-
-    // Simulate 1 day
-    processDayEconomy(state, 2);
-    expect(state.player.money).toBeLessThan(initialMoney);
-
-    // Payday on cycle day 15
-    const beforePay = state.player.money;
-    processDayEconomy(state, 15);
-    expect(state.player.money).toBeGreaterThan(beforePay);
+    state.resources.mentalHealth = 18;
+    const res = tickDailyHealth(state);
+    expect(res.triggeredBurnout).toBe(true);
+    expect(state.simulation.burnoutEpisodeCount).toBe(1);
+    expect(state.resources.mentalHealth).toBe(45); // stabilized recovery
   });
 
-  it('triggers health consequences from prolonged street food consumption', () => {
+  it('triggers emergency hospitalization when physical drops <= 15', () => {
     const state = createInitialState();
-    state.player.lifestyle.foodTier = 'street';
-
-    let triggeredEvent = false;
-    for (let day = 1; day <= 22; day++) {
-      const res = processHealthAndConsequences(state, day);
-      if (res.triggered && res.name?.includes('Gastroenteritis')) {
-        triggeredEvent = true;
-        break;
-      }
-    }
-    expect(triggeredEvent).toBe(true);
+    state.resources.physicalHealth = 12;
+    const res = tickDailyHealth(state);
+    expect(res.triggeredMedicalEmergency).toBe(true);
+    expect(state.simulation.hospitalizationCount).toBe(1);
+    expect(state.resources.physicalHealth).toBe(40); // emergency stabilization
   });
 
-  it('maintains deterministic PRNG sequences across sessions', () => {
-    const rng1 = new SeededRNG(999);
-    const rng2 = new SeededRNG(999);
-
-    const rolls1 = [rng1.next(), rng1.next(), rng1.range(10, 50)];
-    const rolls2 = [rng2.next(), rng2.next(), rng2.range(10, 50)];
-
-    expect(rolls1).toEqual(rolls2);
+  it('updates market asset prices on monthly transition', () => {
+    const state = createInitialState();
+    expect(state.simulation.macroPhase).toBe('BULL_RUN');
+    updateMarketPricesMonthly(state);
+    expect(state.simulation.macroPhase).toBe('BULL_RUN');
   });
 
-  it('runs market tickers and NPC autonomous agents without errors', () => {
+  it('advances an entire month smoothly with advanceMonth', () => {
     const state = createInitialState();
-    const rng = new SeededRNG(42);
+    state.player.currentDay = 2; // start on day 2 so advanceMonth steps to day 1 of next month
+    let salaryTriggered = false;
+    const loop = new GameLoop(state, {
+      onRender: () => {},
+      onSalaryDay: () => { salaryTriggered = true; },
+      onYearEndTax: () => {},
+      onGameOver: () => {}
+    });
 
-    for (let d = 1; d <= 10; d++) {
-      tickMarket(state, d, rng);
-      tickNpcs(state, d, rng);
-    }
-
-    expect(state.market.tickers[0].history.length).toBeGreaterThan(3);
+    loop.advanceMonth();
+    expect(state.player.currentMonth).toBe(2);
+    expect(salaryTriggered).toBe(true);
   });
 });

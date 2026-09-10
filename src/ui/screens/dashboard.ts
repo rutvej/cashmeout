@@ -1,140 +1,211 @@
 import { GameState } from '../../types/game';
-import { calculateNetWorth } from '../../engine/economy-engine';
-import { formatCurrency } from '../components/format';
-import { FOOD_TIERS } from '../../data/static-data';
+import { computeMonthlyCashflow } from '../../engine/economy';
+import { adjustHabitCounter } from '../../engine/behavioral';
 
-export function renderDashboardScreen(state: GameState, onAction: (action: string, payload?: any) => void): HTMLElement {
-  const p = state.player;
-  const netWorth = calculateNetWorth(state);
+export interface DashboardCallbacks {
+  onResolveChoice: (cardId: string, choiceId: string) => void;
+  onRefresh: () => void;
+}
 
+export function renderDashboardScreen(state: GameState, callbacks: DashboardCallbacks): HTMLElement {
   const container = document.createElement('div');
-  container.className = 'screen-content';
-  container.style.display = 'flex';
-  container.style.flexDirection = 'column';
-  container.style.gap = '14px';
+  container.className = 'screen-container';
 
-  // 1. Net Worth Hero Card
-  const netWorthCard = document.createElement('div');
-  netWorthCard.className = 'card';
-  netWorthCard.innerHTML = `
-    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Estimated Net Worth</div>
-    <div style="font-size: 1.8rem; font-weight: 800; color: #38bdf8;">${formatCurrency(netWorth)}</div>
-    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 6px;">
-      <div style="background: #0b0f19; padding: 8px; border-radius: 8px; border: 1px solid #1a2336;">
-        <div style="font-size: 0.65rem; color: var(--text-muted);">Liquid Wallet</div>
-        <div style="font-weight: 700; color: var(--accent-green); font-size: 1rem;">${formatCurrency(p.money)}</div>
-      </div>
-      <div style="background: #0b0f19; padding: 8px; border-radius: 8px; border: 1px solid #1a2336;">
-        <div style="font-size: 0.65rem; color: var(--text-muted);">Bank Savings (3.5%)</div>
-        <div style="font-weight: 700; color: #38bdf8; font-size: 1rem;">${formatCurrency(p.savingsBalance)}</div>
-      </div>
-    </div>
-  `;
-  container.appendChild(netWorthCard);
+  const cf = computeMonthlyCashflow(state);
+  const beh = state.behavioral;
 
-  // 2. Day Schedule & Time Allocation
-  const scheduleCard = document.createElement('div');
-  scheduleCard.className = 'card';
-  scheduleCard.innerHTML = `
-    <div class="card-title">
-      <span>Daily Schedule (6 Time Slots)</span>
-      <button class="btn btn-primary" id="btn-reallocate-time" style="font-size: 0.7rem; padding: 4px 8px;">Reallocate</button>
-    </div>
-    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">How your 24 hours are divided today:</div>
-    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; text-align: center;">
-      ${renderSlotPills(p.timeAllocation)}
-    </div>
-  `;
-  container.appendChild(scheduleCard);
+  let emergencyBadgeClass = 'positive';
+  let emergencyLabel = '🛡️ Fortress Shield (6+ Months Buffer)';
+  if (cf.emergencyTier === 'critical') {
+    emergencyBadgeClass = 'danger';
+    emergencyLabel = '🚨 Critical Red Zone (< 1 Month Buffer)';
+  } else if (cf.emergencyTier === 'vulnerable') {
+    emergencyBadgeClass = 'warning';
+    emergencyLabel = '⚠️ Vulnerable (1-2 Months Buffer)';
+  } else if (cf.emergencyTier === 'stable') {
+    emergencyBadgeClass = 'positive';
+    emergencyLabel = '✅ Stable Buffer (3-5 Months)';
+  }
 
-  // 3. Quick Career & Food Status
-  const statusCard = document.createElement('div');
-  statusCard.className = 'card';
-  const foodTier = FOOD_TIERS[p.lifestyle.foodTier];
-  statusCard.innerHTML = `
-    <div class="card-title">
-      <span>Active Occupation & Diet</span>
-    </div>
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #0b0f19; padding: 10px; border-radius: 8px;">
-      <div>
-        <div style="font-weight: 700; font-size: 0.9rem;">${p.job.title}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted);">Salary: ${formatCurrency(p.job.salaryPerCycle)} / ${p.job.payCycleDays} days</div>
-      </div>
-      <span class="badge badge-green">Level 1</span>
-    </div>
-    <div style="display: flex; justify-content: space-between; align-items: center; background: #0b0f19; padding: 10px; border-radius: 8px;">
-      <div>
-        <div style="font-weight: 700; font-size: 0.9rem;">Diet: ${foodTier.name}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted);">Cost: ${formatCurrency(foodTier.costPerDay)}/day • ${foodTier.physicalDelta >= 0 ? '+' : ''}${foodTier.physicalDelta} health/day</div>
-      </div>
-      <button class="btn" id="btn-change-diet" style="font-size: 0.7rem; padding: 4px 8px;">Change</button>
-    </div>
-  `;
-  container.appendChild(statusCard);
+  container.innerHTML = `
+    <div class="dashboard-grid">
+      <!-- Left Column: Story Feed & Events -->
+      <div class="feed-column">
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h2 class="card-title">⚡ Daily Life & Story Feed</h2>
+            <span class="time-tag">Era: ${state.simulation.macroPhase.replace('_', ' ')}</span>
+          </div>
 
-  // 4. Ad Placeholder Slot
-  const adCard = document.createElement('div');
-  adCard.className = 'ad-slot-placeholder';
-  adCard.innerText = '— Sponsored Partner Ad Slot —';
-  container.appendChild(adCard);
-
-  // 5. Recent Activity Ledger
-  const logCard = document.createElement('div');
-  logCard.className = 'card';
-  logCard.innerHTML = `
-    <div class="card-title">
-      <span>Life & Financial Journal</span>
-      <span style="font-size: 0.7rem; color: var(--text-muted);">Live stream</span>
-    </div>
-    <div style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto;">
-      ${p.eventLog.slice(0, 10).map(e => `
-        <div style="font-size: 0.75rem; padding: 6px 8px; background: #0b0f19; border-left: 3px solid ${getLogColor(e.type)}; border-radius: 4px;">
-          <span style="color: var(--text-muted); font-size: 0.65rem; margin-right: 6px;">Day ${e.day}</span>
-          <span>${e.text}</span>
+          <div id="active-events-list">
+            ${state.simulation.activeEventCards.length === 0 ? `
+              <div style="padding: 24px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: var(--radius-md);">
+                ✨ No critical life dilemmas pending today. Daily routine is operating normally.
+                <div style="margin-top: 10px;">
+                  <button id="btn-advance-today" class="btn-action">Advance Day ⏩</button>
+                </div>
+              </div>
+            ` : ''}
+          </div>
         </div>
-      `).join('')}
+
+        <!-- Quick Wellness Actions -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">🧘 Daily Discipline Actions</h3>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+            <button id="btn-quick-gym" class="btn-ctrl">🏋️ Extra Workout (+2 Phys)</button>
+            <button id="btn-quick-sleep" class="btn-ctrl">😴 Power Nap (+5 Energy)</button>
+            <button id="btn-quick-cook" class="btn-ctrl">🍳 Prep Home Meal (-Junk)</button>
+            <button id="btn-quick-leisure" class="btn-ctrl">🎮 Unwind Rest (+4 Mental)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Habit Counters & Status -->
+      <div class="status-column">
+        <!-- Emergency Buffer Card -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h3 class="card-title">🛡️ Safety Buffer</h3>
+          </div>
+          <div style="font-size: 0.85rem; margin-bottom: 8px;">
+            <strong>${cf.emergencyFundMonths} Months</strong> of Fixed Expenses Covered
+          </div>
+          <div class="metric-pill" style="border-color: var(--accent-${emergencyBadgeClass === 'positive' ? 'green' : (emergencyBadgeClass === 'danger' ? 'rose' : 'amber')});">
+            <span style="font-size: 0.82rem; font-weight: 700;">${emergencyLabel}</span>
+          </div>
+        </div>
+
+        <!-- 7 Behavioral Habit Counters -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h3 class="card-title">🧠 Behavioral Habits</h3>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Floor: 1.0</span>
+          </div>
+          <div class="item-list">
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 600; font-size: 0.85rem;">Impulse Buying</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Triggers spontaneous spend cards</div>
+              </div>
+              <span class="metric-value ${beh.impulseBuyCounter >= 6 ? 'danger' : (beh.impulseBuyCounter >= 3 ? 'warning' : 'positive')}">${beh.impulseBuyCounter.toFixed(1)}</span>
+            </div>
+
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 600; font-size: 0.85rem;">Sleep Debt</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Causes energy crashes</div>
+              </div>
+              <span class="metric-value ${beh.sleepDebtCounter >= 6 ? 'danger' : (beh.sleepDebtCounter >= 3 ? 'warning' : 'positive')}">${beh.sleepDebtCounter.toFixed(1)}</span>
+            </div>
+
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 600; font-size: 0.85rem;">Gym Avoidance</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Physical inertia penalty</div>
+              </div>
+              <span class="metric-value ${beh.gymSkipCounter >= 6 ? 'danger' : (beh.gymSkipCounter >= 3 ? 'warning' : 'positive')}">${beh.gymSkipCounter.toFixed(1)}</span>
+            </div>
+
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 600; font-size: 0.85rem;">Crypto FOMO</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Speculative hype vulnerability</div>
+              </div>
+              <span class="metric-value ${beh.cryptoFomoCounter >= 6 ? 'danger' : 'positive'}">${beh.cryptoFomoCounter.toFixed(1)}</span>
+            </div>
+
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 600; font-size: 0.85rem;">Lifestyle Creep</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Expense inflation risk</div>
+              </div>
+              <span class="metric-value ${beh.lifestyleCreepCounter >= 6 ? 'danger' : 'positive'}">${beh.lifestyleCreepCounter.toFixed(1)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Logs Feed -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">📜 Life Chronicles</h3>
+          </div>
+          <div class="log-feed">
+            ${state.simulation.recentLogs.map(log => `
+              <div class="log-entry ${log.type}">
+                <span style="font-weight: 700; opacity: 0.75;">Day ${log.day}:</span> ${log.message}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
     </div>
   `;
-  container.appendChild(logCard);
 
-  // Attach handlers
-  scheduleCard.querySelector('#btn-reallocate-time')?.addEventListener('click', () => {
-    onAction('open-time-modal');
+  // Render event cards
+  const eventsListEl = container.querySelector('#active-events-list')!;
+  for (const card of state.simulation.activeEventCards) {
+    const cardEl = document.createElement('div');
+    cardEl.className = 'event-card';
+    cardEl.innerHTML = `
+      <span class="event-category-tag">${card.category}</span>
+      <h3 class="event-title">${card.title}</h3>
+      <p class="event-desc">${card.description}</p>
+      <div class="event-choices-grid">
+        ${card.choices.map(choice => `
+          <button class="choice-btn" data-card-id="${card.id}" data-choice-id="${choice.id}">
+            <div class="choice-label">${choice.label}</div>
+            <div class="choice-desc">${choice.description}</div>
+            <div class="choice-preview">Impact: ${choice.immediateImpactPreview}</div>
+          </button>
+        `).join('')}
+      </div>
+    `;
+
+    // Attach choice listeners
+    cardEl.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cId = (btn as HTMLElement).dataset.cardId!;
+        const chId = (btn as HTMLElement).dataset.choiceId!;
+        callbacks.onResolveChoice(cId, chId);
+      });
+    });
+
+    eventsListEl.appendChild(cardEl);
+  }
+
+  // Quick action listeners
+  container.querySelector('#btn-advance-today')?.addEventListener('click', () => {
+    // triggers next day
+    const event = new CustomEvent('step-day');
+    window.dispatchEvent(event);
   });
 
-  statusCard.querySelector('#btn-change-diet')?.addEventListener('click', () => {
-    onAction('open-diet-modal');
+  container.querySelector('#btn-quick-gym')?.addEventListener('click', () => {
+    state.resources.physicalHealth = Math.min(100, state.resources.physicalHealth + 2);
+    adjustHabitCounter(state.behavioral, 'gymSkipCounter', -0.5);
+    state.simulation.lifetimeGymSessions += 1;
+    callbacks.onRefresh();
+  });
+
+  container.querySelector('#btn-quick-sleep')?.addEventListener('click', () => {
+    state.resources.energy = Math.min(100, state.resources.energy + 5);
+    adjustHabitCounter(state.behavioral, 'sleepDebtCounter', -0.5);
+    callbacks.onRefresh();
+  });
+
+  container.querySelector('#btn-quick-cook')?.addEventListener('click', () => {
+    adjustHabitCounter(state.behavioral, 'junkFoodCounter', -0.8);
+    state.resources.physicalHealth = Math.min(100, state.resources.physicalHealth + 1);
+    callbacks.onRefresh();
+  });
+
+  container.querySelector('#btn-quick-leisure')?.addEventListener('click', () => {
+    state.resources.mentalHealth = Math.min(100, state.resources.mentalHealth + 4);
+    callbacks.onRefresh();
   });
 
   return container;
-}
-
-function renderSlotPills(alloc: any): string {
-  const slots: { name: string; color: string; icon: string }[] = [];
-
-  for (let i = 0; i < alloc.job; i++) slots.push({ name: 'Job', color: '#0284c7', icon: '💼' });
-  for (let i = 0; i < alloc.commute; i++) slots.push({ name: 'Commute', color: '#64748b', icon: '🚗' });
-  for (let i = 0; i < alloc.exercise; i++) slots.push({ name: 'Workout', color: '#22c55e', icon: '🏋️' });
-  for (let i = 0; i < alloc.cooking; i++) slots.push({ name: 'Cook', color: '#f97316', icon: '🍳' });
-  for (let i = 0; i < alloc.sideHustle; i++) slots.push({ name: 'Hustle', color: '#eab308', icon: '💻' });
-  for (let i = 0; i < alloc.education; i++) slots.push({ name: 'Study', color: '#a855f7', icon: '📚' });
-  for (let i = 0; i < alloc.rest; i++) slots.push({ name: 'Rest', color: '#ec4899', icon: '😴' });
-  for (let i = 0; i < alloc.free; i++) slots.push({ name: 'Free', color: '#475569', icon: '☕' });
-
-  return slots.slice(0, 6).map(s => `
-    <div style="background: ${s.color}22; border: 1px solid ${s.color}66; border-radius: 6px; padding: 6px 2px;">
-      <div style="font-size: 0.9rem;">${s.icon}</div>
-      <div style="font-size: 0.6rem; color: ${s.color}; font-weight: 700; margin-top: 2px;">${s.name}</div>
-    </div>
-  `).join('');
-}
-
-function getLogColor(type: string): string {
-  switch (type) {
-    case 'income': return '#22c55e';
-    case 'expense': return '#ef4444';
-    case 'investment': return '#38bdf8';
-    case 'achievement': return '#fbbf24';
-    default: return '#94a3b8';
-  }
 }

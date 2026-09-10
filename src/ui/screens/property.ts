@@ -1,359 +1,216 @@
-import { GameState } from '../../types/game';
+import { GameState, Property } from '../../types/game';
+import { RENTAL_TIERS, BUYABLE_PROPERTIES } from '../../data/properties';
+import { getCreditTierInfo } from '../../engine/credit';
 import { formatCurrency } from '../components/format';
-import { saveGame } from '../../save/save-manager';
 
-export interface BuyablePropertyDef {
-  id: string;
-  name: string;
-  type: 'personal' | 'investment';
-  price: number;
-  downPaymentPct: number;
-  monthlyEmi: number;
-  commuteDaily: number;
-  expectedRentMonthly: number;
-  netPassiveMonthly: number;
-  description: string;
+export interface PropertyCallbacks {
+  onRefresh: () => void;
 }
 
-export const PROPERTY_CATALOG: BuyablePropertyDef[] = [
-  // Personal Homes
-  {
-    id: 'studio-downtown',
-    name: 'Studio Downtown',
-    type: 'personal',
-    price: 38000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 290,
-    commuteDaily: 0,
-    expectedRentMonthly: 0,
-    netPassiveMonthly: 0,
-    description: 'Eliminates commute completely (0h). Locks in fixed $290/mo EMI and ends rent creep.'
-  },
-  {
-    id: '1bhk-near-office',
-    name: '1BHK Near Office',
-    type: 'personal',
-    price: 65000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 495,
-    commuteDaily: 0.5,
-    expectedRentMonthly: 0,
-    netPassiveMonthly: 0,
-    description: 'Prime location, 15-minute walk. High appreciation corridor and comfortable couple space.'
-  },
-  {
-    id: '2bhk-suburb',
-    name: '2BHK Suburb',
-    type: 'personal',
-    price: 45000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 342,
-    commuteDaily: 2.0,
-    expectedRentMonthly: 0,
-    netPassiveMonthly: 0,
-    description: 'Spacious and affordable, but carries a +2h daily commute tax that drains daily energy.'
-  },
-  {
-    id: '3bhk-family-home',
-    name: '3BHK Family Home',
-    type: 'personal',
-    price: 90000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 685,
-    commuteDaily: 1.0,
-    expectedRentMonthly: 0,
-    netPassiveMonthly: 0,
-    description: 'Large family home in top neighborhood. High capital appreciation and room for children.'
-  },
-
-  // Investment Properties
-  {
-    id: 'studio-investment',
-    name: 'Studio Investment Rental',
-    type: 'investment',
-    price: 50000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 320,
-    commuteDaily: 0,
-    expectedRentMonthly: 420,
-    netPassiveMonthly: 100,
-    description: 'Low vacancy risk. Generates $420/mo tenant rent minus $320 EMI = +$100/mo net cashflow.'
-  },
-  {
-    id: '1bhk-investment',
-    name: '1BHK Investment Unit',
-    type: 'investment',
-    price: 65000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 415,
-    commuteDaily: 0,
-    expectedRentMonthly: 540,
-    netPassiveMonthly: 125,
-    description: 'Reliable long-term tenant demographic. Produces +$125/mo net passive income.'
-  },
-  {
-    id: 'commercial-shop',
-    name: 'Commercial Shop Space',
-    type: 'investment',
-    price: 80000,
-    downPaymentPct: 0.20,
-    monthlyEmi: 520,
-    commuteDaily: 0,
-    expectedRentMonthly: 700,
-    netPassiveMonthly: 180,
-    description: 'Prime commercial location. Generates +$180/mo net passive cashflow.'
-  }
-];
-
-export function renderPropertyScreen(
-  state: GameState,
-  onAction?: (action: string, payload?: any) => void
-): HTMLElement {
-  const p = state.player;
+export function renderPropertyScreen(state: GameState, callbacks: PropertyCallbacks): HTMLElement {
   const container = document.createElement('div');
-  container.className = 'screen-content property-screen';
+  container.className = 'screen-container';
 
-  // Calculate Total Equity & Mortgage Debt
-  let totalPropertyMarketValue = 0;
-  let totalMortgageDebt = 0;
+  const creditInfo = getCreditTierInfo(state.resources.creditScore);
+  const ownedHome = state.property.ownedProperties.find(p => p.type === 'home');
+  const investmentProps = state.property.ownedProperties.filter(p => p.type === 'rental');
 
-  for (const prop of p.properties) {
-    const catalogItem = PROPERTY_CATALOG.find(x => x.id === prop.id);
-    const val = catalogItem ? catalogItem.price : prop.purchasePrice;
-    totalPropertyMarketValue += val;
-    if (prop.mortgage) {
-      totalMortgageDebt += prop.mortgage.principalRemaining;
-    }
-  }
-
-  const totalRealEstateEquity = Math.max(0, totalPropertyMarketValue - totalMortgageDebt);
-
-  // Hero Card: Real Estate Wealth
-  const heroCard = document.createElement('div');
-  heroCard.className = 'card hero-property-card';
-  heroCard.innerHTML = `
-    <div class="property-hero-label">REAL ESTATE EQUITY & WEALTH</div>
-    <div class="property-hero-val val-emerald">${formatCurrency(totalRealEstateEquity)}</div>
-    <div class="property-breakdown-row">
-      <div class="prop-chip">
-        <span class="chip-lbl">Portfolio Asset Value</span>
-        <span class="chip-val val-sky">${formatCurrency(totalPropertyMarketValue)}</span>
+  container.innerHTML = `
+    <!-- Current Living Arrangement -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">🏠 Primary Residence</h2>
+        <span class="time-tag">${state.property.isRenting ? 'Tenant (Renting)' : 'Homeowner'}</span>
       </div>
-      <div class="prop-chip">
-        <span class="chip-lbl">Mortgage Debt</span>
-        <span class="chip-val val-rose">${formatCurrency(totalMortgageDebt)}</span>
-      </div>
-      <div class="prop-chip">
-        <span class="chip-lbl">Properties Owned</span>
-        <span class="chip-val">${p.properties.length}</span>
-      </div>
-    </div>
-  `;
-  container.appendChild(heroCard);
 
-  // Current Living Situation Card
-  const currentLivingCard = document.createElement('div');
-  currentLivingCard.className = 'card';
-  currentLivingCard.innerHTML = `
-    <div class="card-title">
-      <span>🏠 Current Living Arrangement</span>
-      <span class="badge ${p.housing.type === 'own' ? 'badge-green' : 'badge-sky'}">
-        ${p.housing.type === 'own' ? 'Homeowner' : 'Renting'}
-      </span>
-    </div>
-    <div class="living-status-box">
-      <div class="living-row">
-        <span>Monthly Outlay:</span>
-        <strong class="val-rose">${formatCurrency(p.housing.amountPerCycle)} / month</strong>
-      </div>
-      <div class="living-row">
-        <span>Daily Commute Transit:</span>
-        <strong>${p.timeAllocation.commute} hrs / day</strong>
-      </div>
-      <div class="living-row">
-        <span>Location Tier:</span>
-        <strong>${p.housing.locationTier === 'distant' ? 'Suburban Rental (Long Commute)' : 'Near Office / Downtown'}</strong>
-      </div>
-      <p class="rent-creep-note">
-        💡 <em>Renting Insight:</em> Rent prices creep upward 7–8% annually due to inflation. Purchasing locks in a fixed EMI forever and builds net equity.
-      </p>
-    </div>
-  `;
-  container.appendChild(currentLivingCard);
-
-  // Buyable Personal Homes
-  const personalHomesCard = document.createElement('div');
-  personalHomesCard.className = 'card';
-  personalHomesCard.innerHTML = `
-    <div class="card-title">
-      <span>🏡 Buyable Personal Residences</span>
-      <span class="badge badge-sky">20% Down Payment</span>
-    </div>
-    <p class="card-sub-hint">
-      Purchasing a home eliminates rent payments and converts EMI principal into verifiable Net Worth equity.
-    </p>
-    <div class="property-grid" id="personal-homes-grid"></div>
-  `;
-
-  const personalGrid = personalHomesCard.querySelector('#personal-homes-grid')!;
-  PROPERTY_CATALOG.filter(item => item.type === 'personal').forEach(prop => {
-    const isOwned = p.properties.some(x => x.id === prop.id);
-    const downPayment = prop.price * prop.downPaymentPct;
-    const canAffordDown = p.money >= downPayment;
-
-    const propEl = document.createElement('div');
-    propEl.className = `property-card ${isOwned ? 'prop-owned' : ''}`;
-    propEl.innerHTML = `
-      <div class="prop-header">
-        <span class="prop-name">${prop.name}</span>
-        <span class="prop-price">${formatCurrency(prop.price)}</span>
-      </div>
-      <div class="prop-stats">
-        <div class="prop-stat-row">
-          <span>Down Payment (20%):</span>
-          <strong>${formatCurrency(downPayment)}</strong>
+      ${state.property.isRenting ? `
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <div style="font-size: 1.1rem; font-weight: 700;">
+              ${RENTAL_TIERS.find(t => t.id === state.property.rentalTier)?.name}
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+              Commute: ${RENTAL_TIERS.find(t => t.id === state.property.rentalTier)?.commuteHoursDaily} hrs/day • Rent Creep applies every Jan 1 (~7-8%)
+            </div>
+          </div>
+          <div>
+            <div class="metric-label">Monthly Rent</div>
+            <div class="metric-value danger" style="font-size: 1.2rem;">${formatCurrency(state.property.currentMonthlyRent)}/mo</div>
+          </div>
         </div>
-        <div class="prop-stat-row">
-          <span>Monthly Mortgage EMI:</span>
-          <strong class="val-rose">${formatCurrency(prop.monthlyEmi)}/mo</strong>
+
+        <div style="margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 0.8rem; color: var(--text-secondary); width: 100%;">Switch Rental Tier:</span>
+          ${RENTAL_TIERS.map(tier => `
+            <button class="btn-ctrl ${state.property.rentalTier === tier.id ? 'active' : ''}" data-change-rent="${tier.id}">
+              ${tier.name} (${formatCurrency(tier.monthlyCostYear1)}/mo)
+            </button>
+          `).join('')}
         </div>
-        <div class="prop-stat-row">
-          <span>Daily Commute:</span>
-          <strong>${prop.commuteDaily} hrs/day</strong>
+      ` : (ownedHome ? `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
+          <div>
+            <div style="font-size: 1.1rem; font-weight: 700;">${ownedHome.name}</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Mortgage: 25-Year Fixed @ ${(creditInfo.mortgageAPR * 100).toFixed(1)}% APR</div>
+          </div>
+          <div>
+            <div class="metric-label">Property Valuation</div>
+            <div class="metric-value positive">${formatCurrency(ownedHome.currentValue)}</div>
+          </div>
+          <div>
+            <div class="metric-label">Mortgage Balance</div>
+            <div class="metric-value danger">${formatCurrency(ownedHome.mortgageBalance)}</div>
+          </div>
+          <div>
+            <div class="metric-label">Monthly EMI</div>
+            <div class="metric-value">${formatCurrency(ownedHome.monthlyEMI)}/mo</div>
+          </div>
+          <div>
+            <div class="metric-label">Net Equity</div>
+            <div class="metric-value positive">${formatCurrency(ownedHome.currentValue - ownedHome.mortgageBalance)}</div>
+          </div>
         </div>
-      </div>
-      <p class="prop-desc">${prop.description}</p>
-      <div class="prop-footer">
-        ${isOwned ? `
-          <span class="badge badge-green">✓ Primary Home Owned</span>
-        ` : `
-          <button class="btn btn-sm btn-primary" data-buy-home="${prop.id}" ${!canAffordDown ? 'disabled' : ''}>
-            ${canAffordDown ? `Buy Home (${formatCurrency(downPayment)} down)` : `Need ${formatCurrency(downPayment)} Cash`}
-          </button>
-        `}
-      </div>
-    `;
-
-    propEl.querySelector(`[data-buy-home="${prop.id}"]`)?.addEventListener('click', () => {
-      buyProperty(prop);
-    });
-
-    personalGrid.appendChild(propEl);
-  });
-  container.appendChild(personalHomesCard);
-
-  // Investment Properties
-  const investPropsCard = document.createElement('div');
-  investPropsCard.className = 'card';
-  investPropsCard.innerHTML = `
-    <div class="card-title">
-      <span>📦 Passive Income Investment Properties</span>
-      <span class="badge badge-green">Tenant Rental Yield</span>
+      ` : '')}
     </div>
-    <p class="card-sub-hint">
-      Investment properties pay for their own mortgage and deposit net passive surplus into your cashflow on Salary Day.
-    </p>
-    <div class="property-grid" id="investment-homes-grid"></div>
+
+    <!-- Real Estate Acquisitions Catalog -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🏗️ Real Estate Market (Spec 06)</h3>
+        <span style="font-size: 0.8rem; color: var(--text-muted);">Mortgage Rate: ${(creditInfo.mortgageAPR * 100).toFixed(1)}% APR</span>
+      </div>
+
+      <div class="item-list">
+        ${BUYABLE_PROPERTIES.map(prop => {
+          const downPayment = Math.round(prop.purchasePrice * prop.downPaymentPct);
+          const canAffordDown = state.resources.cashOnHand >= downPayment;
+          const isEligible = canAffordDown && creditInfo.mortgageEligible;
+          const isAlreadyHomeowner = prop.type === 'home' && !state.property.isRenting;
+
+          // Approx EMI
+          const loanPrincipal = prop.purchasePrice - downPayment;
+          const monthlyRate = creditInfo.mortgageAPR / 12;
+          const totalMonths = 300; // 25 years
+          const emi = Math.round((loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1));
+
+          return `
+            <div class="list-item">
+              <div style="max-width: 500px;">
+                <div style="font-weight: 700; font-size: 0.95rem;">
+                  ${prop.name} <span class="time-tag">${prop.type === 'home' ? 'Residential Home' : 'Investment Asset'}</span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">${prop.description}</div>
+                <div style="font-size: 0.78rem; color: var(--accent-cyan); margin-top: 2px;">
+                  Price: ${formatCurrency(prop.purchasePrice)} • Down Payment (20%): ${formatCurrency(downPayment)} • EMI: ~${formatCurrency(emi)}/mo
+                  ${prop.type === 'rental' ? ` • <strong style="color: var(--accent-green);">Tenant Rent: ${formatCurrency(prop.expectedMonthlyRent)}/mo</strong>` : ''}
+                </div>
+              </div>
+
+              <div>
+                ${isAlreadyHomeowner ? `
+                  <span class="time-tag">Already Own Home</span>
+                ` : `
+                  <button class="btn-action ${isEligible ? 'success' : ''}" data-buy-prop="${prop.id}" ${!isEligible ? 'disabled style="opacity: 0.4; cursor: not-allowed;"' : ''}>
+                    ${creditInfo.mortgageEligible ? (canAffordDown ? 'Purchase Property' : 'Down Payment Short') : 'Credit Ineligible'}
+                  </button>
+                `}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Investment Properties Portfolio -->
+    ${investmentProps.length > 0 ? `
+      <div class="card">
+        <div class="card-header">
+          <h3 class="card-title">🏢 Investment Real Estate Portfolio</h3>
+        </div>
+        <div class="item-list">
+          ${investmentProps.map(p => `
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 700;">${p.name}</div>
+                <div style="font-size: 0.8rem; color: var(--text-muted);">
+                  Valuation: ${formatCurrency(p.currentValue)} • Mortgage: ${formatCurrency(p.mortgageBalance)} • EMI: ${formatCurrency(p.monthlyEMI)}/mo
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="metric-value positive">+${formatCurrency(p.tenantMonthlyRent)}/mo Rent</span>
+                <span class="time-tag" style="color: var(--accent-green);">Occupied</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
   `;
 
-  const investGrid = investPropsCard.querySelector('#investment-homes-grid')!;
-  PROPERTY_CATALOG.filter(item => item.type === 'investment').forEach(prop => {
-    const isOwned = p.properties.some(x => x.id === prop.id);
-    const downPayment = prop.price * prop.downPaymentPct;
-    const canAffordDown = p.money >= downPayment;
-
-    const propEl = document.createElement('div');
-    propEl.className = `property-card ${isOwned ? 'prop-owned' : ''}`;
-    propEl.innerHTML = `
-      <div class="prop-header">
-        <span class="prop-name">${prop.name}</span>
-        <span class="prop-price">${formatCurrency(prop.price)}</span>
-      </div>
-      <div class="prop-stats">
-        <div class="prop-stat-row">
-          <span>Down Payment (20%):</span>
-          <strong>${formatCurrency(downPayment)}</strong>
-        </div>
-        <div class="prop-stat-row">
-          <span>Gross Tenant Rent:</span>
-          <strong class="val-emerald">+${formatCurrency(prop.expectedRentMonthly)}/mo</strong>
-        </div>
-        <div class="prop-stat-row">
-          <span>Net Passive Cashflow:</span>
-          <strong class="val-emerald">+${formatCurrency(prop.netPassiveMonthly)}/mo</strong>
-        </div>
-      </div>
-      <p class="prop-desc">${prop.description}</p>
-      <div class="prop-footer">
-        ${isOwned ? `
-          <span class="badge badge-green">✓ In Portfolio (+${formatCurrency(prop.netPassiveMonthly)}/mo)</span>
-        ` : `
-          <button class="btn btn-sm btn-primary" data-buy-invest="${prop.id}" ${!canAffordDown ? 'disabled' : ''}>
-            ${canAffordDown ? `Acquire Asset (${formatCurrency(downPayment)})` : `Need ${formatCurrency(downPayment)}`}
-          </button>
-        `}
-      </div>
-    `;
-
-    propEl.querySelector(`[data-buy-invest="${prop.id}"]`)?.addEventListener('click', () => {
-      buyProperty(prop);
-    });
-
-    investGrid.appendChild(propEl);
-  });
-  container.appendChild(investPropsCard);
-
-  function buyProperty(prop: BuyablePropertyDef) {
-    const downPayment = prop.price * prop.downPaymentPct;
-    const loanAmount = prop.price - downPayment;
-
-    if (p.money < downPayment) {
-      alert(`Insufficient cash balance for 20% down payment (${formatCurrency(downPayment)} required).`);
-      return;
-    }
-
-    if (confirm(`Acquire ${prop.name} for ${formatCurrency(prop.price)}? (${formatCurrency(downPayment)} upfront down payment, ${formatCurrency(prop.monthlyEmi)}/mo EMI)`)) {
-      p.money -= downPayment;
-
-      // Add loan
-      const mortgageLoan = {
-        id: `mortgage-${prop.id}-${Date.now()}`,
-        name: `Mortgage: ${prop.name}`,
-        type: 'mortgage' as const,
-        principalRemaining: loanAmount,
-        interestRate: 0.07,
-        emiAmount: prop.monthlyEmi,
-        cycleDays: 30,
-        lastPaidDay: p.currentDay,
-        missedPayments: 0
-      };
-      p.loans.push(mortgageLoan);
-
-      // Add property
-      p.properties.push({
-        id: prop.id,
-        purchasePrice: prop.price,
-        riskStatus: 'clear',
-        mortgage: mortgageLoan
+  // Change rent tier listener
+  container.querySelectorAll('button[data-change-rent]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rId = (btn as HTMLElement).dataset.changeRent! as any;
+      const tier = RENTAL_TIERS.find(t => t.id === rId);
+      if (!tier) return;
+      state.property.rentalTier = rId;
+      state.property.currentMonthlyRent = tier.monthlyCostYear1;
+      state.resources.dailySchedule.commuteHours = tier.commuteHoursDaily;
+      state.simulation.recentLogs.unshift({
+        day: state.player.currentDay,
+        message: `🏠 Relocated to ${tier.name}. Monthly rent is now ${formatCurrency(tier.monthlyCostYear1)}/mo.`,
+        type: 'info'
       });
+      callbacks.onRefresh();
+    });
+  });
 
-      // If personal home, update housing status
-      if (prop.type === 'personal') {
-        p.housing.type = 'own';
-        p.housing.amountPerCycle = prop.monthlyEmi;
-        p.timeAllocation.commute = prop.commuteDaily;
+  // Buy property listener
+  container.querySelectorAll('button[data-buy-prop]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pId = (btn as HTMLElement).dataset.buyProp!;
+      const opt = BUYABLE_PROPERTIES.find(p => p.id === pId);
+      if (!opt) return;
+
+      const downPayment = Math.round(opt.purchasePrice * opt.downPaymentPct);
+      if (state.resources.cashOnHand < downPayment) return;
+
+      const loanPrincipal = opt.purchasePrice - downPayment;
+      const monthlyRate = creditInfo.mortgageAPR / 12;
+      const totalMonths = 300;
+      const emi = Math.round((loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, totalMonths)) / (Math.pow(1 + monthlyRate, totalMonths) - 1));
+
+      state.resources.cashOnHand -= downPayment;
+
+      const newProp: Property = {
+        id: `prop-${Date.now()}`,
+        name: opt.name,
+        type: opt.type,
+        purchasePrice: opt.purchasePrice,
+        currentValue: opt.purchasePrice,
+        mortgageBalance: loanPrincipal,
+        monthlyEMI: emi,
+        downPayment,
+        isInsured: true,
+        tenantMonthlyRent: opt.expectedMonthlyRent,
+        isVacant: false
+      };
+
+      state.property.ownedProperties.push(newProp);
+
+      if (opt.type === 'home') {
+        state.property.isRenting = false;
+        state.resources.dailySchedule.commuteHours = opt.commuteHoursDaily;
       }
 
-      p.eventLog.unshift({
-        day: p.currentDay,
-        text: `🏡 Acquired ${prop.name}! Down payment of ${formatCurrency(downPayment)} paid; mortgage active.`,
-        type: 'investment'
+      state.simulation.recentLogs.unshift({
+        day: state.player.currentDay,
+        message: `🏡 Acquired ${opt.name}! Down payment of ${formatCurrency(downPayment)} cleared.`,
+        type: 'positive'
       });
-
-      saveGame(state);
-      if (onAction) onAction('refresh-property');
-    }
-  }
+      callbacks.onRefresh();
+    });
+  });
 
   return container;
 }

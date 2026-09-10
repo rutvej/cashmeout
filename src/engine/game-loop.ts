@@ -1,212 +1,183 @@
 import { GameState } from '../types/game';
-import { SeededRNG } from './prng';
-import { MS_PER_GAME_DAY } from './time-system';
-import { processDayEconomy, calculateNetWorth } from './economy-engine';
-import { processHealthAndConsequences, HealthConsequenceResult, HealthWarning } from './health-engine';
-import { tickMarket } from './market-engine';
-import { tickNpcs } from './npc-engine';
-import { COURSES } from '../data/static-data';
+import { getTimelineInfo } from './time';
+import { tickDailyHealth } from './health';
+import { evaluateHabitsDaily } from './behavioral';
+import { updateMarketPricesMonthly } from './market';
+import { calculateIncomeTax } from './economy';
+import { selectActiveEvents } from '../scenarios/deck';
+import { saveGame } from '../save/save-manager';
 
-export interface SimulationReport {
-  startDay: number;
-  endDay: number;
-  daysAdvanced: number;
-  startMoney: number;
-  endMoney: number;
-  moneyDelta: number;
-  startNetWorth: number;
-  endNetWorth: number;
-  netWorthDelta: number;
-  healthEmergency?: HealthConsequenceResult;
-  doctorWarning?: HealthWarning;
+export interface GameLoopCallbacks {
+  onRender: () => void;
+  onSalaryDay: () => void;
+  onYearEndTax: (taxAmount: number) => void;
+  onGameOver: () => void;
 }
 
 export class GameLoop {
   private state: GameState;
-  private rng: SeededRNG;
-  private lastFrameTime = 0;
-  private accumulatedMs = 0;
-  private isRunning = false;
-  private onRenderCallback: () => void;
-  private onDayTickCallback: (day: number, healthEmergency?: HealthConsequenceResult) => void;
-  constructor(
-    state: GameState,
-    onDayTick?: (day: number, healthEmergency?: HealthConsequenceResult) => void,
-    onRender?: () => void
-  ) {
+  private callbacks: GameLoopCallbacks;
+  private timerId: ReturnType<typeof setInterval> | null = null;
+
+  constructor(state: GameState, callbacks: GameLoopCallbacks) {
     this.state = state;
-    this.rng = new SeededRNG(state.gameSeed + state.player.currentDay);
-    this.onDayTickCallback = onDayTick || (() => {});
-    this.onRenderCallback = onRender || (() => {});
+    this.callbacks = callbacks;
   }
 
   public start(): void {
-    if (this.isRunning) return;
-    this.isRunning = true;
-    this.lastFrameTime = performance.now();
-    requestAnimationFrame(t => this.frame(t));
+    this.stop();
+    this.state.simulation.isPaused = false;
+    const intervalMs = this.getIntervalMs();
+    this.timerId = setInterval(() => this.tickDay(), intervalMs);
+    this.callbacks.onRender();
+  }
+
+  public pause(): void {
+    this.stop();
+    this.state.simulation.isPaused = true;
+    this.callbacks.onRender();
   }
 
   public stop(): void {
-    this.isRunning = false;
-  }
-
-  public simulateSingleDay(): void {
-    const nextDay = this.state.player.currentDay + 1;
-    this.state.player.currentDay = nextDay;
-    this.state.player.lastActiveTimestamp = Date.now();
-
-    // 1. Process time allocation side effects
-    const p = this.state.player;
-    if (p.timeAllocation.sideHustle > 0) {
-      const hasLaptop = p.lifestyleAssets.some(a => a.id === 'laptop');
-      const sideIncome = p.timeAllocation.sideHustle * (hasLaptop ? 500 : 250);
-      p.money += sideIncome;
-      p.taxes.incomeThisCycle += sideIncome;
+    if (this.timerId !== null) {
+      clearInterval(this.timerId);
+      this.timerId = null;
     }
-
-    // 1b. Daily course study progress
-    this.processCourseProgress(nextDay);
-
-    // 2. Health & Lifestyle Consequences
-    const healthRes = processHealthAndConsequences(this.state, nextDay);
-
-    // 3. Economy (Living costs, salary, rent, debt, taxes)
-    processDayEconomy(this.state, nextDay);
-
-    // 4. Market & Investments (Stocks, gold, SIPs, properties, businesses)
-    tickMarket(this.state, nextDay, this.rng);
-
-    // 5. NPC Decisions
-    tickNpcs(this.state, nextDay, this.rng);
-
-    // 6. Check achievements
-    this.checkAchievements();
-
-    this.onDayTickCallback(nextDay, healthRes);
   }
 
-  public simulateMultipleDays(count: number): SimulationReport {
-    const startDay = this.state.player.currentDay;
-    const startMoney = this.state.player.money;
-    const startNetWorth = calculateNetWorth(this.state);
-    let lastEmergency: HealthConsequenceResult | undefined;
-    let lastWarning: HealthWarning | undefined;
-
-    for (let i = 0; i < count; i++) {
-      const nextDay = this.state.player.currentDay + 1;
-      this.state.player.currentDay = nextDay;
-      this.state.player.lastActiveTimestamp = Date.now();
-
-      const p = this.state.player;
-      if (p.timeAllocation.sideHustle > 0) {
-        const hasLaptop = p.lifestyleAssets.some(a => a.id === 'laptop');
-        const sideIncome = p.timeAllocation.sideHustle * (hasLaptop ? 500 : 250);
-        p.money += sideIncome;
-        p.taxes.incomeThisCycle += sideIncome;
-      }
-
-      this.processCourseProgress(nextDay);
-
-      const healthRes = processHealthAndConsequences(this.state, nextDay);
-      if (healthRes.triggered) lastEmergency = healthRes;
-      if (healthRes.warning) lastWarning = healthRes.warning;
-
-      processDayEconomy(this.state, nextDay);
-      tickMarket(this.state, nextDay, this.rng);
-      tickNpcs(this.state, nextDay, this.rng);
-      this.checkAchievements();
+  public setSpeed(speed: 1 | 2 | 4): void {
+    this.state.simulation.simulationSpeed = speed;
+    if (!this.state.simulation.isPaused) {
+      this.start();
+    } else {
+      this.callbacks.onRender();
     }
-
-    const endDay = this.state.player.currentDay;
-    const endMoney = this.state.player.money;
-    const endNetWorth = calculateNetWorth(this.state);
-
-    const report: SimulationReport = {
-      startDay,
-      endDay,
-      daysAdvanced: count,
-      startMoney,
-      endMoney,
-      moneyDelta: endMoney - startMoney,
-      startNetWorth,
-      endNetWorth,
-      netWorthDelta: endNetWorth - startNetWorth,
-      healthEmergency: lastEmergency,
-      doctorWarning: lastWarning
-    };
-
-    const finalCallbackArg = lastEmergency
-      ? lastEmergency
-      : (lastWarning ? { triggered: false, warning: lastWarning } : undefined);
-
-    this.onDayTickCallback(endDay, finalCallbackArg);
-    return report;
   }
 
-  private frame(timestamp: number): void {
-    if (!this.isRunning) return;
-
-    const delta = timestamp - this.lastFrameTime;
-    this.lastFrameTime = timestamp;
-    this.accumulatedMs += delta;
-
-    while (this.accumulatedMs >= MS_PER_GAME_DAY) {
-      this.accumulatedMs -= MS_PER_GAME_DAY;
-      this.simulateSingleDay();
+  private getIntervalMs(): number {
+    switch (this.state.simulation.simulationSpeed) {
+      case 4: return 200;
+      case 2: return 500;
+      case 1:
+      default: return 1000;
     }
-
-    this.onRenderCallback();
-    requestAnimationFrame(t => this.frame(t));
   }
 
-  /** Called each simulated day to advance the active course study progress. */
-  private processCourseProgress(_day: number): void {
-    const p = this.state.player;
-    if (!p.activeCourseId) return;
+  public stepDay(): void {
+    this.tickDay();
+  }
 
-    const course = COURSES.find(c => c.id === p.activeCourseId);
-    if (!course) {
-      p.activeCourseId = null;
+  public advanceMonth(): void {
+    // Fast-forward until next Salary Day (Day 1 of next month)
+    const currentM = this.state.player.currentMonth;
+    while (this.state.player.currentMonth === currentM && this.state.player.currentDay < 3650) {
+      this.tickDay(true);
+      if (this.state.player.currentDay % 30 === 1) break;
+    }
+    this.callbacks.onRender();
+  }
+
+  private tickDay(suppressRender = false): void {
+    if (this.state.player.currentDay >= 3650) {
+      this.pause();
+      this.state.player.gameOver = true;
+      saveGame(this.state);
+      this.callbacks.onGameOver();
       return;
     }
 
-    // Each education slot per day gives 1 study point. Default 1 if none allocated.
-    const studySlots = Math.max(1, p.timeAllocation.education);
-    const progressPerDay = (studySlots / course.slotsRequired) * 100;
-    const current = p.educationProgress[course.id] ?? 0;
-    const newProgress = Math.min(100, current + progressPerDay);
-    p.educationProgress[course.id] = Math.round(newProgress * 10) / 10;
+    const prevInfo = getTimelineInfo(this.state.player.currentDay, this.state.player.startingAge);
+    this.state.player.currentDay += 1;
+    const nextInfo = getTimelineInfo(this.state.player.currentDay, this.state.player.startingAge);
 
-    if (newProgress >= 100 && current < 100) {
-      // Course completed!
-      p.educationProgress[course.id] = 100;
-      p.activeCourseId = null;
-      p.eventLog.unshift({
-        day: p.currentDay,
-        text: `🎓 Certification Complete: ${course.name}! You are now qualified.`,
-        type: 'achievement'
-      });
+    this.state.player.currentAge = nextInfo.age;
+    this.state.player.currentYear = nextInfo.year;
+    this.state.player.currentMonth = nextInfo.month;
+
+    // 1. Health daily adjustments
+    tickDailyHealth(this.state);
+
+    // 2. Behavioral daily habits
+    evaluateHabitsDaily(
+      this.state.behavioral,
+      this.state.resources.dailySchedule.sleepHours,
+      this.state.resources.dailySchedule.gymHours
+    );
+
+    // 3. Career experience & course progression
+    if (this.state.career.currentJob) {
+      this.state.career.yearsOfExperience = Number((this.state.career.yearsOfExperience + (1 / 365)).toFixed(3));
+      this.state.career.consecutiveEmploymentMonths += (1 / 30);
+    } else {
+      this.state.career.unemploymentMonths += (1 / 30);
     }
-  }
 
-  private checkAchievements(): void {
-    const p = this.state.player;
-    const addAch = (id: string, text: string) => {
-      if (!p.achievements.includes(id)) {
-        p.achievements.push(id);
-        p.eventLog.unshift({
-          day: p.currentDay,
-          text: `🏆 Achievement Unlocked: ${text}!`,
-          type: 'achievement'
+    // Active course progress
+    if (this.state.career.activeCourse && nextInfo.dayInMonth === 30) {
+      this.state.career.activeCourse.monthsRemaining -= 1;
+      if (this.state.career.activeCourse.monthsRemaining <= 0) {
+        const cId = this.state.career.activeCourse.courseId;
+        this.state.career.completedCourseIds.push(cId);
+        this.state.career.activeCourse = null;
+        this.state.simulation.recentLogs.unshift({
+          day: this.state.player.currentDay,
+          message: `🎓 Course Completed: Successfully attained qualification in ${cId.replace('course-', '')}!`,
+          type: 'positive'
         });
       }
-    };
+    }
 
-    if (p.money >= 100000) addAch('first-lakh', 'Lakhpati (₹1 Lakh liquid cash)');
-    if (p.properties.length >= 1) addAch('first-property', 'Property Owner');
-    if (p.businesses.length >= 1) addAch('entrepreneur', 'Business Mogul');
-    if (p.health.physical >= 95 && p.health.mental >= 95) addAch('peak-health', 'Peak Performance (95+ Health)');
-    if (p.consequenceMeters.cheapFoodDays >= 18) addAch('gut-of-steel', 'Living on the Edge (18+ Street Food Days)');
+    // 4. Monthly transition check
+    if (nextInfo.month !== prevInfo.month) {
+      // Update market asset prices monthly
+      updateMarketPricesMonthly(this.state);
+
+      // Annual rent creep (Spec 06: Jan 1 / Month % 12 === 1)
+      if (nextInfo.monthInYear === 1 && this.state.property.isRenting) {
+        const rentHike = Math.round(this.state.property.currentMonthlyRent * 0.075);
+        this.state.property.currentMonthlyRent += rentHike;
+        this.state.simulation.recentLogs.unshift({
+          day: this.state.player.currentDay,
+          message: `📈 Annual Rent Creep: Landlord increased monthly rent by $${rentHike}.`,
+          type: 'warning'
+        });
+      }
+
+      // Check Year-End Tax (Spec 07: Month 12 Day 30)
+      if (prevInfo.isYearEnd) {
+        const taxDue = calculateIncomeTax(this.state.resources.currentYearTaxableIncome);
+        this.state.resources.cashOnHand = Math.max(0, this.state.resources.cashOnHand - taxDue);
+        this.state.resources.annualTaxPaid += taxDue;
+        this.state.resources.currentYearTaxableIncome = 0;
+        this.state.simulation.recentLogs.unshift({
+          day: this.state.player.currentDay,
+          message: `🏛️ Year-End Tax Audit: Paid $${taxDue} in progressive income tax.`,
+          type: 'info'
+        });
+        this.callbacks.onYearEndTax(taxDue);
+      }
+    }
+
+    // 5. Salary Day Trigger (Day 1 of month)
+    if (nextInfo.isSalaryDay) {
+      this.pause();
+      saveGame(this.state);
+      this.callbacks.onSalaryDay();
+      return;
+    }
+
+    // 6. Mid-month random event cards (every ~7 to 10 days)
+    if (this.state.simulation.activeEventCards.length === 0 && (nextInfo.dayInMonth === 8 || nextInfo.dayInMonth === 18 || nextInfo.dayInMonth === 25)) {
+      this.state.simulation.activeEventCards = selectActiveEvents(this.state);
+    }
+
+    // Auto-save every 5 days
+    if (this.state.player.currentDay % 5 === 0) {
+      saveGame(this.state);
+    }
+
+    if (!suppressRender) {
+      this.callbacks.onRender();
+    }
   }
 }

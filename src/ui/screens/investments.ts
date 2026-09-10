@@ -1,148 +1,309 @@
 import { GameState } from '../../types/game';
+import { STOCK_TICKERS, CRYPTO_TOKENS, MUTUAL_FUNDS, FD_TIERS } from '../../data/markets';
 import { formatCurrency } from '../components/format';
 
-export function renderInvestmentsScreen(
-  state: GameState,
-  onAction?: (action: string, payload?: any) => void
-): HTMLElement {
-  const p = state.player;
+export interface InvestmentCallbacks {
+  onRefresh: () => void;
+}
+
+export function renderInvestmentsScreen(state: GameState, callbacks: InvestmentCallbacks): HTMLElement {
   const container = document.createElement('div');
-  container.className = 'screen-content investments-screen';
+  container.className = 'screen-container';
 
-  // Calculate Equities Value
-  let totalEquitiesValue = 0;
-  for (const [tickerId, entry] of Object.entries(p.portfolio)) {
-    const t = state.market.tickers.find(x => x.id === tickerId);
-    if (t) totalEquitiesValue += entry.shares * t.price;
-  }
-
-  const goldValue = p.goldHoldings.grams * state.market.goldPricePerGram;
-  const totalLiquidSavings = p.savingsBalance;
-  const totalInvestedWealth = totalEquitiesValue + goldValue + totalLiquidSavings;
-
-  // Investment Portfolio Hero
-  const heroCard = document.createElement('div');
-  heroCard.className = 'card hero-invest-card';
-  heroCard.innerHTML = `
-    <div class="invest-hero-label">TOTAL INVESTED ASSETS</div>
-    <div class="invest-hero-val val-sky">${formatCurrency(totalInvestedWealth)}</div>
-    <div class="invest-breakdown-row">
-      <div class="invest-pill">
-        <span class="pill-lbl">📈 Stocks & Equities</span>
-        <span class="pill-val val-emerald">${formatCurrency(totalEquitiesValue)}</span>
+  container.innerHTML = `
+    <!-- High-Yield Cash & Emergency Buffer -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">🛡️ High-Yield Emergency Reserves (3.5% APY)</h2>
+        <span class="metric-value positive">${formatCurrency(state.resources.emergencyFund)}</span>
       </div>
-      <div class="invest-pill">
-        <span class="pill-lbl">🏦 High-Yield Savings (3.5%)</span>
-        <span class="pill-val val-sky">${formatCurrency(totalLiquidSavings)}</span>
-      </div>
-      <div class="invest-pill">
-        <span class="pill-lbl">🪙 Physical Gold</span>
-        <span class="pill-val val-amber">${formatCurrency(goldValue)}</span>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+        Risk-free, liquid capital earning 3.5% interest compounded monthly. Protects you against medical emergencies, layoffs, and debt spirals.
+      </p>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <button id="btn-deposit-buffer-500" class="btn-ctrl">+ Transfer $500 to Buffer</button>
+        <button id="btn-deposit-buffer-1000" class="btn-ctrl">+ Transfer $1,000 to Buffer</button>
+        <button id="btn-withdraw-buffer-500" class="btn-ctrl">- Withdraw $500 to Checking</button>
       </div>
     </div>
-  `;
-  container.appendChild(heroCard);
 
-  // High-Yield Savings Account Card
-  const savingsCard = document.createElement('div');
-  savingsCard.className = 'card';
-  savingsCard.innerHTML = `
-    <div class="card-title">
-      <span>🏦 High-Yield Emergency Savings</span>
-      <span class="badge badge-green">3.5% APY Daily</span>
-    </div>
-    <div class="savings-actions-row">
-      <div>
-        <div class="savings-balance">${formatCurrency(p.savingsBalance)}</div>
-        <div class="savings-sub">Liquid buffer protecting you against sudden crises</div>
+    <!-- Stock Market & Equities -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📈 Equity Market (8 Canonical Tickers)</h3>
+        <span class="time-tag">Macro Era: ${state.simulation.macroPhase.replace('_', ' ')}</span>
       </div>
-      <div class="btn-group-sm">
-        <button class="btn btn-sm btn-primary" id="btn-deposit-savings">Deposit</button>
-        <button class="btn btn-sm btn-secondary" id="btn-withdraw-savings">Withdraw</button>
+      <div class="item-list">
+        ${STOCK_TICKERS.map(stock => {
+          const holding = state.investments.stocksOwned[stock.symbol] || { shares: 0, averageCost: 0 };
+          const holdingVal = holding.shares * stock.currentPrice;
+
+          return `
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 700; font-size: 0.95rem;">
+                  ${stock.symbol} <span style="font-weight: 400; color: var(--text-muted);">— ${stock.name}</span>
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                  Sector: ${stock.sector} • Div Yield: ${(stock.dividendYield * 100).toFixed(1)}% • Volatility: ${(stock.volatility * 100).toFixed(0)}%
+                </div>
+                ${holding.shares > 0 ? `
+                  <div style="font-size: 0.78rem; color: var(--accent-cyan); margin-top: 2px;">
+                    Owned: ${holding.shares} shares (${formatCurrency(holdingVal)}) • Avg: $${holding.averageCost.toFixed(1)}
+                  </div>
+                ` : ''}
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="metric-value">$${stock.currentPrice}</span>
+                <button class="btn-action success" data-buy-stock="${stock.symbol}">Buy 5 ($${stock.currentPrice * 5})</button>
+                ${holding.shares > 0 ? `
+                  <button class="btn-action danger" data-sell-stock="${stock.symbol}">Sell All</button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>
-  `;
-  savingsCard.querySelector('#btn-deposit-savings')?.addEventListener('click', () => {
-    if (onAction) onAction('deposit-savings');
-  });
-  savingsCard.querySelector('#btn-withdraw-savings')?.addEventListener('click', () => {
-    if (onAction) onAction('withdraw-savings');
-  });
-  container.appendChild(savingsCard);
 
-  // Stock Market Tickers Card
-  const stockCard = document.createElement('div');
-  stockCard.className = 'card';
-  stockCard.innerHTML = `
-    <div class="card-title">
-      <span>📈 Stock Market & Index Equities</span>
-      <span class="badge badge-sky">${state.market.tickers.length} Listed</span>
+    <!-- Mutual Funds & SIP -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📊 Index Funds & Auto-SIP</h3>
+      </div>
+      <div class="item-list">
+        ${MUTUAL_FUNDS.map(fund => {
+          const unitsOwned = state.investments.mutualFundUnits[fund.id] || { units: 0, investedAmount: 0 };
+          const monthlyAlloc = state.investments.sipMonthlyAllocations[fund.id] || 0;
+
+          return `
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 700; font-size: 0.95rem;">${fund.name}</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                  Expected Return: ${(fund.expectedAnnualReturn * 100).toFixed(1)}% p.a. • Expense Ratio: ${(fund.expenseRatio * 100).toFixed(2)}%
+                </div>
+                <div style="font-size: 0.8rem; color: var(--accent-green); margin-top: 2px;">
+                  Total Invested: ${formatCurrency(unitsOwned.investedAmount)} • Monthly SIP: ${formatCurrency(monthlyAlloc)}/mo
+                </div>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn-ctrl" data-sip-plus="${fund.id}">+ $50/mo</button>
+                <button class="btn-ctrl" data-sip-minus="${fund.id}">- $50/mo</button>
+                <button class="btn-action" data-invest-fund="${fund.id}">Lump Sum $500</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
     </div>
-    <div class="tickers-list" id="tickers-list"></div>
-  `;
 
-  const tickersListEl = stockCard.querySelector('#tickers-list')!;
-  state.market.tickers.forEach(ticker => {
-    const holding = p.portfolio[ticker.id];
-    const shares = holding ? holding.shares : 0;
-    const holdingValue = shares * ticker.price;
+    <!-- Cryptocurrencies -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🪙 Digital Assets & Crypto</h3>
+        <span style="font-size: 0.75rem; color: var(--accent-rose);">High Volatility</span>
+      </div>
+      <div class="item-list">
+        ${CRYPTO_TOKENS.map(token => {
+          const owned = state.investments.cryptoOwned[token.symbol] || { units: 0, averageCost: 0 };
+          const val = owned.units * token.currentPrice;
 
-    const tEl = document.createElement('div');
-    tEl.className = 'ticker-row-item';
-    tEl.innerHTML = `
-      <div class="ticker-info-col">
-        <div class="ticker-sym-row">
-          <span class="ticker-sym">${ticker.id}</span>
-          <span class="ticker-name">${ticker.name}</span>
+          return `
+            <div class="list-item">
+              <div>
+                <div style="font-weight: 700; font-size: 0.95rem;">
+                  ${token.symbol} (${token.name})
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-muted);">
+                  Price: $${token.currentPrice.toLocaleString()}
+                </div>
+                ${owned.units > 0 ? `
+                  <div style="font-size: 0.78rem; color: var(--accent-cyan);">
+                    Holding: ${owned.units.toFixed(token.symbol === 'BTC' ? 3 : 1)} units (${formatCurrency(val)})
+                  </div>
+                ` : ''}
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <button class="btn-action" data-buy-crypto="${token.symbol}">Buy $500</button>
+                ${owned.units > 0 ? `
+                  <button class="btn-action danger" data-sell-crypto="${token.symbol}">Sell All</button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Fixed Deposits -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">🔒 Fixed Term Deposits (FD)</h3>
+      </div>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+        ${FD_TIERS.map(tier => `
+          <button class="btn-ctrl" data-open-fd="${tier.durationMonths}" data-rate="${tier.annualRate}">
+            Lock $2,000 for ${tier.label}
+          </button>
+        `).join('')}
+      </div>
+
+      ${state.investments.fixedDeposits.length > 0 ? `
+        <div class="item-list">
+          ${state.investments.fixedDeposits.map(fd => `
+            <div class="list-item">
+              <div>
+                <span style="font-weight: 600;">FD #${fd.id.slice(-4)}: ${formatCurrency(fd.principal)}</span>
+                <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">(${(fd.interestRate * 100).toFixed(1)}% APY)</span>
+              </div>
+              <span class="time-tag">${fd.durationMonths} Mos Term</span>
+            </div>
+          `).join('')}
         </div>
-        <div class="ticker-meta">
-          <span>Sector: <strong>${ticker.sector}</strong></span>
-          ${ticker.dividendYieldPct ? `<span>· Div: <strong>${(ticker.dividendYieldPct * 100).toFixed(1)}%</strong></span>` : ''}
-        </div>
-      </div>
+      ` : `
+        <div style="font-size: 0.82rem; color: var(--text-muted);">No active fixed deposits. Open one above for guaranteed yields.</div>
+      `}
+    </div>
+  `;
 
-      <div class="ticker-price-col">
-        <div class="ticker-price">${formatCurrency(ticker.price)}</div>
-        ${shares > 0 ? `<div class="ticker-holding">Holding: ${shares} shares (${formatCurrency(holdingValue)})</div>` : ''}
-      </div>
+  // Listeners for buffer actions
+  container.querySelector('#btn-deposit-buffer-500')?.addEventListener('click', () => {
+    if (state.resources.cashOnHand >= 500) {
+      state.resources.cashOnHand -= 500;
+      state.resources.emergencyFund += 500;
+      callbacks.onRefresh();
+    }
+  });
 
-      <button class="btn btn-sm btn-primary" data-trade-ticker="${ticker.id}">Trade</button>
-    `;
+  container.querySelector('#btn-deposit-buffer-1000')?.addEventListener('click', () => {
+    if (state.resources.cashOnHand >= 1000) {
+      state.resources.cashOnHand -= 1000;
+      state.resources.emergencyFund += 1000;
+      callbacks.onRefresh();
+    }
+  });
 
-    tEl.querySelector(`[data-trade-ticker="${ticker.id}"]`)?.addEventListener('click', () => {
-      if (onAction) onAction('trade-stock', { tickerId: ticker.id });
+  container.querySelector('#btn-withdraw-buffer-500')?.addEventListener('click', () => {
+    if (state.resources.emergencyFund >= 500) {
+      state.resources.emergencyFund -= 500;
+      state.resources.cashOnHand += 500;
+      callbacks.onRefresh();
+    }
+  });
+
+  // Stock listeners
+  container.querySelectorAll('button[data-buy-stock]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = (btn as HTMLElement).dataset.buyStock!;
+      const stock = STOCK_TICKERS.find(s => s.symbol === sym);
+      if (!stock) return;
+      const cost = stock.currentPrice * 5;
+      if (state.resources.cashOnHand >= cost) {
+        state.resources.cashOnHand -= cost;
+        const current = state.investments.stocksOwned[sym] || { shares: 0, averageCost: stock.currentPrice };
+        const totalShares = current.shares + 5;
+        const avgCost = ((current.shares * current.averageCost) + cost) / totalShares;
+        state.investments.stocksOwned[sym] = { shares: totalShares, averageCost: avgCost };
+        callbacks.onRefresh();
+      }
     });
+  });
 
-    tickersListEl.appendChild(tEl);
+  container.querySelectorAll('button[data-sell-stock]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = (btn as HTMLElement).dataset.sellStock!;
+      const stock = STOCK_TICKERS.find(s => s.symbol === sym);
+      const holding = state.investments.stocksOwned[sym];
+      if (!stock || !holding || holding.shares <= 0) return;
+      const proceeds = holding.shares * stock.currentPrice;
+      state.resources.cashOnHand += proceeds;
+      delete state.investments.stocksOwned[sym];
+      callbacks.onRefresh();
+    });
   });
-  container.appendChild(stockCard);
 
-  // Gold Holdings Card
-  const goldCard = document.createElement('div');
-  goldCard.className = 'card';
-  goldCard.innerHTML = `
-    <div class="card-title">
-      <span>🪙 24K Physical Gold Bullion</span>
-      <span class="badge badge-gold">${formatCurrency(state.market.goldPricePerGram)} / gram</span>
-    </div>
-    <div class="gold-actions-row">
-      <div>
-        <div class="gold-qty">${p.goldHoldings.grams} Grams Held</div>
-        <div class="gold-val">Current Value: <strong>${formatCurrency(goldValue)}</strong></div>
-      </div>
-      <div class="btn-group-sm">
-        <button class="btn btn-sm btn-primary" id="btn-buy-gold">Buy Gold</button>
-        <button class="btn btn-sm btn-secondary" id="btn-sell-gold" ${p.goldHoldings.grams === 0 ? 'disabled' : ''}>Sell</button>
-      </div>
-    </div>
-  `;
-  goldCard.querySelector('#btn-buy-gold')?.addEventListener('click', () => {
-    if (onAction) onAction('trade-gold', { action: 'buy' });
+  // SIP listeners
+  container.querySelectorAll('button[data-sip-plus]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const fId = (btn as HTMLElement).dataset.sipPlus!;
+      state.investments.sipMonthlyAllocations[fId] = (state.investments.sipMonthlyAllocations[fId] || 0) + 50;
+      callbacks.onRefresh();
+    });
   });
-  goldCard.querySelector('#btn-sell-gold')?.addEventListener('click', () => {
-    if (onAction) onAction('trade-gold', { action: 'sell' });
+
+  container.querySelectorAll('button[data-sip-minus]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const fId = (btn as HTMLElement).dataset.sipMinus!;
+      const cur = state.investments.sipMonthlyAllocations[fId] || 0;
+      state.investments.sipMonthlyAllocations[fId] = Math.max(0, cur - 50);
+      callbacks.onRefresh();
+    });
   });
-  container.appendChild(goldCard);
+
+  container.querySelectorAll('button[data-invest-fund]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const fId = (btn as HTMLElement).dataset.investFund!;
+      if (state.resources.cashOnHand >= 500) {
+        state.resources.cashOnHand -= 500;
+        const fund = state.investments.mutualFundUnits[fId] || { units: 0, investedAmount: 0 };
+        fund.investedAmount += 500;
+        fund.units += 5;
+        state.investments.mutualFundUnits[fId] = fund;
+        callbacks.onRefresh();
+      }
+    });
+  });
+
+  // Crypto listeners
+  container.querySelectorAll('button[data-buy-crypto]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = (btn as HTMLElement).dataset.buyCrypto!;
+      const token = CRYPTO_TOKENS.find(t => t.symbol === sym);
+      if (!token || state.resources.cashOnHand < 500) return;
+      state.resources.cashOnHand -= 500;
+      const unitsBought = 500 / token.currentPrice;
+      const holding = state.investments.cryptoOwned[sym] || { units: 0, averageCost: token.currentPrice };
+      holding.units += unitsBought;
+      state.investments.cryptoOwned[sym] = holding;
+      callbacks.onRefresh();
+    });
+  });
+
+  container.querySelectorAll('button[data-sell-crypto]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const sym = (btn as HTMLElement).dataset.sellCrypto!;
+      const token = CRYPTO_TOKENS.find(t => t.symbol === sym);
+      const holding = state.investments.cryptoOwned[sym];
+      if (!token || !holding || holding.units <= 0) return;
+      const proceeds = holding.units * token.currentPrice;
+      state.resources.cashOnHand += Math.round(proceeds);
+      delete state.investments.cryptoOwned[sym];
+      callbacks.onRefresh();
+    });
+  });
+
+  // FD listener
+  container.querySelectorAll('button[data-open-fd]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const months = parseInt((btn as HTMLElement).dataset.openFd!, 10);
+      const rate = parseFloat((btn as HTMLElement).dataset.rate!);
+      if (state.resources.cashOnHand >= 2000) {
+        state.resources.cashOnHand -= 2000;
+        state.investments.fixedDeposits.push({
+          id: `fd-${Date.now()}`,
+          principal: 2000,
+          interestRate: rate,
+          startMonth: state.player.currentMonth,
+          durationMonths: months
+        });
+        callbacks.onRefresh();
+      }
+    });
+  });
 
   return container;
 }
