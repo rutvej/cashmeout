@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply min-h-screen;
+    overscroll-behavior: none;
+  }
+
+  /* Number emphasis — Cred-style */
+  .money {
+    @apply font-extrabold tracking-tight;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Bottom sheet backdrop */
+  .sheet-backdrop {
+    @apply fixed inset-0 bg-black/30 z-40;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* Stacked bar segment */
+  .bar-segment {
+    @apply h-full transition-all duration-500 ease-out first:rounded-l-full last:rounded-r-full;
+    min-width: 2px;
+  }
+
+  /* Pill badge */
+  .pill {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .pill-achieved {
+    @apply pill bg-accent-stable text-accent-stable-dark;
+  }
+  .pill-sacrificed {
+    @apply pill bg-accent-caution text-accent-caution-dark;
+  }
+  .pill-bonus {
+    @apply pill bg-accent-bonus text-accent-bonus-dark;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+  }
+}

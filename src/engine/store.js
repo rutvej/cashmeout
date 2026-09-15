@@ -1,0 +1,1567 @@
+import { create } from 'zustand';
+import { generateStartingConditions } from './startingConditions.js';
+import { simulateTick, shouldTriggerEvent, getEligibleEvents } from './simulation.js';
+import { resolveEvent as resolveEventFn } from './eventResolver.js';
+import { EVENT_DECK } from './events.js';
+import { createGoal, redistributeBuckets } from './goals.js';
+import { calculateResults, generateInsights } from './scoring.js';
+import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES } from './constants.js';
+import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
+
+/**
+ * Central Zustand store — single source of truth for all game state.
+ * All mutations flow through store actions. The simulation loop calls tick()
+ * on an interval, and tick() applies changes from simulateTick().
+ */
+const useGameStore = create((set, get) => ({
+  // --- Screen & Seed ---
+  screen: 'landing',
+  gameSeed: null,
+
+  // --- Player profile (set at spawn) ---
+  player: null,
+
+  // --- Financial state ---
+  pool: 0,
+  buckets: {},
+  instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
+
+  // --- Goals ---
+  goals: [],
+
+  // --- Income & deductions ---
+  incomes: [],
+  fixedDeductions: [],
+  loans: [],
+
+  // --- Insurance ---
+  hasHealthInsurance: false,
+  hasVehicleInsurance: false,
+  healthInsuranceCost: 0,
+  vehicleInsuranceCost: 0,
+  homeMaintenanceCost: 0,
+  carMaintenanceCost: 0,
+
+  // --- Simulation ---
+  currentDay: 0,
+  lastEventDay: 0,
+  simRunning: false,
+  simSpeed: 1,
+  simIntervalId: null,
+
+  // --- Current event / modal state ---
+  currentEvent: null,
+  showAllocation: false,
+  showMilestone: null,
+  activeTab: null,
+  deficitInfo: null,
+
+  // --- Game tracking ---
+  gameOver: false,
+  gameOverReason: null,
+  eventHistory: [],
+  decisionHistory: [],
+  monthlySnapshots: [],
+  results: null,
+
+  // --- Owned assets ---
+  homesOwned: [],
+  carsOwned: [],
+  hasActiveBusiness: false,
+  businessIncome: 0,
+
+  // --- Player progression ---
+  experienceMonths: 0,
+  courseCompleted: false,
+  salaryCeiling: 0,
+
+  // ═══════════════════════════════════════════
+  // ACTIONS
+  // ═══════════════════════════════════════════
+
+  startGame: (customSeed = null) => {
+    const seed = setSeed(customSeed);
+    const p = generateStartingConditions();
+    const incomes = [];
+    if (p.incomeSource === 'job' || p.incomeSource === 'fresh_start') {
+      incomes.push({ id: 'salary_1', type: 'job', amount: p.startingSalary, name: 'Salary' });
+    } else if (p.incomeSource === 'family_business') {
+      incomes.push({ id: 'biz_1', type: 'family_business', amount: p.startingSalary, name: 'Family Business' });
+    } else if (p.incomeSource === 'passive_income') {
+      incomes.push({ id: 'passive_1', type: 'passive_income', amount: Math.round(p.startingSalary * 0.6), name: 'Passive Income' });
+      incomes.push({ id: 'salary_1', type: 'job', amount: Math.round(p.startingSalary * 0.4), name: 'Part-time Work' });
+    }
+
+    const homesOwned = p.homeOwned
+      ? [{ id: 'home_start', value: randInt(1500000, 12000000), isRentedOut: false, rentalIncome: 0, maintenanceCost: p.homeMaintenanceCost, purchasePrice: 0, purchaseDay: 0 }]
+      : [];
+    const carsOwned = p.carOwned
+      ? [{ id: 'car_start', maintenanceCost: p.carMaintenanceCost, purchaseDay: 0 }]
+      : [];
+
+    const fixedDeductions = [
+      { id: 'living', type: 'living', amount: p.livingCost, name: 'Food & Utilities' },
+    ];
+    if (p.isRenting && p.rentCost > 0) {
+      fixedDeductions.push({ id: 'rent', type: 'rent', amount: p.rentCost, name: 'House Rent' });
+    }
+
+    set({
+      player: p,
+      gameSeed: seed,
+      pool: p.startingSavings,
+      incomes,
+      fixedDeductions,
+      loans: p.existingLoan ? [{ ...p.existingLoan, name: `${p.existingLoan.type === 'education' ? 'Education' : 'Personal'} Loan` }] : [],
+      homeMaintenanceCost: p.homeMaintenanceCost,
+      carMaintenanceCost: p.carMaintenanceCost,
+      homesOwned,
+      carsOwned,
+      salaryCeiling: Math.round(p.startingSalary * 3),
+      screen: 'spawn',
+      isAusterityMode: false,
+      annualIncomeAcc: 0,
+      // Reset everything else
+      currentDay: 0,
+      lastEventDay: 0,
+      simRunning: false,
+      simIntervalId: null,
+      currentEvent: null,
+      showAllocation: false,
+      showMilestone: null,
+      activeTab: null,
+      gameOver: false,
+      gameOverReason: null,
+      eventHistory: [],
+      decisionHistory: [],
+      monthlySnapshots: [{ day: 0, pool: p.startingSavings, netWorth: p.startingSavings }],
+      results: null,
+      goals: [],
+      buckets: {},
+      instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
+      hasHealthInsurance: false,
+      hasVehicleInsurance: false,
+      healthInsuranceCost: 0,
+      vehicleInsuranceCost: 0,
+      hasActiveBusiness: false,
+      businessIncome: 0,
+      experienceMonths: 0,
+      courseCompleted: false,
+    });
+  },
+
+  setScreen: (screen) => set({ screen }),
+
+  setGoals: (goals) => {
+    // Equal-split bucket allocation by default
+    const evenPercent = Math.floor(100 / goals.length);
+    const remainder = 100 - (evenPercent * goals.length);
+    const buckets = {};
+    goals.forEach((g, i) => {
+      const pct = i === 0 ? evenPercent + remainder : evenPercent;
+      g.bucketPercent = pct;
+      buckets[g.id] = pct;
+    });
+    set({ goals, buckets, showAllocation: true });
+  },
+
+  addGoalMidGame: (goal, mode) => {
+    set(s => {
+      const newGoals = [...s.goals, { ...goal, bonus: true }];
+      let newBuckets = { ...s.buckets };
+
+      if (mode === 'retroactive') {
+        // Recompute all bucket %'s evenly as if this goal existed from day one
+        const activeGoals = newGoals.filter(g => !g.achieved && !g.sacrificed);
+        const evenPct = Math.floor(100 / activeGoals.length);
+        const rem = 100 - (evenPct * activeGoals.length);
+        newBuckets = {};
+        activeGoals.forEach((g, i) => {
+          const pct = i === 0 ? evenPct + rem : evenPct;
+          newBuckets[g.id] = pct;
+        });
+      } else {
+        // Fresh start: new goal gets 0%, existing buckets untouched
+        newBuckets[goal.id] = 0;
+      }
+
+      // Update goals with new percentages
+      const updatedGoals = newGoals.map(g => ({
+        ...g,
+        bucketPercent: newBuckets[g.id] || 0,
+      }));
+
+      return { goals: updatedGoals, buckets: newBuckets };
+    });
+  },
+
+  removeGoal: (goalId) => {
+    set(s => {
+      const updatedGoals = s.goals.map(g =>
+        g.id === goalId ? { ...g, sacrificed: true, bucketPercent: 0 } : g
+      );
+      const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
+
+      // Also include non-removed goals in the new buckets
+      const finalGoals = updatedGoals.map(g => ({
+        ...g,
+        bucketPercent: g.sacrificed ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
+      }));
+
+      return {
+        goals: finalGoals,
+        buckets: newBuckets,
+        decisionHistory: [...s.decisionHistory, { day: s.currentDay, type: 'sacrifice_goal', goalId }],
+      };
+    });
+  },
+
+  updateBucketAllocations: (newBuckets) => {
+    set(s => ({
+      buckets: newBuckets,
+      goals: s.goals.map(g => ({ ...g, bucketPercent: newBuckets[g.id] || 0 })),
+    }));
+  },
+
+  updateInstrumentAllocations: (newInstruments) => {
+    set({
+      instruments: newInstruments,
+    });
+  },
+
+  // --- Simulation controls ---
+
+  startSimulation: () => {
+    const state = get();
+    if (state.simRunning || state.gameOver) return;
+
+    const speed = state.simSpeed;
+    const intervalMs = Math.max(10, SIMULATION_SPEED_MS / speed);
+
+    const interval = setInterval(() => {
+      get().tick();
+    }, intervalMs);
+
+    set({ simRunning: true, simIntervalId: interval });
+  },
+
+  pauseSimulation: () => {
+    const { simIntervalId } = get();
+    if (simIntervalId) clearInterval(simIntervalId);
+    set({ simRunning: false, simIntervalId: null });
+  },
+
+  setSimSpeed: (speed) => {
+    const { simRunning, simIntervalId } = get();
+    if (simIntervalId) clearInterval(simIntervalId);
+    set({ simSpeed: speed, simRunning: false, simIntervalId: null });
+    if (simRunning) {
+      // Restart with new speed
+      setTimeout(() => get().startSimulation(), 0);
+    }
+  },
+
+  tick: () => {
+    const state = get();
+    if (state.gameOver || state.currentEvent || state.showMilestone || state.showAllocation) {
+      // Auto-pause when something needs player attention
+      get().pauseSimulation();
+      return;
+    }
+
+    const tickResult = simulateTick(state);
+    const changes = tickResult.stateChanges;
+
+    // Check for random event
+    let nextEvent = null;
+    if (shouldTriggerEvent(changes.currentDay, state.lastEventDay)) {
+      const eligible = getEligibleEvents(state, EVENT_DECK);
+      if (eligible.length > 0) {
+        const picked = eligible[Math.floor(Math.random() * eligible.length)];
+        // Build event with player-facing options
+        nextEvent = buildEventOptions(picked, state);
+      }
+    }
+
+    // Check for scheduled annual events (Tax, Inflation) or random events
+    if (tickResult.eventTriggered) {
+      nextEvent = tickResult.eventTriggered;
+    }
+
+    set(s => {
+      // Pool floor protection during tick
+      let finalPool = s.pool + (changes.poolDelta || 0);
+      let autoEmergencyLoan = null;
+
+      if (finalPool < 0) {
+        const deficit = Math.abs(finalPool);
+        finalPool = 0; // NEVER negative!
+        const monthlyRate = 0.12 / 12;
+        const tenure = 24;
+        const emi = Math.max(500, Math.round(
+          (deficit * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
+          (Math.pow(1 + monthlyRate, tenure) - 1)
+        ));
+
+        autoEmergencyLoan = {
+          id: `loan_deficit_${Date.now()}`,
+          name: 'Monthly Deficit Emergency Loan',
+          principal: Math.round(deficit),
+          emi,
+          remainingMonths: tenure,
+          rate: 12.0,
+          type: 'personal',
+        };
+      }
+
+      const newState = {
+        currentDay: changes.currentDay,
+        pool: finalPool,
+        loans: autoEmergencyLoan ? [...(changes.loansUpdate || s.loans), autoEmergencyLoan] : (changes.loansUpdate || s.loans),
+      };
+
+      if (autoEmergencyLoan) {
+        newState.eventHistory = [
+          ...s.eventHistory,
+          {
+            day: changes.currentDay,
+            eventName: 'Emergency Cashflow Loan',
+            icon: '⚠️',
+            choice: 'Automatic Deficit Coverage',
+            poolDelta: 0,
+            outcome: `Monthly expenses exceeded cash reserves! Issued an emergency loan of ₹${autoEmergencyLoan.principal.toLocaleString('en-IN')} (EMI: ₹${autoEmergencyLoan.emi}/mo) to protect your pool at ₹0.`,
+          }
+        ];
+      }
+
+      // Apply goals update (inflation)
+      if (changes.goalsUpdate) {
+        newState.goals = changes.goalsUpdate;
+      }
+
+      if (changes.fixedDeductionsUpdate) {
+        newState.fixedDeductions = changes.fixedDeductionsUpdate;
+      }
+
+      // Experience tracking
+      if (changes.experienceIncrement) {
+        newState.experienceMonths = s.experienceMonths + changes.experienceIncrement;
+      }
+
+      // Monthly snapshot
+      if (changes.currentDay % 30 === 0) {
+        const currentPool = finalPool;
+        const assetValue = (s.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
+        newState.monthlySnapshots = [
+          ...s.monthlySnapshots,
+          { day: changes.currentDay, pool: currentPool, netWorth: currentPool + assetValue },
+        ];
+      }
+
+      // Event triggered
+      if (nextEvent) {
+        newState.currentEvent = nextEvent;
+        newState.lastEventDay = changes.currentDay;
+      }
+
+      // Milestone triggered
+      if (tickResult.milestoneTriggered) {
+        newState.showMilestone = tickResult.milestoneTriggered;
+      }
+
+      // Game over
+      if (changes.gameOverReason) {
+        newState.gameOver = true;
+        newState.gameOverReason = changes.gameOverReason;
+        newState.results = calculateResults({ ...s, ...newState });
+        newState.screen = 'scorecard';
+      }
+
+      return newState;
+    });
+
+    // If event or milestone appeared, pause the sim
+    const updated = get();
+    if (updated.currentEvent || updated.showMilestone || updated.gameOver) {
+      get().pauseSimulation();
+    }
+  },
+
+  // --- Event resolution ---
+
+  resolveEvent: (choiceIndex, extraData = {}) => {
+    const state = get();
+    if (!state.currentEvent) return;
+
+    const eventWithData = { ...state.currentEvent, ...extraData };
+    const changes = resolveEventFn(eventWithData, choiceIndex, state);
+
+    // Expenses deduct strictly from savings buffer first!
+    const poolDelta = changes.poolDelta || 0;
+    const savingsPercent = state.instruments.savings || 0;
+    const savingsRupees = Math.round((savingsPercent / 100) * state.pool);
+    const expense = Math.abs(poolDelta);
+
+    // If there is an expense and savings cannot cover it:
+    if (poolDelta < 0 && savingsRupees < expense) {
+      const shortfall = expense - savingsRupees;
+      const remainingPool = Math.max(0, state.pool - savingsRupees);
+      const updatedInstruments = { ...state.instruments, savings: 0 };
+
+      set(s => ({
+        pool: remainingPool,
+        instruments: updatedInstruments,
+        currentEvent: null,
+        deficitInfo: {
+          shortfall,
+          reason: eventWithData.name || 'Expense',
+        },
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: eventWithData.name || 'Life Event',
+            icon: eventWithData.icon || '⚠️',
+            choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
+            choiceIndex,
+            poolDelta: -savingsRupees,
+            outcome: `Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
+          }
+        ]
+      }));
+
+      get().pauseSimulation();
+      return;
+    }
+
+    // Savings has enough cash: deduct strictly from savings buffer!
+    let newPool = state.pool + poolDelta;
+    let newInstruments = changes.newInstruments || { ...state.instruments };
+
+    if (poolDelta < 0 && newPool > 0) {
+      const newSavingsRupees = Math.max(0, savingsRupees - expense);
+      const newSavingsPct = Math.round((newSavingsRupees / newPool) * 100);
+      const oldNonSavingsPct = Math.max(1, 100 - state.instruments.savings);
+      const scale = (100 - newSavingsPct) / oldNonSavingsPct;
+
+      newInstruments = {
+        savings: newSavingsPct,
+        stocks: Math.round(state.instruments.stocks * scale),
+        mf: Math.round(state.instruments.mf * scale),
+        gold: Math.round(state.instruments.gold * scale),
+        fd: Math.round(state.instruments.fd * scale),
+      };
+      const totalSum = Object.values(newInstruments).reduce((a, b) => a + b, 0);
+      if (totalSum !== 100) newInstruments.savings += (100 - totalSum);
+    }
+
+    set(s => {
+      const currentEvt = s.currentEvent;
+      const choiceLabel = currentEvt?.options?.[choiceIndex]?.label || 'Acknowledged';
+      const allMessages = [...(changes.statusMessages || [])];
+
+      const finalLoans = [...s.loans];
+      if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
+
+      const newState = {
+        pool: newPool,
+        currentEvent: null,
+        loans: finalLoans,
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: currentEvt?.name || 'Life Event',
+            icon: currentEvt?.icon || '📝',
+            choice: choiceLabel,
+            choiceIndex,
+            poolDelta: poolDelta,
+            outcome: allMessages.join(' '),
+          },
+        ],
+        decisionHistory: [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'event', eventId: currentEvt?.id, choiceIndex, poolDelta },
+        ],
+      };
+
+      // Applied instrument updates (e.g. Booking profit sets stocks to 0%)
+      if (changes.newInstruments) {
+        newState.instruments = changes.newInstruments;
+      }
+
+      // Opt-in health insurance
+      if (changes.optInHealthInsurance) {
+        newState.hasHealthInsurance = true;
+        newState.healthInsuranceCost = 750;
+      }
+
+      // Certification completion
+      if (changes.courseCompletedDelta) {
+        newState.courseCompleted = true;
+        newState.salaryCeiling = Math.round(s.salaryCeiling * 1.5);
+      }
+
+      // Business changes
+      if (changes.businessIncomeDelta) {
+        newState.businessIncome = Math.max(0, s.businessIncome + changes.businessIncomeDelta);
+      }
+      if (changes.hasActiveBusinessDelta !== null && changes.hasActiveBusinessDelta !== undefined) {
+        newState.hasActiveBusiness = changes.hasActiveBusinessDelta;
+      }
+
+      // Income changes
+      if (changes.newIncomes.length > 0 || changes.removedIncomes.length > 0) {
+        newState.incomes = s.incomes
+          .filter(i => !changes.removedIncomes.includes(i.id))
+          .concat(changes.newIncomes);
+      }
+
+      // New deductions
+      if (changes.newDeductions && changes.newDeductions.length > 0) {
+        newState.fixedDeductions = [...s.fixedDeductions, ...changes.newDeductions];
+      }
+
+      // Trigger allocation screen only if there are active goals remaining
+      const hasActiveGoals = s.goals.some(g => !g.achieved && !g.sacrificed);
+      if (changes.triggerAllocation && hasActiveGoals) {
+        newState.showAllocation = true;
+      }
+
+      return newState;
+    });
+
+    // Resume sim if no allocation needed
+    if (!get().showAllocation) {
+      get().startSimulation();
+    }
+  },
+
+  // --- Investment Liquidation Resolution ---
+
+  resolveLiquidation: ({ action, assetKey, amount }) => {
+    const state = get();
+    if (action === 'liquidate') {
+      const assetPercent = state.instruments[assetKey] || 0;
+      const freedPercent = Math.min(assetPercent, Math.max(1, Math.round((amount / Math.max(1, state.pool)) * 100)));
+      
+      const newInstruments = {
+        ...state.instruments,
+        [assetKey]: Math.max(0, assetPercent - freedPercent),
+      };
+      // Normalize sum to 100%
+      const sum = Object.values(newInstruments).reduce((a, b) => a + b, 0);
+      if (sum < 100) newInstruments.savings = (newInstruments.savings || 0) + (100 - sum);
+
+      let penalty = 0;
+      if (assetKey === 'fd') penalty = Math.round(amount * 0.01);
+
+      set(s => ({
+        deficitInfo: null,
+        instruments: newInstruments,
+        pool: Math.max(0, s.pool - penalty),
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: 'Liquidated Investment Holding',
+            icon: '📉',
+            choice: `Sold ${assetKey.toUpperCase()} (₹${amount.toLocaleString('en-IN')})`,
+            poolDelta: 0,
+            outcome: `Liquidated ₹${amount.toLocaleString('en-IN')} of ${assetKey.toUpperCase()} to cover your shortfall!`,
+          }
+        ]
+      }));
+    } else if (action === 'emergency_loan') {
+      const monthlyRate = 0.12 / 12;
+      const tenure = 24;
+      const emi = Math.max(500, Math.round(
+        (amount * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
+        (Math.pow(1 + monthlyRate, tenure) - 1)
+      ));
+
+      const newLoan = {
+        id: `loan_emergency_${Date.now()}`,
+        name: 'Emergency Personal Loan',
+        principal: Math.round(amount),
+        emi,
+        remainingMonths: tenure,
+        rate: 12.0,
+        type: 'personal',
+      };
+
+      set(s => ({
+        deficitInfo: null,
+        loans: [...s.loans, newLoan],
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: 'Emergency Loan Issued',
+            icon: '💳',
+            choice: 'Preserved Portfolio via Loan',
+            poolDelta: 0,
+            outcome: `Funded ₹${amount.toLocaleString('en-IN')} shortfall via an Emergency Loan (EMI: ₹${emi}/mo) to avoid selling investments.`,
+          }
+        ]
+      }));
+    }
+
+    get().startSimulation();
+  },
+
+  downsizeHousing: () => {
+    const state = get();
+    const rentDeduction = state.fixedDeductions.find(d => d.type === 'rent');
+    if (!rentDeduction) return false;
+
+    const minRent = 4000;
+    if (rentDeduction.amount <= minRent) return false;
+
+    const savings = Math.max(2000, Math.round(rentDeduction.amount * 0.35));
+    const newRent = Math.max(minRent, rentDeduction.amount - savings);
+
+    set(s => ({
+      fixedDeductions: s.fixedDeductions.map(d =>
+        d.type === 'rent' ? { ...d, amount: newRent, name: 'House Rent (Budget Apartment)' } : d
+      ),
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Downsized Rental Housing',
+          icon: '📦',
+          choice: 'Moved to budget housing',
+          poolDelta: 0,
+          outcome: `Moved into a modest, older budget home. Saved ₹${savings.toLocaleString('en-IN')}/mo in rent! (Now ₹${newRent.toLocaleString('en-IN')}/mo).`,
+        }
+      ]
+    }));
+    return true;
+  },
+
+  relocateCity: (targetTier) => {
+    const state = get();
+    if (state.player.cityTier === targetTier) return;
+
+    const targetMeta = CITY_TIERS[targetTier];
+    const newLiving = targetMeta.livingCost[0];
+    const newRent = targetMeta.minRent;
+
+    set(s => ({
+      player: { ...s.player, cityTier: targetTier },
+      fixedDeductions: s.fixedDeductions.map(d => {
+        if (d.type === 'living') return { ...d, amount: newLiving };
+        if (d.type === 'rent') return { ...d, amount: newRent };
+        return d;
+      }),
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Relocated City',
+          icon: '🚚',
+          choice: `Moved to Tier ${targetTier} City`,
+          poolDelta: 0,
+          outcome: `Relocated to ${targetMeta.name}. Living cost reduced to ₹${newLiving.toLocaleString('en-IN')}/mo and rent to ₹${newRent.toLocaleString('en-IN')}/mo.`,
+        }
+      ]
+    }));
+  },
+
+  toggleAusterityMode: () => {
+    set(s => {
+      const active = !s.isAusterityMode;
+      const factor = active ? 0.75 : 1.333;
+      return {
+        isAusterityMode: active,
+        fixedDeductions: s.fixedDeductions.map(d =>
+          d.type === 'living'
+            ? { ...d, amount: Math.round(d.amount * factor), name: active ? 'Food & Utilities (Austerity Mode: -25%)' : 'Food & Utilities' }
+            : d
+        ),
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: active ? 'Activated Austerity Mode' : 'Deactivated Austerity Mode',
+            icon: '✂️',
+            choice: active ? 'Cut discretionary expenses' : 'Restored standard lifestyle',
+            poolDelta: 0,
+            outcome: active
+              ? 'Trimmed 25% of discretionary groceries, dining, and utility consumption.'
+              : 'Restored standard household consumption.',
+          }
+        ]
+      };
+    });
+  },
+
+  sellCar: () => {
+    const state = get();
+    if (!state.carsOwned || state.carsOwned.length === 0) return false;
+    const saleValue = 280000;
+
+    set(s => ({
+      pool: s.pool + saleValue,
+      carsOwned: [],
+      carMaintenanceCost: 0,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Sold Vehicle',
+          icon: '🚗',
+          choice: 'Cashed out Car',
+          poolDelta: saleValue,
+          outcome: `Sold car for ₹${saleValue.toLocaleString('en-IN')} cash and eliminated ₹${s.carMaintenanceCost}/mo recurring maintenance liability!`,
+        }
+      ]
+    }));
+    return true;
+  },
+
+  reinvestInBusiness: (amount = 50000) => {
+    const state = get();
+    if (!state.hasActiveBusiness || state.pool < amount) return false;
+    const monthlyBoost = 8000;
+
+    set(s => ({
+      pool: s.pool - amount,
+      businessIncome: (s.businessIncome || 0) + monthlyBoost,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Reinvested in Business',
+          icon: '💼',
+          choice: `Reinvested ₹${amount.toLocaleString('en-IN')}`,
+          poolDelta: -amount,
+          outcome: `Expanded business equipment and marketing! Monthly venture profit grew by +₹${monthlyBoost.toLocaleString('en-IN')}/mo.`,
+        }
+      ]
+    }));
+    return true;
+  },
+
+  sellBusiness: () => {
+    const state = get();
+    if (!state.hasActiveBusiness || (state.businessIncome || 0) <= 0) return false;
+    const saleValue = Math.round(state.businessIncome * 22);
+
+    set(s => ({
+      pool: s.pool + saleValue,
+      hasActiveBusiness: false,
+      businessIncome: 0,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Exited Business Venture',
+          icon: '🤝',
+          choice: 'Sold Venture',
+          poolDelta: saleValue,
+          outcome: `Sold business equity for ₹${saleValue.toLocaleString('en-IN')} lump sum into pool! Eliminated ongoing operational risk.`,
+        }
+      ]
+    }));
+    return true;
+  },
+
+  takeFreelanceGig: () => {
+    const state = get();
+    const gigPay = 20000;
+    set(s => ({
+      incomes: [
+        ...s.incomes.filter(i => i.type !== 'job'),
+        { id: `gig_${Date.now()}`, type: 'job', amount: gigPay, name: 'Freelance Bridge Income' }
+      ],
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Freelance Bridge Project',
+          icon: '💻',
+          choice: 'Started Contract Work',
+          poolDelta: 0,
+          outcome: `Secured flexible client consulting contract earning ₹${gigPay.toLocaleString('en-IN')}/mo to cover fixed bills while job seeking.`,
+        }
+      ]
+    }));
+  },
+
+  // --- Proactive Financial Actions (Player Choice) ---
+
+  takePersonalLoan: (principal, tenureMonths = 24, rate = 0.12, name = 'Personal Loan') => {
+    const monthlyRate = rate / 12;
+    const emi = Math.round(
+      (principal * monthlyRate * Math.pow(1 + monthlyRate, tenureMonths)) /
+      (Math.pow(1 + monthlyRate, tenureMonths) - 1)
+    );
+
+    const newLoan = {
+      id: `loan_${Date.now()}`,
+      name,
+      principal,
+      emi,
+      remainingMonths: tenureMonths,
+      rate: rate * 100,
+      type: 'personal',
+    };
+
+    set(s => ({
+      pool: s.pool + principal,
+      loans: [...s.loans, newLoan],
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Personal Loan Disbursed',
+          icon: '🏦',
+          choice: `Took ₹${principal.toLocaleString('en-IN')} loan`,
+          poolDelta: principal,
+          outcome: `Received ₹${principal.toLocaleString('en-IN')} cash into pool. Monthly EMI: ₹${emi.toLocaleString('en-IN')}/mo.`,
+        }
+      ]
+    }));
+  },
+
+  repayLoanEarly: (loanId) => {
+    const state = get();
+    const loan = state.loans.find(l => l.id === loanId);
+    if (!loan || state.pool < loan.principal) return false;
+
+    set(s => ({
+      pool: s.pool - loan.principal,
+      loans: s.loans.filter(l => l.id !== loanId),
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Loan Prepayment',
+          icon: '✅',
+          choice: `Repaid ${loan.name}`,
+          poolDelta: -loan.principal,
+          outcome: `Paid off ₹${loan.principal.toLocaleString('en-IN')} early! Eliminated ₹${loan.emi.toLocaleString('en-IN')}/mo EMI drag.`,
+        }
+      ]
+    }));
+    return true;
+  },
+
+  achieveGoalEarly: (goalId) => {
+    const state = get();
+    const goal = state.goals.find(g => g.id === goalId);
+    if (!goal || state.pool < goal.currentTarget) return false;
+
+    get().resolveMilestone(goalId, 'spend');
+    return true;
+  },
+
+  depositToFd: (amount) => {
+    const state = get();
+    const savingsAmount = (state.instruments.savings / 100) * state.pool;
+    if (amount > savingsAmount || amount <= 0 || state.pool <= 0) return false;
+
+    // Shift percentage from savings to FD
+    const shiftPercent = Math.round((amount / state.pool) * 100);
+    if (shiftPercent <= 0) return false;
+
+    const newSavings = Math.max(0, state.instruments.savings - shiftPercent);
+    const newFd = state.instruments.fd + shiftPercent;
+
+    set({
+      instruments: {
+        ...state.instruments,
+        savings: newSavings,
+        fd: newFd,
+      }
+    });
+    return true;
+  },
+
+  withdrawFd: (amount) => {
+    const state = get();
+    const fdAmount = (state.instruments.fd / 100) * state.pool;
+    if (amount > fdAmount || amount <= 0 || state.pool <= 0) return false;
+
+    // 1% early break penalty on FD
+    const penalty = Math.round(amount * 0.01);
+    const shiftPercent = Math.round((amount / state.pool) * 100);
+
+    const newFd = Math.max(0, state.instruments.fd - shiftPercent);
+    const newSavings = state.instruments.savings + shiftPercent;
+
+    set(s => ({
+      pool: Math.max(0, s.pool - penalty),
+      instruments: {
+        ...s.instruments,
+        fd: newFd,
+        savings: newSavings,
+      }
+    }));
+    return true;
+  },
+
+  // --- Milestone resolution ---
+
+  resolveMilestone: (goalId, action) => {
+    set(s => {
+      const goal = s.goals.find(g => g.id === goalId);
+      if (!goal) return {};
+
+      const newState = { showMilestone: null };
+
+      if (action === 'spend') {
+        // Goal achieved — deduct from pool
+        newState.pool = Math.max(0, s.pool - goal.currentTarget);
+        newState.goals = s.goals.map(g =>
+          g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0 } : g
+        );
+        // Redistribute the freed bucket percentage
+        const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
+        newState.buckets = newBuckets;
+        newState.goals = newState.goals.map(g => ({
+          ...g,
+          bucketPercent: g.achieved ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
+        }));
+        newState.decisionHistory = [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'goal_achieved', goalId, goalName: goal.name },
+        ];
+
+        // Post-purchase consequences (§10)
+        if (goal.type === 'car') {
+          const maintenanceCost = randInt(2000, 5000);
+          newState.carMaintenanceCost = (s.carMaintenanceCost || 0) + maintenanceCost;
+          newState.carsOwned = [...s.carsOwned, { id: `car_${Date.now()}`, maintenanceCost, purchaseDay: s.currentDay }];
+          newState.player = { ...s.player, carOwned: true };
+          newState.vehicleInsuranceCost = s.vehicleInsuranceCost || 350;
+        } else if (goal.type === 'home') {
+          const homeValue = goal.currentTarget;
+          newState.homesOwned = [...s.homesOwned, {
+            id: `home_${Date.now()}`,
+            value: homeValue,
+            isRentedOut: false,
+            rentalIncome: 0,
+            maintenanceCost: randInt(3000, 8000),
+            purchasePrice: homeValue,
+            purchaseDay: s.currentDay,
+          }];
+          newState.homeMaintenanceCost = (s.homeMaintenanceCost || 0) + randInt(3000, 8000);
+          // Buying a home eliminates house rent deduction!
+          newState.fixedDeductions = s.fixedDeductions.filter(d => d.type !== 'rent');
+          newState.player = {
+            ...s.player,
+            homeOwned: true,
+            isRenting: false,
+            rentCost: 0,
+          };
+        } else if (goal.type === 'business') {
+          newState.hasActiveBusiness = true;
+          // Initial venture phase: modest early traction (₹0 - ₹12,000/mo) that fluctuates
+          newState.businessIncome = randInt(0, 12000);
+        }
+      } else if (action === 'grow') {
+        // Raise the target by 25%
+        newState.goals = s.goals.map(g =>
+          g.id === goalId ? { ...g, currentTarget: Math.round(g.currentTarget * 1.25) } : g
+        );
+      } else if (action === 'delete') {
+        // Sacrifice the goal
+        newState.goals = s.goals.map(g =>
+          g.id === goalId ? { ...g, sacrificed: true, bucketPercent: 0 } : g
+        );
+        const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
+        newState.buckets = newBuckets;
+        newState.goals = newState.goals.map(g => ({
+          ...g,
+          bucketPercent: g.sacrificed ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
+        }));
+        newState.decisionHistory = [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'sacrifice_goal', goalId, goalName: goal.name },
+        ];
+      }
+
+      return newState;
+    });
+
+    get().startSimulation();
+  },
+
+  // --- Insurance ---
+
+  buyInsurance: (type) => {
+    set(s => {
+      if (type === 'health') {
+        const cost = randInt(INSURANCE_COSTS.health[0], INSURANCE_COSTS.health[1]);
+        return { hasHealthInsurance: true, healthInsuranceCost: cost };
+      }
+      if (type === 'vehicle') {
+        const cost = randInt(INSURANCE_COSTS.vehicle[0], INSURANCE_COSTS.vehicle[1]);
+        return { hasVehicleInsurance: true, vehicleInsuranceCost: cost };
+      }
+      return {};
+    });
+  },
+
+  // --- Asset management ---
+
+  sellHome: (homeId) => {
+    set(s => {
+      const home = s.homesOwned.find(h => h.id === homeId);
+      if (!home) return {};
+      const remainingHomes = s.homesOwned.filter(h => h.id !== homeId);
+      const newState = {
+        pool: s.pool + (home.value || 0),
+        homesOwned: remainingHomes,
+        homeMaintenanceCost: Math.max(0, s.homeMaintenanceCost - (home.maintenanceCost || 0)),
+        decisionHistory: [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'sell_home', value: home.value },
+        ],
+      };
+
+      // If no homes are left, the player must rent a place to live! Automatically add rent deduction.
+      if (remainingHomes.length === 0) {
+        const cityTier = s.player?.cityTier || 2;
+        const rentBand = RENT_RANGES[cityTier] || { min: 8000, max: 15000 };
+        const rentCost = s.player?.rentCost || randInt(rentBand.min, rentBand.max);
+
+        let updatedDeductions = [...s.fixedDeductions];
+        const existingRentIndex = updatedDeductions.findIndex(d => d.type === 'rent');
+        if (existingRentIndex >= 0) {
+          updatedDeductions[existingRentIndex] = {
+            ...updatedDeductions[existingRentIndex],
+            amount: rentCost,
+          };
+        } else {
+          updatedDeductions.push({
+            id: 'rent',
+            type: 'rent',
+            amount: rentCost,
+            name: 'House Rent',
+          });
+        }
+        newState.fixedDeductions = updatedDeductions;
+        newState.player = {
+          ...s.player,
+          homeOwned: false,
+          isRenting: true,
+          rentCost,
+        };
+      }
+
+      return newState;
+    });
+  },
+
+  upgradeLifestyle: ({ type, name, costDelta }) => {
+    set(s => {
+      let updatedDeductions = [...s.fixedDeductions];
+      let updatedPlayer = { ...s.player };
+
+      if (type === 'city_tier') {
+        const currentTier = s.player?.cityTier || 2;
+        if (currentTier <= 1) return {};
+        const newTier = currentTier - 1;
+        const rentIncrease = 12000;
+        const livingIncrease = 8000;
+        updatedPlayer.cityTier = newTier;
+        updatedDeductions = updatedDeductions.map(d => {
+          if (d.type === 'living') return { ...d, amount: d.amount + livingIncrease };
+          if (d.type === 'rent') return { ...d, amount: d.amount + rentIncrease };
+          return d;
+        });
+      } else {
+        // Luxury expense e.g. Gourmet Dining / Premium Leisure / Travel
+        updatedDeductions.push({
+          id: `luxury_${Date.now()}`,
+          type: 'luxury',
+          name: name || 'Luxury Dining & Leisure',
+          amount: costDelta || 10000,
+        });
+      }
+
+      return {
+        fixedDeductions: updatedDeductions,
+        player: updatedPlayer,
+        decisionHistory: [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'lifestyle_upgrade', name, costDelta }
+        ]
+      };
+    });
+  },
+
+  // --- Allocation ---
+
+  confirmAllocation: (bucketAllocations) => {
+    set(s => ({
+      buckets: bucketAllocations,
+      goals: s.goals.map(g => ({ ...g, bucketPercent: bucketAllocations[g.id] || 0 })),
+      showAllocation: false,
+    }));
+    get().startSimulation();
+  },
+
+  closeAllocation: () => {
+    set({ showAllocation: false });
+    get().startSimulation();
+  },
+
+  setActiveTab: (tab) => set(s => ({ activeTab: s.activeTab === tab ? null : tab })),
+
+  // --- Save / Load / Reset ---
+
+  saveGame: () => {
+    const state = get();
+    // Exclude non-serializable values (interval ID)
+    const { simIntervalId, ...saveable } = state;
+    try {
+      localStorage.setItem('cashflow-game-save', JSON.stringify(saveable));
+    } catch (e) {
+      console.warn('Failed to save game:', e);
+    }
+  },
+
+  loadGame: () => {
+    try {
+      const saved = localStorage.getItem('cashflow-game-save');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Don't restore running state — player resumes paused
+        set({ ...parsed, simRunning: false, simIntervalId: null });
+        return true;
+      }
+    } catch (e) {
+      console.warn('Failed to load game:', e);
+    }
+    return false;
+  },
+
+  hasSavedGame: () => {
+    return !!localStorage.getItem('cashflow-game-save');
+  },
+
+  resetGame: () => {
+    const { simIntervalId } = get();
+    if (simIntervalId) clearInterval(simIntervalId);
+    localStorage.removeItem('cashflow-game-save');
+    set({
+      screen: 'landing',
+      player: null,
+      pool: 0,
+      buckets: {},
+      instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
+      goals: [],
+      incomes: [],
+      fixedDeductions: [],
+      loans: [],
+      hasHealthInsurance: false,
+      hasVehicleInsurance: false,
+      healthInsuranceCost: 0,
+      vehicleInsuranceCost: 0,
+      homeMaintenanceCost: 0,
+      carMaintenanceCost: 0,
+      currentDay: 0,
+      lastEventDay: 0,
+      simRunning: false,
+      simIntervalId: null,
+      currentEvent: null,
+      showAllocation: false,
+      showMilestone: null,
+      activeTab: null,
+      gameOver: false,
+      gameOverReason: null,
+      eventHistory: [],
+      decisionHistory: [],
+      monthlySnapshots: [],
+      results: null,
+      homesOwned: [],
+      carsOwned: [],
+      hasActiveBusiness: false,
+      businessIncome: 0,
+      experienceMonths: 0,
+      courseCompleted: false,
+      salaryCeiling: 0,
+    });
+  },
+}));
+
+// ─── Helper: build player-facing event options ───
+
+function buildEventOptions(event, state) {
+  const options = [];
+  let financialImpact = null;
+
+  switch (event.id) {
+    case 'medical_emergency':
+    case 'uninsured_illness': {
+      const billAmount = randInt(60000, 250000);
+      const insured = state.hasHealthInsurance && event.id !== 'uninsured_illness';
+      const outOfPocket = insured ? Math.round(billAmount * 0.2) : billAmount;
+      financialImpact = {
+        type: 'loss',
+        billAmount,
+        outOfPocket,
+        insured,
+        coveredAmount: insured ? billAmount - outOfPocket : 0,
+      };
+      options.push({
+        label: insured ? `Pay Copay (₹${outOfPocket.toLocaleString('en-IN')})` : `Pay Full Bill (₹${billAmount.toLocaleString('en-IN')})`,
+        description: insured
+          ? `Health Insurance covers 80% (₹${(billAmount - outOfPocket).toLocaleString('en-IN')}). You pay 20%.`
+          : `No active health insurance! Full medical cost comes out of pocket.`
+      });
+      break;
+    }
+
+    case 'job_loss': {
+      const currentSalary = state.incomes.find(i => i.type === 'job')?.amount || 0;
+      financialImpact = {
+        type: 'income_loss',
+        monthlyLoss: currentSalary,
+        duration: '2-6 months'
+      };
+      options.push({
+        label: 'Acknowledge & Hunt for Jobs',
+        description: `Income drops to ₹0. Fixed living expenses and EMIs will deduct from your cash pool.`
+      });
+      break;
+    }
+
+    case 'market_crash':
+    case 'mf_correction': {
+      const stockVal = Math.round((state.pool * (state.instruments.stocks || 0)) / 100);
+      const mfVal = Math.round((state.pool * (state.instruments.mf || 0)) / 100);
+      const estimatedDrop = Math.round(stockVal * 0.28 + mfVal * 0.12);
+      financialImpact = {
+        type: 'market_loss',
+        lossAmount: estimatedDrop,
+        stockVal,
+        mfVal
+      };
+      options.push({
+        label: 'Hold Steady (Ride it out)',
+        description: `Stay invested. Absorb estimated ~₹${estimatedDrop.toLocaleString('en-IN')} temporary loss.`
+      });
+      options.push({
+        label: 'Sell 50% Equities to Cash',
+        description: `Cut losses immediately and move 50% of stocks/MF to safe savings.`
+      });
+      break;
+    }
+
+    case 'market_boom':
+    case 'gold_surge': {
+      const isGold = event.id === 'gold_surge';
+      const equityShare = isGold ? (state.instruments.gold || 0) : (state.instruments.stocks || 0);
+      const holdingVal = Math.round((state.pool * equityShare) / 100);
+      const estimatedGain = Math.round(holdingVal * (isGold ? 0.20 : 0.30));
+      financialImpact = {
+        type: 'gain',
+        amount: estimatedGain,
+        holdingVal
+      };
+      options.push({
+        label: 'Ride the Rally',
+        description: `Keep holdings invested to capture potential further upside.`
+      });
+      options.push({
+        label: isGold ? 'Book Profits (Sell Gold)' : 'Book Profits (Sell Stocks to 0%)',
+        description: isGold
+          ? `Lock in profits and shift gold holdings safely into Savings.`
+          : `Zero out stock allocation (currently ${equityShare}%) and move all gains securely into Savings!`
+      });
+      break;
+    }
+
+    case 'salary_hike': {
+      const primaryJob = state.incomes.find(i => i.type === 'job');
+      const currentSalary = primaryJob?.amount || 40000;
+      const hikePercent = randFloat(0.12, 0.20);
+      const hikeAmount = Math.round(currentSalary * hikePercent);
+      financialImpact = {
+        type: 'gain_recurring',
+        hikeAmount,
+        hikePercent: Math.round(hikePercent * 100),
+        newSalary: currentSalary + hikeAmount
+      };
+      options.push({
+        label: `Accept +₹${hikeAmount.toLocaleString('en-IN')}/mo Raise 🎉`,
+        description: `Monthly salary grows from ₹${currentSalary.toLocaleString('en-IN')} to ₹${(currentSalary + hikeAmount).toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}%).`
+      });
+      break;
+    }
+
+    case 'job_switch': {
+      const currentJob = state.incomes.find(i => i.type === 'job');
+      const currentSalary = currentJob ? currentJob.amount : 40000;
+      const newSalary = Math.round(currentSalary * randFloat(1.30, 1.45));
+      const diff = newSalary - currentSalary;
+      financialImpact = {
+        type: 'job_switch',
+        currentSalary,
+        newSalary,
+        diff,
+      };
+      options.push({
+        label: `Accept New Offer (₹${newSalary.toLocaleString('en-IN')}/mo)`,
+        description: `+₹${diff.toLocaleString('en-IN')}/mo jump. Opens allocation screen for surplus.`
+      });
+      options.push({
+        label: `Stay at Current Job (₹${currentSalary.toLocaleString('en-IN')}/mo)`,
+        description: 'Keep stability, comfort, and existing team.'
+      });
+      break;
+    }
+
+    case 'vehicle_accident': {
+      const repairCost = randInt(15000, 75000);
+      const insured = state.hasVehicleInsurance;
+      const outOfPocket = insured ? Math.round(repairCost * 0.1) : repairCost;
+      financialImpact = {
+        type: 'loss',
+        repairCost,
+        outOfPocket,
+        insured,
+      };
+      options.push({
+        label: insured ? `Pay Deductible (₹${outOfPocket.toLocaleString('en-IN')})` : `Pay Repair Bill (₹${repairCost.toLocaleString('en-IN')})`,
+        description: insured
+          ? `Vehicle insurance covers 90%. You pay 10% copay.`
+          : `No vehicle insurance! Full repair bill out of pocket.`
+      });
+      break;
+    }
+
+    case 'family_wedding': {
+      const tierAmounts = { tierLow: 10000, tierMid: 25000, tierHigh: 50000 };
+      financialImpact = {
+        type: 'loss',
+        amount: 25000,
+        ...tierAmounts,
+      };
+      options.push({
+        label: 'Contribute ₹25,000 to Wedding',
+        description: 'Support family milestone and maintain social standing.'
+      });
+      break;
+    }
+
+    case 'scam_fraud': {
+      const lossAmount = Math.min(Math.round(state.pool * 0.1), 60000);
+      financialImpact = {
+        type: 'loss',
+        amount: lossAmount,
+      };
+      options.push({
+        label: `File Report (Loss: -₹${lossAmount.toLocaleString('en-IN')})`,
+        description: 'Learn valuable lesson about cybersecurity.'
+      });
+      break;
+    }
+
+    case 'inheritance_gift': {
+      const giftAmount = randInt(100000, 500000);
+      financialImpact = {
+        type: 'gain',
+        amount: giftAmount,
+      };
+      options.push({
+        label: `Receive Windfall (+₹${giftAmount.toLocaleString('en-IN')}) 🎁`,
+        description: 'Directly added to your liquid cash pool.'
+      });
+      break;
+    }
+
+    case 'business_opportunity': {
+      const investmentCost = 100000;
+      const monthlyReturn = randInt(8000, 22000);
+      const annualRoi = Math.round(((monthlyReturn * 12) / investmentCost) * 100);
+      const paybackMonths = Math.round(investmentCost / monthlyReturn);
+      financialImpact = {
+        type: 'business',
+        investmentCost,
+        monthlyReturn,
+        annualRoi,
+        paybackMonths,
+      };
+      options.push({
+        label: `Invest ₹${(investmentCost / 100000).toFixed(0)}L Upfront`,
+        description: `Pay ₹${investmentCost.toLocaleString('en-IN')} upfront. Earn +₹${monthlyReturn.toLocaleString('en-IN')}/mo passive income (~${annualRoi}% annual ROI, ${paybackMonths} mo payback).`
+      });
+      options.push({
+        label: 'Pass on Venture',
+        description: 'Preserve cash liquidity and avoid entrepreneurial risk.'
+      });
+      break;
+    }
+
+    case 'business_downturn': {
+      const lossMonthly = Math.round((state.businessIncome || 10000) * 0.5);
+      financialImpact = {
+        type: 'income_loss',
+        monthlyLoss: lossMonthly,
+      };
+      options.push({
+        label: 'Cut Costs & Weather Storm',
+        description: `Monthly business cashflow temporarily drops by -₹${lossMonthly.toLocaleString('en-IN')}/mo.`
+      });
+      break;
+    }
+
+    case 'business_failure': {
+      const currentBizIncome = state.businessIncome || 0;
+      financialImpact = {
+        type: 'income_loss',
+        monthlyLoss: currentBizIncome,
+      };
+      options.push({
+        label: 'Close Down Venture (Accept 100% Loss)',
+        description: 'Halt operations, cease cash burn, and eliminate business cashflow.'
+      });
+      options.push({
+        label: 'Inject ₹50,000 Working Capital',
+        description: 'Fund an emergency turnaround pivot from liquid savings to restore revenue.'
+      });
+      break;
+    }
+
+    case 'inflation_spike': {
+      financialImpact = {
+        type: 'inflation',
+      };
+      options.push({
+        label: 'Adjust Lifestyle',
+        description: 'Macro inflation rises. Goal targets and living costs accelerate.'
+      });
+      break;
+    }
+
+    case 'tax_event': {
+      const isRefund = Math.random() > 0.45;
+      const amount = randInt(8000, 25000);
+      financialImpact = {
+        type: isRefund ? 'gain' : 'loss',
+        amount,
+        isRefund,
+      };
+      options.push({
+        label: isRefund ? `Accept Refund (+₹${amount.toLocaleString('en-IN')})` : `Pay Tax Due (-₹${amount.toLocaleString('en-IN')})`,
+        description: isRefund
+          ? 'Income tax assessment resulted in a refund!'
+          : 'Dues assessed on capital gains and interest.'
+      });
+      break;
+    }
+
+    case 'theft': {
+      const theftAmount = Math.min(Math.round(state.pool * 0.08), 35000);
+      financialImpact = {
+        type: 'loss',
+        amount: theftAmount,
+      };
+      options.push({
+        label: `Acknowledge (-₹${theftAmount.toLocaleString('en-IN')})`,
+        description: 'Cash and personal items stolen.'
+      });
+      break;
+    }
+
+    case 'loan_rate_change': {
+      financialImpact = {
+        type: 'rate_change',
+      };
+      options.push({
+        label: 'Noted',
+        description: 'Floating interest rates adjusted by central bank.'
+      });
+      break;
+    }
+
+    case 'work_bonus': {
+      const bonusAmount = randInt(20000, 80000);
+      financialImpact = {
+        type: 'gain',
+        amount: bonusAmount,
+      };
+      options.push({
+        label: `Collect Bonus (+₹${bonusAmount.toLocaleString('en-IN')}) 🎉`,
+        description: 'Performance incentive deposited into cash pool.'
+      });
+      break;
+    }
+
+    case 'senior_job_offer': {
+      const currentJob = state.incomes.find(i => i.type === 'job');
+      const base = currentJob ? currentJob.amount : (state.player?.startingSalary || 40000);
+      const offeredSalary = Math.round(Math.max(base * 1.5, 75000));
+      const hike = offeredSalary - (currentJob ? currentJob.amount : 0);
+      financialImpact = {
+        type: 'job_switch',
+        currentSalary: currentJob ? currentJob.amount : 0,
+        newSalary: offeredSalary,
+        diff: hike,
+      };
+      options.push({
+        label: `Accept Leadership Role (₹${offeredSalary.toLocaleString('en-IN')}/mo) 🎉`,
+        description: `+₹${hike.toLocaleString('en-IN')}/mo raise with senior executive scope.`
+      });
+      options.push({
+        label: 'Decline Offer',
+        description: 'Stay at current position.'
+      });
+      break;
+    }
+
+    case 'course_upskill': {
+      const courseFee = 35000;
+      financialImpact = {
+        type: 'loss',
+        amount: courseFee,
+      };
+      options.push({
+        label: `Enroll in Certification (₹${courseFee.toLocaleString('en-IN')}) 🎓`,
+        description: `Pay ₹${courseFee.toLocaleString('en-IN')} upfront to unlock senior executive recruiter offers & raises.`
+      });
+      options.push({
+        label: 'Skip Course',
+        description: 'Save cash for now and rely on regular career progression.'
+      });
+      break;
+    }
+
+    case 'freelance_gig': {
+      const gigPay = randInt(20000, 35000);
+      financialImpact = {
+        type: 'gain_recurring',
+        gigPay,
+        amount: gigPay,
+        hikeAmount: gigPay,
+      };
+      options.push({
+        label: `Accept Retainer (+₹${gigPay.toLocaleString('en-IN')}/mo) 💻`,
+        description: `Start flexible consulting contract paying ₹${gigPay.toLocaleString('en-IN')} monthly.`
+      });
+      options.push({
+        label: 'Focus on Full-Time Hunt',
+        description: 'Pass on contract gig to interview full-time.'
+      });
+      break;
+    }
+
+    default:
+      options.push({ label: 'OK', description: '' });
+  }
+
+  return {
+    ...event,
+    financialImpact,
+    options,
+  };
+}
+
+export default useGameStore;
