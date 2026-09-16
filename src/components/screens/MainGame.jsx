@@ -12,6 +12,7 @@ import AllocationSheet from '../game/AllocationSheet';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
 import LifestyleScene from '../game/LifestyleScene';
+import PixiGameWorld from '../game/PixiGameWorld';
 import LedgerDisplay from '../game/LedgerDisplay';
 import FloatingDelta from '../game/FloatingDelta';
 
@@ -124,6 +125,9 @@ const MainGame = () => {
       <div className="flex-1 overflow-y-auto">
         {!store.activeTab ? (
           <div className="py-2">
+            {/* 🎮 PIXI.JS 2.5D HARDWARE-ACCELERATED GAME WORLD */}
+            <PixiGameWorld />
+
             <PoolDisplay pool={store.pool} prevPool={prevPool} />
             <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
             <InstrumentBar instruments={store.instruments} pool={store.pool} />
@@ -164,8 +168,8 @@ const MainGame = () => {
         />
       )}
 
-      {/* 2. Event Cutscene (Interactive Animated Scene) */}
-      {activeModal === 'event' && (
+      {/* 2. Event Cutscene fallback (only if player is currently in a sub-tab) */}
+      {activeModal === 'event' && store.activeTab && (
         <EventCutscene 
           event={store.currentEvent} 
           onChoice={store.resolveEvent} 
