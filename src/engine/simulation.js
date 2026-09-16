@@ -200,13 +200,11 @@ export const simulateTick = (state) => {
     };
   }
 
-  // --- Annual Tax Assessment (Day 365 of each year) ---
-  if (nextDay % 365 === 0) {
+  // --- Annual Tax Assessment (Day 360 of each year, after month 12 earnings) ---
+  if (nextDay % 365 === 360) {
     const annualEarned = state.annualIncomeAcc || (incomes.reduce((s, i) => s + i.amount, 0) * 12);
     const taxBill = computeIncomeTax(annualEarned);
 
-    // If both events fire on day 365, this will overwrite scheduledEvent.
-    // The player will see the tax assessment and the inflation/raise happens silently.
     scheduledEvent = {
       id: 'annual_tax',
       name: 'Annual Income Tax Assessment',

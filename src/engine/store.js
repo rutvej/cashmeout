@@ -10,6 +10,32 @@ import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
 import { getCareerRole, generateJobMarketOffers } from './careers.js';
 import { generateEventCalendar } from './calendarQueue.js';
 
+export function normalizeInstruments(instruments) {
+  const current = {
+    savings: Math.max(0, Number(instruments?.savings) || 0),
+    stocks: Math.max(0, Number(instruments?.stocks) || 0),
+    gold: Math.max(0, Number(instruments?.gold) || 0),
+    mf: Math.max(0, Number(instruments?.mf) || 0),
+    fd: Math.max(0, Number(instruments?.fd) || 0),
+  };
+  const nonSavings = current.stocks + current.gold + current.mf + current.fd;
+  if (nonSavings <= 0) {
+    return { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 };
+  }
+  if (nonSavings >= 100) {
+    const scale = 90 / nonSavings;
+    current.stocks = Math.round(current.stocks * scale);
+    current.gold = Math.round(current.gold * scale);
+    current.mf = Math.round(current.mf * scale);
+    current.fd = Math.round(current.fd * scale);
+    const sumAfter = current.stocks + current.gold + current.mf + current.fd;
+    current.savings = Math.max(0, 100 - sumAfter);
+    return current;
+  }
+  current.savings = 100 - nonSavings;
+  return current;
+}
+
 /**
  * Central Zustand store — single source of truth for all game state.
  * All mutations flow through store actions. The simulation loop calls tick()
@@ -347,7 +373,6 @@ const useGameStore = create((set, get) => ({
     set(s => {
       // Pool floor protection during tick
       let finalPool = s.pool + (changes.poolDelta || 0);
-      let autoEmergencyLoan = null;
 
       const newState = {
         currentDay: changes.currentDay,
@@ -359,12 +384,52 @@ const useGameStore = create((set, get) => ({
         const deficit = Math.abs(finalPool);
         finalPool = 0; // NEVER negative!
         newState.pool = finalPool;
-        // Don't auto-create loan — let player decide via LiquidationModal
-        // Set deficit info so player must resolve it
-        newState.deficitInfo = {
-          shortfall: deficit,
-          reason: 'Monthly expenses exceed cash reserves',
-        };
+
+        // Check if player has any way out:
+        const hasPhysicalAssets = (s.carsOwned || []).length > 0 || (s.homesOwned || []).length > 0 || s.hasActiveBusiness;
+        const hasInvestments = ((s.instruments?.stocks || 0) + (s.instruments?.mf || 0) + (s.instruments?.gold || 0) + (s.instruments?.fd || 0)) > 0 && s.pool > 0;
+
+        // Estimate EMI for this deficit
+        const mRate = 0.12 / 12;
+        const estEMI = Math.max(500, Math.round((deficit * mRate * Math.pow(1 + mRate, 24)) / (Math.pow(1 + mRate, 24) - 1)));
+        const canLoan = get().canAffordLoan(estEMI);
+
+        if (!hasPhysicalAssets && !hasInvestments && !canLoan) {
+          newState.gameOver = true;
+          newState.gameOverReason = 'broke';
+        } else {
+          newState.deficitInfo = {
+            shortfall: deficit,
+            reason: 'Monthly expenses exceed cash reserves',
+          };
+        }
+      } else if (changes.monthlySurplus && changes.monthlySurplus > 0) {
+        // Monthly cashflow surplus arrives directly into liquid savings account!
+        const oldSavingsRupees = Math.round(((s.instruments?.savings || 0) / 100) * s.pool);
+        const newSavingsRupees = oldSavingsRupees + changes.monthlySurplus;
+        if (finalPool > 0) {
+          const newSavingsPct = Math.min(100, Math.max(1, Math.round((newSavingsRupees / finalPool) * 100)));
+          const currentNonSavingsSum = (s.instruments?.stocks || 0) + (s.instruments?.mf || 0) + (s.instruments?.gold || 0) + (s.instruments?.fd || 0);
+          if (currentNonSavingsSum > 0) {
+            const scale = (100 - newSavingsPct) / currentNonSavingsSum;
+            const updatedInstruments = {
+              savings: newSavingsPct,
+              stocks: Math.round((s.instruments.stocks || 0) * scale),
+              mf: Math.round((s.instruments.mf || 0) * scale),
+              gold: Math.round((s.instruments.gold || 0) * scale),
+              fd: Math.round((s.instruments.fd || 0) * scale),
+            };
+            const sum = Object.values(updatedInstruments).reduce((a, b) => a + b, 0);
+            if (sum !== 100) updatedInstruments.savings += (100 - sum);
+            newState.instruments = updatedInstruments;
+          } else {
+            newState.instruments = { savings: 100, stocks: 0, mf: 0, gold: 0, fd: 0 };
+          }
+        } else {
+          newState.instruments = { savings: 100, stocks: 0, mf: 0, gold: 0, fd: 0 };
+        }
+      } else {
+        newState.instruments = normalizeInstruments(s.instruments);
       }
 
       // Apply goals update (inflation)
@@ -454,7 +519,27 @@ const useGameStore = create((set, get) => ({
     if (poolDelta < 0 && savingsRupees < expense) {
       const shortfall = expense - savingsRupees;
       const remainingPool = Math.max(0, state.pool - savingsRupees);
-      const updatedInstruments = { ...state.instruments, savings: 0 };
+      
+      let updatedInstruments;
+      if (remainingPool <= 0) {
+        updatedInstruments = { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 };
+      } else {
+        const nonSavingsSum = (state.instruments.stocks || 0) + (state.instruments.mf || 0) + (state.instruments.gold || 0) + (state.instruments.fd || 0);
+        if (nonSavingsSum > 0) {
+          const factor = 100 / nonSavingsSum;
+          updatedInstruments = {
+            savings: 0,
+            stocks: Math.round((state.instruments.stocks || 0) * factor),
+            mf: Math.round((state.instruments.mf || 0) * factor),
+            gold: Math.round((state.instruments.gold || 0) * factor),
+            fd: Math.round((state.instruments.fd || 0) * factor),
+          };
+          const totalSum = updatedInstruments.stocks + updatedInstruments.mf + updatedInstruments.gold + updatedInstruments.fd;
+          if (totalSum !== 100) updatedInstruments.stocks += (100 - totalSum);
+        } else {
+          updatedInstruments = { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 };
+        }
+      }
 
       const finalLoans = [...state.loans];
       if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
@@ -465,7 +550,7 @@ const useGameStore = create((set, get) => ({
       set(s => {
         const shortfallState = {
           pool: remainingPool,
-          instruments: updatedInstruments,
+          instruments: normalizeInstruments(updatedInstruments),
           currentEvent: null,
           loans: finalLoans,
           fixedDeductions: finalDeductions,
@@ -507,14 +592,7 @@ const useGameStore = create((set, get) => ({
           shortfallState.homeNeedsRenovation = false;
         }
 
-        // Normalize instruments to 100%
-        const currentInstruments = { ...shortfallState.instruments };
-        const sum = Object.values(currentInstruments).reduce((a, b) => a + b, 0);
-        if (sum < 100 && sum > 0) {
-          const deficit = 100 - sum;
-          currentInstruments.savings = (currentInstruments.savings || 0) + deficit;
-          shortfallState.instruments = currentInstruments;
-        }
+        shortfallState.instruments = normalizeInstruments(shortfallState.instruments);
 
         return shortfallState;
       });
@@ -666,6 +744,8 @@ const useGameStore = create((set, get) => ({
 
   resolveLiquidation: ({ action, assetKey, amount }) => {
     const state = get();
+    const currentShortfall = state.deficitInfo?.shortfall || amount || 0;
+
     if (action === 'liquidate') {
       const assetPercent = state.instruments[assetKey] || 0;
       const freedPercent = Math.min(assetPercent, Math.max(1, Math.round((amount / Math.max(1, state.pool)) * 100)));
@@ -674,58 +754,169 @@ const useGameStore = create((set, get) => ({
         ...state.instruments,
         [assetKey]: Math.max(0, assetPercent - freedPercent),
       };
-      // Normalize sum to 100%
-      const sum = Object.values(newInstruments).reduce((a, b) => a + b, 0);
-      if (sum < 100) newInstruments.savings = (newInstruments.savings || 0) + (100 - sum);
 
       let penalty = 0;
       if (assetKey === 'fd') penalty = Math.round(amount * 0.01);
 
+      const paidAmount = Math.min(amount, currentShortfall);
+      const remainingShortfall = currentShortfall - paidAmount;
+
       set(s => ({
-        deficitInfo: null,
-        instruments: newInstruments,
-        pool: Math.max(0, s.pool - amount - penalty),
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        instruments: normalizeInstruments(newInstruments),
+        pool: Math.max(0, s.pool - paidAmount - penalty),
         eventHistory: [
           ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Liquidated Investment Holding',
             icon: '📉',
-            choice: `Sold ${assetKey.toUpperCase()} (₹${amount.toLocaleString('en-IN')})`,
-            poolDelta: 0,
-            outcome: `Liquidated ₹${amount.toLocaleString('en-IN')} of ${assetKey.toUpperCase()} to cover your shortfall!`,
+            choice: `Sold ${assetKey.toUpperCase()} (₹${paidAmount.toLocaleString('en-IN')})`,
+            poolDelta: -paidAmount,
+            outcome: `Liquidated ₹${paidAmount.toLocaleString('en-IN')} of ${assetKey.toUpperCase()} to cover shortfall.`,
           }
         ]
       }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
+    } else if (action === 'sell_car') {
+      if (!state.carsOwned || state.carsOwned.length === 0) return false;
+      const saleValue = 280000;
+      const paidAmount = Math.min(saleValue, currentShortfall);
+      const netCashAdded = saleValue - paidAmount;
+      const remainingShortfall = currentShortfall - paidAmount;
+
+      set(s => ({
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        pool: s.pool + netCashAdded,
+        instruments: normalizeInstruments(s.instruments),
+        carsOwned: [],
+        carMaintenanceCost: 0,
+        hasVehicleInsurance: false,
+        vehicleInsuranceCost: 0,
+        player: { ...s.player, carOwned: false },
+        financialChanged: true,
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: 'Sold Vehicle to Clear Shortfall',
+            icon: '🚗',
+            choice: 'Sold Car',
+            poolDelta: netCashAdded,
+            outcome: `Sold car for ₹${saleValue.toLocaleString('en-IN')}, paid ₹${paidAmount.toLocaleString('en-IN')} shortfall, and pocketed ₹${netCashAdded.toLocaleString('en-IN')} cash buffer!`,
+          }
+        ]
+      }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
+    } else if (action === 'sell_home') {
+      if (!state.homesOwned || state.homesOwned.length === 0) return false;
+      const homeToSell = state.homesOwned[0];
+      const saleValue = homeToSell.value || 0;
+      const paidAmount = Math.min(saleValue, currentShortfall);
+      const netCashAdded = saleValue - paidAmount;
+      const remainingShortfall = currentShortfall - paidAmount;
+      const remainingHomes = state.homesOwned.slice(1);
+
+      let updatedDeductions = [...state.fixedDeductions];
+      if (remainingHomes.length === 0) {
+        const cityTier = state.player?.cityTier || 2;
+        const rentBand = RENT_RANGES[cityTier] || { min: 8000, max: 15000 };
+        const rentCost = state.player?.rentCost || randInt(rentBand.min, rentBand.max);
+        const existingRentIndex = updatedDeductions.findIndex(d => d.type === 'rent');
+        if (existingRentIndex >= 0) {
+          updatedDeductions[existingRentIndex] = { ...updatedDeductions[existingRentIndex], amount: rentCost };
+        } else {
+          updatedDeductions.push({ id: 'rent', type: 'rent', amount: rentCost, name: 'House Rent' });
+        }
+      }
+
+      set(s => ({
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        pool: s.pool + netCashAdded,
+        homesOwned: remainingHomes,
+        homeMaintenanceCost: Math.max(0, s.homeMaintenanceCost - (homeToSell.maintenanceCost || 0)),
+        fixedDeductions: updatedDeductions,
+        instruments: normalizeInstruments(s.instruments),
+        financialChanged: true,
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: 'Sold Real Estate to Clear Shortfall',
+            icon: '🏠',
+            choice: 'Sold Property',
+            poolDelta: netCashAdded,
+            outcome: `Sold property for ₹${saleValue.toLocaleString('en-IN')}, cleared ₹${paidAmount.toLocaleString('en-IN')} shortfall, and added ₹${netCashAdded.toLocaleString('en-IN')} to cash pool!`,
+          }
+        ]
+      }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
+    } else if (action === 'sell_business') {
+      if (!state.hasActiveBusiness || (state.businessIncome || 0) <= 0) return false;
+      const saleValue = Math.round(state.businessIncome * 22);
+      const paidAmount = Math.min(saleValue, currentShortfall);
+      const netCashAdded = saleValue - paidAmount;
+      const remainingShortfall = currentShortfall - paidAmount;
+
+      set(s => ({
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        pool: s.pool + netCashAdded,
+        hasActiveBusiness: false,
+        businessIncome: 0,
+        instruments: normalizeInstruments(s.instruments),
+        financialChanged: true,
+        eventHistory: [
+          ...s.eventHistory,
+          {
+            day: s.currentDay,
+            eventName: 'Liquidated Business Equity',
+            icon: '💼',
+            choice: 'Exited Venture',
+            poolDelta: netCashAdded,
+            outcome: `Sold venture for ₹${saleValue.toLocaleString('en-IN')}, cleared ₹${paidAmount.toLocaleString('en-IN')} shortfall, and added ₹${netCashAdded.toLocaleString('en-IN')} cash!`,
+          }
+        ]
+      }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
     } else if (action === 'emergency_loan') {
+      const loanAmount = currentShortfall || amount || 10000;
       const monthlyRate = 0.12 / 12;
       const tenure = 24;
       const emi = Math.max(500, Math.round(
-        (amount * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
+        (loanAmount * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
         (Math.pow(1 + monthlyRate, tenure) - 1)
       ));
+
+      // Strict underwriting check: player must be able to afford the EMI!
+      if (!get().canAffordLoan(emi)) {
+        return false;
+      }
 
       const newLoan = {
         id: `loan_emergency_${Date.now()}`,
         name: 'Emergency Personal Loan',
-        principal: Math.round(amount),
+        principal: Math.round(loanAmount),
         emi,
         remainingMonths: tenure,
         rate: 12.0,
         type: 'personal',
       };
 
-      // Normalize instruments to 100%
-      const currentInstruments = { ...state.instruments };
-      const sum = Object.values(currentInstruments).reduce((a, b) => a + b, 0);
-      if (sum < 100 && sum > 0) {
-        const deficit = 100 - sum;
-        currentInstruments.savings = (currentInstruments.savings || 0) + deficit;
-      }
-
       set(s => ({
         deficitInfo: null,
-        instruments: currentInstruments,
+        instruments: normalizeInstruments(s.instruments),
         loans: [...s.loans, newLoan],
         eventHistory: [
           ...s.eventHistory,
@@ -735,13 +926,21 @@ const useGameStore = create((set, get) => ({
             icon: '💳',
             choice: 'Preserved Portfolio via Loan',
             poolDelta: 0,
-            outcome: `Funded ₹${amount.toLocaleString('en-IN')} shortfall via an Emergency Loan (EMI: ₹${emi}/mo) to avoid selling investments.`,
+            outcome: `Funded ₹${loanAmount.toLocaleString('en-IN')} shortfall via an Emergency Loan (EMI: ₹${emi}/mo) at 12% p.a.`,
           }
         ]
       }));
-    }
 
-    get().startSimulation();
+      get().startSimulation();
+    } else if (action === 'declare_insolvency') {
+      set({
+        deficitInfo: null,
+        gameOver: true,
+        gameOverReason: 'broke',
+        simRunning: false,
+      });
+      get().pauseSimulation();
+    }
   },
 
   downsizeHousing: () => {
@@ -1140,6 +1339,9 @@ const useGameStore = create((set, get) => ({
       (loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
       (Math.pow(1 + monthlyRate, tenure) - 1)
     );
+
+    // Strict loan eligibility check
+    if (!get().canAffordLoan(emi)) return false;
 
     const loanType = goal.type === 'home' ? 'home' : goal.type === 'car' ? 'vehicle' : 'personal';
     const newLoan = {

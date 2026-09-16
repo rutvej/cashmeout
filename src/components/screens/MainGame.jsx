@@ -7,12 +7,11 @@ import BucketBar from '../game/BucketBar';
 import InstrumentBar from '../game/InstrumentBar';
 import IncomeDeductions from '../game/IncomeDeductions';
 import TabBar from '../ui/TabBar';
-import EventCutscene from '../game/EventCutscene';
+import EventCard from '../game/EventCard';
+import EventLog from '../game/EventLog';
 import AllocationSheet from '../game/AllocationSheet';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
-import LifestyleScene from '../game/LifestyleScene';
-import PixiGameWorld from '../game/PixiGameWorld';
 import LedgerDisplay from '../game/LedgerDisplay';
 import FloatingDelta from '../game/FloatingDelta';
 
@@ -71,7 +70,7 @@ const MainGame = () => {
     (store.homeMaintenanceCost || 0) +
     (store.carMaintenanceCost || 0);
 
-  // Strict modal priority to prevent any overlapping modals
+  // Strict modal priority to prevent any overlapping dialogs
   const activeModal = (() => {
     if (store.deficitInfo) return 'liquidation';
     if (store.currentEvent) return 'event';
@@ -121,21 +120,33 @@ const MainGame = () => {
         )}
       </div>
 
-      {/* Main Content Area - Scrollable */}
+      {/* Main Content Area - Scrollable Dashboard */}
       <div className="flex-1 overflow-y-auto">
         {!store.activeTab ? (
-          <div className="py-2">
-            {/* 🎮 PIXI.JS 2.5D HARDWARE-ACCELERATED GAME WORLD */}
-            <PixiGameWorld />
+          <div className="py-3 px-3 max-w-lg mx-auto space-y-3">
+            {/* Active Life Event Card (Slide-In) */}
+            {store.currentEvent && (
+              <div className="mb-2">
+                <EventCard
+                  event={store.currentEvent}
+                  onChoice={store.resolveEvent}
+                />
+              </div>
+            )}
 
+            {/* Core Financial Dashboard Metrics */}
             <PoolDisplay pool={store.pool} prevPool={prevPool} />
-            <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
-            <InstrumentBar instruments={store.instruments} pool={store.pool} />
             <IncomeDeductions totalIncome={totalIncome} totalDeductions={totalDeductions} />
-            <LifestyleScene />
+            <InstrumentBar instruments={store.instruments} pool={store.pool} />
+            <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
+
+            {/* Recent Activity Log */}
+            <div className="pt-2">
+              <EventLog events={[...store.eventHistory].reverse()} />
+            </div>
           </div>
         ) : (
-          <div className="p-4 bg-gray-50/50 min-h-full">
+          <div className="p-4 bg-gray-50/50 min-h-full max-w-lg mx-auto">
             {/* Tab Header with Close Button */}
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-black capitalize text-text-primary">
@@ -168,12 +179,16 @@ const MainGame = () => {
         />
       )}
 
-      {/* 2. Event Cutscene fallback (only if player is currently in a sub-tab) */}
+      {/* 2. Event Dialog Overlay (if browsing sub-tabs when event triggers) */}
       {activeModal === 'event' && store.activeTab && (
-        <EventCutscene 
-          event={store.currentEvent} 
-          onChoice={store.resolveEvent} 
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <EventCard 
+              event={store.currentEvent} 
+              onChoice={store.resolveEvent} 
+            />
+          </div>
+        </div>
       )}
 
       {/* 3. Milestone Modal (Goal Achieved) */}
