@@ -17,6 +17,11 @@ export const resolveEvent = (event, playerChoice, state) => {
     newInstruments: null,
     optInHealthInsurance: false,
     courseCompletedDelta: false,
+    married: null,
+    homeNeedsRenovation: null,
+    utilityHikePercent: null,
+    homeValueIncrease: null,
+    triggerPostMarriageHome: false,
   };
 
   const impact = event.financialImpact || {};
@@ -290,6 +295,63 @@ export const resolveEvent = (event, playerChoice, state) => {
       const bonus = impact.bonusAmount || randInt(20000, 60000);
       changes.poolDelta = bonus;
       changes.statusMessages.push(`Corporate performance bonus: +₹${bonus.toLocaleString('en-IN')} credited!`);
+      break;
+    }
+
+    case 'home_renovation': {
+      if (playerChoice === 0) {
+        const homeValue = (state.homesOwned && state.homesOwned[0]?.value) || 3000000;
+        const cost = randInt(80000, Math.min(300000, Math.round(homeValue * 0.04)));
+        changes.poolDelta = -cost;
+        changes.homeValueIncrease = Math.round(cost * 0.6);
+        changes.homeNeedsRenovation = false;
+        changes.statusMessages.push(`Full renovation complete! Paid ₹${cost.toLocaleString('en-IN')}. Home value appreciated by ₹${Math.round(cost * 0.6).toLocaleString('en-IN')}.`);
+      } else {
+        const cost = randInt(20000, 55000);
+        changes.poolDelta = -cost;
+        changes.homeNeedsRenovation = false;
+        changes.statusMessages.push(`Quick patch done for ₹${cost.toLocaleString('en-IN')}. A more thorough renovation will be needed soon.`);
+      }
+      break;
+    }
+
+    case 'utility_hike': {
+      changes.utilityHikePercent = randFloat(0.08, 0.15);
+      changes.statusMessages.push(`Utility tariffs permanently increased. Monthly costs rise by ~${Math.round(changes.utilityHikePercent * 100)}%.`);
+      break;
+    }
+
+    case 'property_tax': {
+      const totalHomeVal = (state.homesOwned || []).reduce((s, h) => s + (h.value || 0), 0);
+      const propTaxBill = Math.round(totalHomeVal * (0.003 + Math.random() * 0.003));
+      changes.poolDelta = -propTaxBill;
+      changes.statusMessages.push(`Municipal property tax of ₹${propTaxBill.toLocaleString('en-IN')} paid.`);
+      break;
+    }
+
+    case 'marriage_event': {
+      changes.married = true;
+      if (playerChoice === 0) {
+        changes.poolDelta = -(impact.weddingCost || 0);
+        changes.statusMessages.push(`Grand wedding celebrated! Paid ₹${(impact.weddingCost || 0).toLocaleString('en-IN')}.`);
+      } else if (playerChoice === 1) {
+        const loanAmt = impact.loanAmt || 500000;
+        const emi = impact.emi || 15000;
+        changes.newLoans.push({
+          id: `loan_wedding_${Date.now()}`,
+          name: 'Wedding Loan',
+          principal: loanAmt,
+          emi,
+          remainingMonths: 36,
+          rate: 10.8,
+          type: 'personal',
+        });
+        changes.statusMessages.push(`Wedding loan taken! EMI: ₹${emi.toLocaleString('en-IN')}/mo for 36 months.`);
+      } else {
+        changes.poolDelta = -50000;
+        changes.statusMessages.push(`Court marriage completed. Paid ₹50,000.`);
+      }
+      changes.triggerPostMarriageHome = true;
       break;
     }
 

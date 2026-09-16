@@ -73,7 +73,13 @@ const useGameStore = create((set, get) => ({
   // --- Player progression ---
   experienceMonths: 0,
   courseCompleted: false,
+  courseRaiseUsed: false,
   salaryCeiling: 0,
+
+  // --- Life events ---
+  marriageEventFired: false,
+  married: false,
+  homeNeedsRenovation: false,
 
   // ═══════════════════════════════════════════
   // ACTIONS
@@ -147,6 +153,10 @@ const useGameStore = create((set, get) => ({
       businessIncome: 0,
       experienceMonths: 0,
       courseCompleted: false,
+      courseRaiseUsed: false,
+      marriageEventFired: false,
+      married: false,
+      homeNeedsRenovation: false,
     });
   },
 
@@ -277,8 +287,14 @@ const useGameStore = create((set, get) => ({
     if (shouldTriggerEvent(changes.currentDay, state.lastEventDay)) {
       const eligible = getEligibleEvents(state, EVENT_DECK);
       if (eligible.length > 0) {
-        const picked = eligible[Math.floor(Math.random() * eligible.length)];
-        // Build event with player-facing options
+        // Weighted random pick (lower weight = rarer)
+        const totalWeight = eligible.reduce((s, e) => s + (e.weight || 10), 0);
+        let r = Math.random() * totalWeight;
+        let picked = eligible[eligible.length - 1];
+        for (const ev of eligible) {
+          r -= (ev.weight || 10);
+          if (r <= 0) { picked = ev; break; }
+        }
         nextEvent = buildEventOptions(picked, state);
       }
     }
@@ -286,6 +302,11 @@ const useGameStore = create((set, get) => ({
     // Check for scheduled annual events (Tax, Inflation) or random events
     if (tickResult.eventTriggered) {
       nextEvent = tickResult.eventTriggered;
+    }
+
+    // Marriage age trigger — fires as a priority event
+    if (changes.shouldTriggerMarriage && !nextEvent) {
+      nextEvent = buildMarriageEvent(state);
     }
 
     set(s => {
@@ -520,6 +541,38 @@ const useGameStore = create((set, get) => ({
       // New deductions
       if (changes.newDeductions && changes.newDeductions.length > 0) {
         newState.fixedDeductions = [...s.fixedDeductions, ...changes.newDeductions];
+      }
+
+      // Utility hike — permanently raises living expense
+      if (changes.utilityHikePercent) {
+        const base = newState.fixedDeductions || s.fixedDeductions;
+        newState.fixedDeductions = base.map(d =>
+          d.type === 'living'
+            ? { ...d, amount: Math.round(d.amount * (1 + changes.utilityHikePercent)) }
+            : d
+        );
+      }
+
+      // Home value appreciation from full renovation
+      if (changes.homeValueIncrease) {
+        newState.homesOwned = s.homesOwned.map((h, i) =>
+          i === 0 ? { ...h, value: h.value + changes.homeValueIncrease } : h
+        );
+      }
+
+      // Renovation flag
+      if (changes.homeNeedsRenovation === false) {
+        newState.homeNeedsRenovation = false;
+      }
+
+      // Marriage
+      if (changes.married === true) {
+        newState.married = true;
+      }
+
+      // Course raise used (one-time)
+      if (changes.courseRaiseUsed) {
+        newState.courseRaiseUsed = true;
       }
 
       // Trigger allocation screen only if there are active goals remaining
@@ -858,6 +911,141 @@ const useGameStore = create((set, get) => ({
     return true;
   },
 
+  achieveGoalWithLoan: (goalId, downPaymentAmount = null, tenureMonths = null, interestRate = null) => {
+    const state = get();
+    const goal = state.goals.find(g => g.id === goalId);
+    if (!goal) return false;
+
+    let tenure = tenureMonths;
+    let rate = interestRate;
+    let defaultDownPct = 0.20;
+
+    if (goal.type === 'home') {
+      tenure = tenure || 180;
+      rate = rate || 0.085;
+      defaultDownPct = 0.20;
+    } else if (goal.type === 'car') {
+      tenure = tenure || 60;
+      rate = rate || 0.095;
+      defaultDownPct = 0.15;
+    } else {
+      tenure = tenure || 36;
+      rate = rate || 0.115;
+      defaultDownPct = 0.10;
+    }
+
+    const downPayment = downPaymentAmount !== null
+      ? Math.min(state.pool, Math.max(0, downPaymentAmount))
+      : Math.min(state.pool, Math.round(goal.currentTarget * defaultDownPct));
+
+    const loanPrincipal = Math.max(0, goal.currentTarget - downPayment);
+    if (loanPrincipal <= 0) {
+      return get().achieveGoalEarly(goalId);
+    }
+
+    const monthlyRate = rate / 12;
+    const emi = Math.round(
+      (loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
+      (Math.pow(1 + monthlyRate, tenure) - 1)
+    );
+
+    const loanType = goal.type === 'home' ? 'home' : goal.type === 'car' ? 'vehicle' : 'personal';
+    const newLoan = {
+      id: `loan_goal_${Date.now()}`,
+      name: `${goal.name} Loan`,
+      principal: Math.round(loanPrincipal),
+      emi,
+      remainingMonths: tenure,
+      rate: Math.round(rate * 1000) / 10,
+      type: loanType,
+    };
+
+    set(s => {
+      const newState = {
+        pool: Math.max(0, s.pool - downPayment),
+        loans: [...s.loans, newLoan],
+        goals: s.goals.map(g =>
+          g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0 } : g
+        ),
+      };
+
+      const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
+      newState.buckets = newBuckets;
+      newState.goals = newState.goals.map(g => ({
+        ...g,
+        bucketPercent: g.achieved ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
+      }));
+
+      newState.decisionHistory = [
+        ...s.decisionHistory,
+        {
+          day: s.currentDay,
+          type: 'goal_achieved_with_loan',
+          goalId,
+          goalName: goal.name,
+          downPayment,
+          loanPrincipal,
+          emi,
+        },
+      ];
+
+      newState.eventHistory = [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: `Milestone Achieved with Loan: ${goal.name}`,
+          icon: goal.type === 'home' ? '🏡' : goal.type === 'car' ? '🚗' : '🎯',
+          choice: `Funded via ₹${downPayment.toLocaleString('en-IN')} Down Payment + Loan`,
+          poolDelta: -downPayment,
+          outcome: `Achieved ${goal.name}! Paid ₹${downPayment.toLocaleString('en-IN')} cash. Took ₹${loanPrincipal.toLocaleString('en-IN')} ${goal.name} Loan (EMI: ₹${emi.toLocaleString('en-IN')}/mo).`,
+        },
+      ];
+
+      // Post-purchase consequences
+      if (goal.type === 'car') {
+        const maintenanceCost = randInt(2000, 5000);
+        newState.carMaintenanceCost = (s.carMaintenanceCost || 0) + maintenanceCost;
+        newState.carsOwned = [...s.carsOwned, { id: `car_${Date.now()}`, maintenanceCost, purchaseDay: s.currentDay }];
+        newState.player = { ...s.player, carOwned: true };
+        newState.vehicleInsuranceCost = s.vehicleInsuranceCost || 350;
+      } else if (goal.type === 'home') {
+        const homeValue = goal.currentTarget;
+        const isSecondHome = s.homesOwned.length >= 1;
+        const rentalIncome = isSecondHome ? randInt(8000, 22000) : 0;
+
+        newState.homesOwned = [...s.homesOwned, {
+          id: `home_${Date.now()}`,
+          value: homeValue,
+          isRentedOut: isSecondHome,
+          rentalIncome,
+          maintenanceCost: randInt(3000, 8000),
+          purchasePrice: homeValue,
+          purchaseDay: s.currentDay,
+          label: isSecondHome ? 'Investment Property' : 'Primary Residence',
+        }];
+        newState.homeMaintenanceCost = (s.homeMaintenanceCost || 0) + randInt(3000, 8000);
+        if (!isSecondHome) {
+          newState.fixedDeductions = s.fixedDeductions.filter(d => d.type !== 'rent');
+          newState.player = {
+            ...s.player,
+            homeOwned: true,
+            isRenting: false,
+            rentCost: 0,
+          };
+        }
+      } else if (goal.type === 'business') {
+        newState.hasActiveBusiness = true;
+        newState.businessIncome = randInt(0, 12000);
+      } else if (goal.type === 'marriage') {
+        newState.married = true;
+      }
+
+      return newState;
+    });
+
+    return true;
+  },
+
   depositToFd: (amount) => {
     const state = get();
     const savingsAmount = (state.instruments.savings / 100) * state.pool;
@@ -939,24 +1127,30 @@ const useGameStore = create((set, get) => ({
           newState.vehicleInsuranceCost = s.vehicleInsuranceCost || 350;
         } else if (goal.type === 'home') {
           const homeValue = goal.currentTarget;
+          const isSecondHome = s.homesOwned.length >= 1;
+          const rentalIncome = isSecondHome ? randInt(8000, 22000) : 0;
+
           newState.homesOwned = [...s.homesOwned, {
             id: `home_${Date.now()}`,
             value: homeValue,
-            isRentedOut: false,
-            rentalIncome: 0,
+            isRentedOut: isSecondHome,       // auto-rent second home
+            rentalIncome,
             maintenanceCost: randInt(3000, 8000),
             purchasePrice: homeValue,
             purchaseDay: s.currentDay,
+            label: isSecondHome ? 'Investment Property' : 'Primary Residence',
           }];
           newState.homeMaintenanceCost = (s.homeMaintenanceCost || 0) + randInt(3000, 8000);
-          // Buying a home eliminates house rent deduction!
-          newState.fixedDeductions = s.fixedDeductions.filter(d => d.type !== 'rent');
-          newState.player = {
-            ...s.player,
-            homeOwned: true,
-            isRenting: false,
-            rentCost: 0,
-          };
+          // Only remove rent deduction when buying PRIMARY home
+          if (!isSecondHome) {
+            newState.fixedDeductions = s.fixedDeductions.filter(d => d.type !== 'rent');
+            newState.player = {
+              ...s.player,
+              homeOwned: true,
+              isRenting: false,
+              rentCost: 0,
+            };
+          }
         } else if (goal.type === 'business') {
           newState.hasActiveBusiness = true;
           // Initial venture phase: modest early traction (₹0 - ₹12,000/mo) that fluctuates
@@ -1007,6 +1201,29 @@ const useGameStore = create((set, get) => ({
   },
 
   // --- Asset management ---
+
+  toggleHomeRental: (homeId) => {
+    set(s => {
+      const home = s.homesOwned.find(h => h.id === homeId);
+      if (!home) return {};
+      // Cannot rent out primary residence if player lives in it
+      const isPrimary = !s.player?.isRenting && s.homesOwned.indexOf(home) === 0;
+      if (isPrimary) return {};
+
+      const cityTier = s.player?.cityTier || 2;
+      const rentBand = { 1: { min: 15000, max: 30000 }, 2: { min: 8000, max: 18000 }, 3: { min: 5000, max: 10000 } };
+      const band = rentBand[cityTier] || rentBand[2];
+      const newRentalIncome = home.isRentedOut ? 0 : randInt(band.min, band.max);
+
+      return {
+        homesOwned: s.homesOwned.map(h =>
+          h.id === homeId
+            ? { ...h, isRentedOut: !h.isRentedOut, rentalIncome: newRentalIncome }
+            : h
+        ),
+      };
+    });
+  },
 
   sellHome: (homeId) => {
     set(s => {
@@ -1185,10 +1402,57 @@ const useGameStore = create((set, get) => ({
       businessIncome: 0,
       experienceMonths: 0,
       courseCompleted: false,
+      courseRaiseUsed: false,
       salaryCeiling: 0,
+      marriageEventFired: false,
+      married: false,
+      homeNeedsRenovation: false,
     });
   },
 }));
+
+// ─── Helper: build marriage event ───
+
+function buildMarriageEvent(state) {
+  const tier = state.player?.cityTier || 2;
+  const costs = {
+    1: [1200000, 2500000],
+    2: [700000, 1800000],
+    3: [500000, 1200000],
+  };
+  const [wMin, wMax] = costs[tier] || costs[2];
+  const weddingCost = randInt(wMin, wMax);
+  const loanAmt = Math.round(weddingCost * 0.6);
+  const monthlyRate = 0.108 / 12;
+  const emi = Math.round(
+    (loanAmt * monthlyRate * Math.pow(1 + monthlyRate, 36)) /
+    (Math.pow(1 + monthlyRate, 36) - 1)
+  );
+  const marriageAge = state.player?.marriageAge || 28;
+
+  return {
+    id: 'marriage_event',
+    name: `Your Wedding Day! 💍`,
+    type: 'choice',
+    icon: '💍',
+    description: `You've reached the age of ${Math.floor(marriageAge)}. It's time to celebrate your wedding! How would you like to handle the expenses?`,
+    financialImpact: { type: 'marriage', weddingCost, loanAmt, emi },
+    options: [
+      {
+        label: `Grand Wedding — Pay ₹${weddingCost.toLocaleString('en-IN')} from Savings`,
+        description: 'Full Indian wedding with all ceremonies. Deducted from your liquid pool.',
+      },
+      {
+        label: `Wedding Loan — EMI ₹${emi.toLocaleString('en-IN')}/mo × 36 months`,
+        description: `Borrow ₹${loanAmt.toLocaleString('en-IN')} at 10.8% interest to preserve cash.`,
+      },
+      {
+        label: 'Court Marriage — ₹50,000 Only',
+        description: 'Simple registered marriage. Save your money for a home and future.',
+      },
+    ],
+  };
+}
 
 // ─── Helper: build player-facing event options ───
 
@@ -1281,7 +1545,7 @@ function buildEventOptions(event, state) {
     case 'salary_hike': {
       const primaryJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = primaryJob?.amount || 40000;
-      const hikePercent = randFloat(0.12, 0.20);
+      const hikePercent = randFloat(0.10, 0.15);
       const hikeAmount = Math.round(currentSalary * hikePercent);
       financialImpact = {
         type: 'gain_recurring',
@@ -1299,7 +1563,7 @@ function buildEventOptions(event, state) {
     case 'job_switch': {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = currentJob ? currentJob.amount : 40000;
-      const newSalary = Math.round(currentSalary * randFloat(1.30, 1.45));
+      const newSalary = Math.round(currentSalary * randFloat(1.20, 1.28));
       const diff = newSalary - currentSalary;
       financialImpact = {
         type: 'job_switch',
@@ -1549,6 +1813,43 @@ function buildEventOptions(event, state) {
       options.push({
         label: 'Focus on Full-Time Hunt',
         description: 'Pass on contract gig to interview full-time.'
+      });
+      break;
+    }
+
+    case 'home_renovation': {
+      const homeValue = (state.homesOwned && state.homesOwned[0]?.value) || 3000000;
+      const fullCost = randInt(80000, Math.min(300000, Math.round(homeValue * 0.04)));
+      const patchCost = randInt(20000, 55000);
+      financialImpact = { type: 'loss', amount: fullCost };
+      options.push({
+        label: `Full Renovation (₹${fullCost.toLocaleString('en-IN')})`,
+        description: 'Complete fix. Home value appreciates by ~60% of cost.',
+      });
+      options.push({
+        label: `Quick Patch (₹${patchCost.toLocaleString('en-IN')})`,
+        description: 'Temporary fix. A more thorough renovation will be needed soon.',
+      });
+      break;
+    }
+
+    case 'utility_hike': {
+      const hikePercent = Math.round(randFloat(0.08, 0.15) * 100);
+      financialImpact = { type: 'inflation', hikePercent };
+      options.push({
+        label: `Absorb Increase (~${hikePercent}% more/mo)`,
+        description: 'Monthly utility cost increases permanently due to revised tariffs.',
+      });
+      break;
+    }
+
+    case 'property_tax': {
+      const totalVal = (state.homesOwned || []).reduce((s, h) => s + (h.value || 0), 0);
+      const taxBill = Math.round(totalVal * randFloat(0.003, 0.006));
+      financialImpact = { type: 'loss', amount: taxBill };
+      options.push({
+        label: `Pay Property Tax (-₹${taxBill.toLocaleString('en-IN')})`,
+        description: 'Annual municipal levy on property guidance value.',
       });
       break;
     }

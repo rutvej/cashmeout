@@ -11,7 +11,39 @@ export const shouldTriggerEvent = (currentDay, lastEventDay) => {
   return Math.random() < chance;
 };
 
+export function computeIncomeTax(annualIncome) {
+  // New Tax Regime FY 2024-25 + Section 87A rebate
+  if (annualIncome <= 700000) return 0;
+
+  const slabs = [
+    { upto: 300000, rate: 0.00 },
+    { upto: 600000, rate: 0.05 },
+    { upto: 900000, rate: 0.10 },
+    { upto: 1200000, rate: 0.15 },
+    { upto: 1500000, rate: 0.20 },
+    { upto: Infinity, rate: 0.30 },
+  ];
+
+  let tax = 0, prev = 0, remaining = annualIncome;
+  for (const slab of slabs) {
+    const taxable = Math.min(remaining, slab.upto - prev);
+    tax += taxable * slab.rate;
+    remaining -= taxable;
+    prev = slab.upto;
+    if (remaining <= 0) break;
+  }
+  return Math.round(tax * 1.04); // +4% health & education cess
+}
+
 export const getEligibleEvents = (state, eventDeck) => {
+  const day = state.currentDay;
+  const history = state.eventHistory || [];
+
+  const daysSince = (name) => {
+    const last = [...history].reverse().find(e => e.eventName === name);
+    return last ? day - last.day : Infinity;
+  };
+
   // If player has no job income, prioritize job recovery/freelance cards
   const isUnemployed = !state.incomes.some(i => i.type === 'job');
   if (isUnemployed) {
@@ -24,7 +56,21 @@ export const getEligibleEvents = (state, eventDeck) => {
     }
   }
 
-  return eventDeck.filter(ev => ev.eligibilityCheck(state));
+  return eventDeck.filter(ev => {
+    if (!ev.eligibilityCheck(state)) return false;
+    switch (ev.id) {
+      case 'inheritance_gift':
+        return daysSince('Family Windfall Gift') > 1000;
+      case 'work_bonus':
+        return daysSince('Annual Corporate Bonus') > 330;
+      case 'salary_hike':
+        return daysSince('Merit Promotion & Raise') > 270;
+      case 'job_switch':
+        return daysSince('Senior Role Recruiter Offer') > 180 && state.experienceMonths >= 18;
+      default:
+        return true;
+    }
+  });
 };
 
 export const simulateTick = (state) => {
@@ -83,14 +129,16 @@ export const simulateTick = (state) => {
   // --- Annual Tax Assessment (Day 350 of each year) ---
   if (nextDay % 365 === 350) {
     const annualEarned = state.annualIncomeAcc || (incomes.reduce((s, i) => s + i.amount, 0) * 12);
-    const taxBill = Math.round(annualEarned * 0.08);
+    const taxBill = computeIncomeTax(annualEarned);
 
     scheduledEvent = {
       id: 'annual_tax',
       name: 'Annual Income Tax Assessment',
-      type: 'bad',
+      type: taxBill > 0 ? 'bad' : 'neutral',
       icon: '🏛️',
-      description: `Tax filing season: Computed at 8% effective tax on your ₹${annualEarned.toLocaleString('en-IN')} total annual earnings.`,
+      description: taxBill > 0
+        ? `Tax filing season: Assessed based on New Regime slabs on your ₹${annualEarned.toLocaleString('en-IN')} total annual earnings.`
+        : `Tax filing season: Total earnings ₹${annualEarned.toLocaleString('en-IN')} are within the rebate limit (Section 87A). ₹0 tax liability!`,
       financialImpact: {
         type: 'loss',
         amount: taxBill,
@@ -98,8 +146,8 @@ export const simulateTick = (state) => {
       },
       options: [
         {
-          label: `File Returns & Pay Tax (₹${taxBill.toLocaleString('en-IN')})`,
-          description: `Paid strictly from liquid savings buffer. Total annual income was ₹${annualEarned.toLocaleString('en-IN')}.`
+          label: taxBill > 0 ? `File Returns & Pay Tax (₹${taxBill.toLocaleString('en-IN')})` : `File Returns (₹0 Tax Payable)`,
+          description: taxBill > 0 ? `Paid strictly from liquid savings buffer.` : `Full rebate applied under New Tax Regime.`
         }
       ]
     };
@@ -127,19 +175,32 @@ export const simulateTick = (state) => {
     });
     stateChanges.fixedDeductionsUpdate = updatedDeductions;
 
-    // 3. Yearly Performance Appraisal / Salary Raise!
+    // 3. Yearly Performance Appraisal / Salary Raise (diminishing returns)!
     const activeJobs = incomes.filter(i => i.type === 'job');
     let totalHike = 0;
     if (activeJobs.length > 0) {
-      const hikeRate = state.courseCompleted ? 0.12 : 0.08; // 12% if upskilled!
       stateChanges.incomesUpdate = incomes.map(i => {
         if (i.type === 'job') {
-          const hike = Math.round(i.amount * hikeRate);
+          const sal = i.amount;
+          // Diminishing returns by salary band
+          let baseRate =
+            sal < 40000  ? 0.10 :
+            sal < 70000  ? 0.07 :
+            sal < 100000 ? 0.05 :
+            sal < 150000 ? 0.04 :
+                           0.03;
+          // Course boost: one-time 12% bonus, not recurring
+          const courseBonus = (state.courseCompleted && !state.courseRaiseUsed) ? 0.12 : 0;
+          const hike = Math.round(sal * (baseRate + courseBonus));
           totalHike += hike;
-          return { ...i, amount: i.amount + hike };
+          return { ...i, amount: sal + hike };
         }
         return i;
       });
+      // Mark course raise as used after first application
+      if (state.courseCompleted && !state.courseRaiseUsed) {
+        stateChanges.courseRaiseUsed = true;
+      }
     }
 
     const livingIncrease = Math.round(
@@ -166,6 +227,17 @@ export const simulateTick = (state) => {
         }
       ]
     };
+  }
+
+  // --- Marriage age trigger ---
+  if (
+    !state.marriageEventFired &&
+    state.player?.marriageAge &&
+    (22 + nextDay / 365) >= state.player.marriageAge &&
+    !scheduledEvent
+  ) {
+    stateChanges.marriageEventFired = true;
+    stateChanges.shouldTriggerMarriage = true;
   }
 
   // --- Milestones check ---

@@ -6,11 +6,14 @@ import { calculateResults, generateInsights } from '../../engine/scoring';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { formatCurrency, formatAge } from '../../utils/format';
+import html2canvas from 'html2canvas';
 
 const Scorecard = () => {
   const store = useGameStore();
   const resetGame = useGameStore(state => state.resetGame);
   const [copied, setCopied] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const [screenshotSaved, setScreenshotSaved] = useState(false);
 
   const isBroke = store.gameOverReason === 'broke';
 
@@ -59,6 +62,77 @@ Play here: ${window.location.origin}${window.location.pathname}`;
       setTimeout(() => setCopied(false), 2500);
     } catch (e) {
       console.error('Clipboard copy failed', e);
+    }
+  };
+
+  const handleDownloadScreenshot = async () => {
+    try {
+      setCapturing(true);
+      const element = document.getElementById('shareable-result-card');
+      if (!element) return;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `cashmeout-seed-${seedNumber}-scorecard.png`;
+      link.href = dataUrl;
+      link.click();
+      setScreenshotSaved(true);
+      setTimeout(() => setScreenshotSaved(false), 2500);
+    } catch (e) {
+      console.error('Screenshot download failed', e);
+    } finally {
+      setCapturing(false);
+    }
+  };
+
+  const handleShareScreenshot = async () => {
+    try {
+      setCapturing(true);
+      const element = document.getElementById('shareable-result-card');
+      if (!element) return;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          handleDownloadScreenshot();
+          return;
+        }
+        const file = new File([blob], `cashmeout-seed-${seedNumber}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `CashMeOut Run — Seed #${seedNumber}`,
+              text: generateShareText(),
+            });
+            return;
+          } catch (shareErr) {
+            // Cancelled or unsupported
+          }
+        }
+        // Fallback: download the file
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `cashmeout-seed-${seedNumber}-scorecard.png`;
+        link.href = dataUrl;
+        link.click();
+        setScreenshotSaved(true);
+        setTimeout(() => setScreenshotSaved(false), 2500);
+      }, 'image/png');
+    } catch (e) {
+      console.error('Share screenshot failed', e);
+    } finally {
+      setCapturing(false);
     }
   };
 
@@ -173,29 +247,71 @@ Play here: ${window.location.origin}${window.location.pathname}`;
             </div>
           </div>
 
-          {/* Share Action Buttons inside Card */}
-          <div className="pt-2 border-t border-gray-100 flex space-x-2">
+          {/* Card Footer Stamp */}
+          <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[10px] text-text-muted">
+            <span className="font-bold text-gray-500">🎮 CashMeOut Life Certificate</span>
+            <span className="font-mono font-semibold">Seed #{seedNumber}</span>
+          </div>
+        </div>
+
+        {/* Share & Screenshot Action Toolbar */}
+        <div className="bg-white rounded-2xl p-3.5 shadow-sm border border-gray-200 mb-5 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold text-text-primary uppercase tracking-wider">
+              Share Your Life Run
+            </span>
+            {screenshotSaved && (
+              <span className="text-[10px] bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded-full animate-pulse">
+                ✓ Screenshot Saved (.PNG)!
+              </span>
+            )}
+            {copied && (
+              <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full animate-pulse">
+                ✓ Text Copied!
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={capturing}
+              onClick={handleDownloadScreenshot}
+              className="py-2.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
+            >
+              <span>{capturing ? '⏳' : '📸'}</span>
+              <span>{capturing ? 'Generating...' : 'Save Screenshot'}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={capturing}
+              onClick={handleShareScreenshot}
+              className="py-2.5 px-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
+            >
+              <span>📲</span>
+              <span>Share Image</span>
+            </button>
+
             <button
               type="button"
               onClick={handleCopyShare}
-              className="flex-1 py-2.5 px-3 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
+              className="py-2 px-3 bg-gray-900 hover:bg-black text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm"
             >
               <span>{copied ? '✓' : '📋'}</span>
-              <span>{copied ? 'Copied with Seed!' : 'Copy Result Text'}</span>
+              <span>{copied ? 'Copied!' : 'Copy Summary'}</span>
             </button>
+
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="py-2.5 px-3.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1 shadow-sm"
+              className="py-2 px-3 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1 shadow-sm"
               title="Share to WhatsApp"
             >
               <span>💬</span>
               <span>WhatsApp</span>
             </button>
           </div>
-          <span className="text-[9px] text-text-muted text-center block mt-1.5">
-            📸 Take a screenshot of this card to challenge friends on Seed #{seedNumber}!
-          </span>
         </div>
 
         {/* Net Worth Chart */}

@@ -89,6 +89,8 @@ export const generateStartingConditions = () => {
     carOwned,
     carMaintenanceCost,
     livingCost,
-    difficultyRating
+    difficultyRating,
+    marriageAge: randInt(26, 33),
+    married: false,
   };
 };

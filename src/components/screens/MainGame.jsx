@@ -11,6 +11,7 @@ import EventCard from '../game/EventCard';
 import AllocationSheet from '../game/AllocationSheet';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
+import LifestyleScene from '../game/LifestyleScene';
 
 // Tab screens
 import BankTab from './tabs/BankTab';
@@ -109,6 +110,7 @@ const MainGame = () => {
             <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
             <InstrumentBar instruments={store.instruments} pool={store.pool} />
             <IncomeDeductions totalIncome={totalIncome} totalDeductions={totalDeductions} />
+            <LifestyleScene />
           </div>
         ) : (
           <div className="p-4 bg-gray-50/50 min-h-full">

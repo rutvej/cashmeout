@@ -11,6 +11,15 @@ const GoalsTab = () => {
   const store = useGameStore();
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [newGoal, setNewGoal] = useState({ name: '', target: '', type: 'custom', inflationRate: 0.06 });
+  const [loanGoal, setLoanGoal] = useState(null);
+  const [loanDownPayment, setLoanDownPayment] = useState(0);
+
+  const handleOpenLoanSheet = (goal) => {
+    setLoanGoal(goal);
+    const defaultPct = goal.type === 'home' ? 0.20 : goal.type === 'car' ? 0.15 : 0.10;
+    const recommendedDown = Math.min(store.pool, Math.round(goal.currentTarget * defaultPct));
+    setLoanDownPayment(recommendedDown);
+  };
 
   const handleSelectSuggested = (type, customLabel, fallbackTarget) => {
     const tier = store.player?.cityTier || 2;
@@ -149,20 +158,28 @@ const GoalsTab = () => {
 
                   <ProgressBar value={progress} />
 
-                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex justify-between items-center text-xs">
+                  <div className="mt-3 pt-2.5 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between items-center text-xs">
                     <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-text-muted font-bold">
                       Claim: {store.buckets[goal.id] || 0}% of Cash Pool
                     </span>
-                    <div className="flex space-x-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {canBuyFromTotalPool && (
                         <button
                           type="button"
                           onClick={() => handleBuyEarly(goal.id)}
-                          className="text-[11px] text-green-600 hover:text-green-800 font-bold bg-green-50 px-2 py-0.5 rounded border border-green-200"
+                          className="text-[10px] text-green-700 hover:text-green-900 font-bold bg-green-50 px-2 py-1 rounded border border-green-200"
                         >
-                          Achieve Early (Full Cash)
+                          Achieve (Full Cash)
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLoanSheet(goal)}
+                        className="text-[10px] text-indigo-700 hover:text-indigo-900 font-bold bg-indigo-50 px-2 py-1 rounded border border-indigo-200 flex items-center space-x-1"
+                      >
+                        <span>💳</span>
+                        <span>Achieve with Loan</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => {
@@ -170,7 +187,7 @@ const GoalsTab = () => {
                             store.removeGoal(goal.id);
                           }
                         }}
-                        className="text-[11px] text-red-500 hover:text-red-700 font-semibold"
+                        className="text-[10px] text-red-500 hover:text-red-700 font-semibold px-1 py-1"
                       >
                         Sacrifice
                       </button>
@@ -332,6 +349,131 @@ const GoalsTab = () => {
           </div>
         </div>
       </BottomSheet>
+
+      {/* Loan Financing Sheet to Achieve Goal Early */}
+      {loanGoal && (
+        <BottomSheet
+          isOpen={!!loanGoal}
+          title={`Fund "${loanGoal.name}" via Loan`}
+        >
+          {(() => {
+            const isHome = loanGoal.type === 'home';
+            const isCar = loanGoal.type === 'car';
+            const tenure = isHome ? 180 : isCar ? 60 : 36;
+            const rate = isHome ? 0.085 : isCar ? 0.095 : 0.115;
+            const maxDown = Math.min(store.pool, loanGoal.currentTarget);
+            const currentDown = Math.min(maxDown, Math.max(0, Number(loanDownPayment) || 0));
+            const loanPrincipal = Math.max(0, loanGoal.currentTarget - currentDown);
+            const monthlyRate = rate / 12;
+            const emi = loanPrincipal > 0
+              ? Math.round(
+                  (loanPrincipal * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
+                  (Math.pow(1 + monthlyRate, tenure) - 1)
+                )
+              : 0;
+
+            const totalMonthlyIncome = store.incomes.reduce((s, i) => s + i.amount, 0) + (store.businessIncome || 0);
+            const currentDeductions = store.fixedDeductions.reduce((s, d) => s + d.amount, 0) +
+              store.loans.reduce((s, l) => s + l.emi, 0) +
+              (store.hasHealthInsurance ? store.healthInsuranceCost : 0) +
+              (store.hasVehicleInsurance ? store.vehicleInsuranceCost : 0) +
+              (store.homeMaintenanceCost || 0) +
+              (store.carMaintenanceCost || 0);
+            const currentSurplus = totalMonthlyIncome - currentDeductions;
+            const projectedSurplus = currentSurplus - emi;
+
+            return (
+              <div className="space-y-3.5 pb-2">
+                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="text-text-muted">Target Purchase Cost:</span>
+                    <span className="font-extrabold">{formatCurrency(loanGoal.currentTarget)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs mb-1">
+                    <span className="text-text-muted">Available Cash in Pool:</span>
+                    <span className="font-bold text-green-700">{formatCurrency(store.pool)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-text-muted">Loan Type:</span>
+                    <span className="font-semibold text-indigo-900">
+                      {isHome ? 'Home Loan (8.5%, 15 Yrs)' : isCar ? 'Auto Loan (9.5%, 5 Yrs)' : 'Personal Loan (11.5%, 3 Yrs)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Down payment control */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-bold text-text-primary">
+                      Down Payment (from Liquid Cash):
+                    </label>
+                    <span className="text-xs font-black text-indigo-700">
+                      {formatCurrency(currentDown)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={maxDown}
+                    step={Math.max(1000, Math.floor(maxDown / 100))}
+                    value={currentDown}
+                    onChange={e => setLoanDownPayment(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-text-muted mt-0.5">
+                    <span>₹0 (100% Loan)</span>
+                    <span>Max {formatCurrency(maxDown)}</span>
+                  </div>
+                </div>
+
+                {/* Loan & EMI Summary */}
+                <div className="p-3 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-text-muted">Loan Principal Borrowed:</span>
+                    <span className="font-extrabold text-indigo-950">{formatCurrency(loanPrincipal)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-text-muted">Estimated Monthly EMI:</span>
+                    <span className="font-black text-red-600 text-sm">-{formatCurrency(emi)}/mo</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1.5 border-t border-indigo-200/60 text-[11px]">
+                    <span className="text-text-muted">Monthly Cashflow Impact:</span>
+                    <span className={`font-bold ${projectedSurplus >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                      {formatCurrency(currentSurplus)} → {formatCurrency(projectedSurplus)}/mo
+                    </span>
+                  </div>
+                </div>
+
+                {projectedSurplus < 0 && (
+                  <p className="text-[10px] text-red-600 bg-red-50 p-2 rounded-lg border border-red-200 leading-snug">
+                    ⚠️ Warning: This loan will put you in a monthly deficit of {formatCurrency(Math.abs(projectedSurplus))}/mo. Make sure you have emergency savings!
+                  </p>
+                )}
+
+                <div className="flex space-x-2 pt-1">
+                  <Button
+                    variant="secondary"
+                    className="flex-1 text-xs"
+                    onClick={() => setLoanGoal(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    className="flex-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
+                    onClick={() => {
+                      store.achieveGoalWithLoan(loanGoal.id, currentDown, tenure, rate);
+                      setLoanGoal(null);
+                    }}
+                  >
+                    Disburse & Achieve 🎉
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
+        </BottomSheet>
+      )}
     </div>
   );
 };

@@ -56,3 +56,9 @@ export const INSURANCE_COSTS = {
   health: [600, 1200],
   vehicle: [250, 450],
 };
+
+export const RENOVATION_COSTS = {
+  1: { min: 150000, max: 300000 },
+  2: { min: 80000, max: 200000 },
+  3: { min: 40000, max: 120000 },
+};

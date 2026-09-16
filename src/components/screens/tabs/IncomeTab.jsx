@@ -117,6 +117,67 @@ const IncomeTab = () => {
         </div>
       </Card>
 
+      {/* Properties — Rental Management */}
+      {(store.homesOwned || []).length > 0 && (
+        <Card className="p-3.5 border border-gray-100">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-extrabold text-xs text-text-primary uppercase tracking-wider">
+              Properties Owned
+            </h3>
+            <span className="text-xs font-bold text-indigo-700">
+              {(store.homesOwned || []).length} {(store.homesOwned || []).length === 1 ? 'property' : 'properties'}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {(store.homesOwned || []).map((home, idx) => {
+              const isPrimary = idx === 0 && !store.player?.isRenting;
+              return (
+                <div key={home.id} className="p-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex justify-between items-start mb-1.5">
+                    <div>
+                      <span className="text-xs font-bold text-text-primary block">
+                        {home.label || (isPrimary ? 'Primary Residence' : 'Investment Property')}
+                      </span>
+                      <span className="text-[10px] text-text-muted">
+                        Value: {formatCurrency(home.value || 0)}
+                      </span>
+                    </div>
+                    {!isPrimary && (
+                      <Button
+                        size="sm"
+                        variant={home.isRentedOut ? 'primary' : 'secondary'}
+                        className="text-[10px] px-2 py-1"
+                        onClick={() => store.toggleHomeRental(home.id)}
+                      >
+                        {home.isRentedOut ? '🔑 Rented Out' : 'Rent Out'}
+                      </Button>
+                    )}
+                    {isPrimary && (
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+                        You live here
+                      </span>
+                    )}
+                  </div>
+                  {home.isRentedOut && home.rentalIncome > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-green-700 font-medium">
+                        Rental income: +{formatCurrency(home.rentalIncome)}/mo
+                      </span>
+                      <span className="text-[10px] text-text-muted">
+                        Maint: -{formatCurrency(home.maintenanceCost || 0)}/mo
+                      </span>
+                    </div>
+                  )}
+                  {!home.isRentedOut && !isPrimary && (
+                    <p className="text-[10px] text-amber-700">⚠️ Vacant — no rental income. Toggle to start earning.</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* 2. Sub-Column Distribution of Fixed Deductions */}
       <Card className="p-3.5 border border-gray-100">
         <div className="flex justify-between items-center mb-3">
