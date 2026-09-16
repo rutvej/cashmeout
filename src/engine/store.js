@@ -5,9 +5,10 @@ import { resolveEvent as resolveEventFn } from './eventResolver.js';
 import { EVENT_DECK } from './events.js';
 import { createGoal, redistributeBuckets } from './goals.js';
 import { calculateResults, generateInsights } from './scoring.js';
-import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES } from './constants.js';
+import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES, CITY_TIERS } from './constants.js';
 import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
 import { getCareerRole, generateJobMarketOffers } from './careers.js';
+import { generateEventCalendar } from './calendarQueue.js';
 
 /**
  * Central Zustand store — single source of truth for all game state.
@@ -56,6 +57,9 @@ const useGameStore = create((set, get) => ({
   showMilestone: null,
   activeTab: null,
   deficitInfo: null,
+  calendarQueue: null,
+  showMonthlyLedger: false,
+  financialChanged: true,
 
   // --- Game tracking ---
   gameOver: false,
@@ -162,6 +166,9 @@ const useGameStore = create((set, get) => ({
       familyWeddingFired: false,
       married: false,
       homeNeedsRenovation: false,
+      calendarQueue: generateEventCalendar(seed, p, EVENT_DECK),
+      showMonthlyLedger: false,
+      financialChanged: true,
       lastJobSwitchDay: 0,
       lastAppraisalDay: 0,
     });
@@ -280,7 +287,7 @@ const useGameStore = create((set, get) => ({
 
   tick: () => {
     const state = get();
-    if (state.gameOver || state.currentEvent || state.showMilestone || state.showAllocation) {
+    if (state.gameOver || state.currentEvent || state.showMilestone || state.showAllocation || state.deficitInfo || state.showMonthlyLedger) {
       // Auto-pause when something needs player attention
       get().pauseSimulation();
       return;
@@ -289,9 +296,30 @@ const useGameStore = create((set, get) => ({
     const tickResult = simulateTick(state);
     const changes = tickResult.stateChanges;
 
-    // Check for random event
+    // 1. Check deterministic calendar queue first
     let nextEvent = null;
-    if (shouldTriggerEvent(changes.currentDay, state.lastEventDay)) {
+    if (state.calendarQueue) {
+      const scheduledEvents = state.calendarQueue.popEventsForDay(changes.currentDay);
+      if (scheduledEvents && scheduledEvents.length > 0) {
+        for (const se of scheduledEvents) {
+          if (se.id === 'marriage_event' || se.id === 'marriage') {
+            if (!state.married && !state.marriageEventFired) {
+              nextEvent = buildMarriageEvent(state);
+              break;
+            }
+          } else {
+            const template = se.template || EVENT_DECK.find(e => e.id === se.id);
+            if (template && template.eligibilityCheck(state)) {
+              nextEvent = buildEventOptions(template, state);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Check for random event if no calendar event fired
+    if (!nextEvent && shouldTriggerEvent(changes.currentDay, state.lastEventDay)) {
       const eligible = getEligibleEvents(state, EVENT_DECK);
       if (eligible.length > 0) {
         // Weighted random pick (lower weight = rarer)
@@ -311,8 +339,8 @@ const useGameStore = create((set, get) => ({
       nextEvent = tickResult.eventTriggered;
     }
 
-    // Marriage age trigger — fires as a priority event
-    if (changes.shouldTriggerMarriage && !state.married && !state.marriageEventFired) {
+    // Marriage age trigger fallback
+    if (changes.shouldTriggerMarriage && !state.married && !state.marriageEventFired && !nextEvent) {
       nextEvent = buildMarriageEvent(state);
     }
 
@@ -321,45 +349,22 @@ const useGameStore = create((set, get) => ({
       let finalPool = s.pool + (changes.poolDelta || 0);
       let autoEmergencyLoan = null;
 
-      if (finalPool < 0) {
-        const deficit = Math.abs(finalPool);
-        finalPool = 0; // NEVER negative!
-        const monthlyRate = 0.12 / 12;
-        const tenure = 24;
-        const emi = Math.max(500, Math.round(
-          (deficit * monthlyRate * Math.pow(1 + monthlyRate, tenure)) /
-          (Math.pow(1 + monthlyRate, tenure) - 1)
-        ));
-
-        autoEmergencyLoan = {
-          id: `loan_deficit_${Date.now()}`,
-          name: 'Monthly Deficit Emergency Loan',
-          principal: Math.round(deficit),
-          emi,
-          remainingMonths: tenure,
-          rate: 12.0,
-          type: 'personal',
-        };
-      }
-
       const newState = {
         currentDay: changes.currentDay,
         pool: finalPool,
-        loans: autoEmergencyLoan ? [...(changes.loansUpdate || s.loans), autoEmergencyLoan] : (changes.loansUpdate || s.loans),
+        loans: changes.loansUpdate || s.loans,
       };
 
-      if (autoEmergencyLoan) {
-        newState.eventHistory = [
-          ...s.eventHistory,
-          {
-            day: changes.currentDay,
-            eventName: 'Emergency Cashflow Loan',
-            icon: '⚠️',
-            choice: 'Automatic Deficit Coverage',
-            poolDelta: 0,
-            outcome: `Monthly expenses exceeded cash reserves! Issued an emergency loan of ₹${autoEmergencyLoan.principal.toLocaleString('en-IN')} (EMI: ₹${autoEmergencyLoan.emi}/mo) to protect your pool at ₹0.`,
-          }
-        ];
+      if (finalPool < 0) {
+        const deficit = Math.abs(finalPool);
+        finalPool = 0; // NEVER negative!
+        newState.pool = finalPool;
+        // Don't auto-create loan — let player decide via LiquidationModal
+        // Set deficit info so player must resolve it
+        newState.deficitInfo = {
+          shortfall: deficit,
+          reason: 'Monthly expenses exceed cash reserves',
+        };
       }
 
       // Apply goals update (inflation)
@@ -369,6 +374,10 @@ const useGameStore = create((set, get) => ({
 
       if (changes.fixedDeductionsUpdate) {
         newState.fixedDeductions = changes.fixedDeductionsUpdate;
+      }
+
+      if (changes.incomesUpdate) {
+        newState.incomes = changes.incomesUpdate;
       }
 
       // Experience tracking
@@ -381,7 +390,7 @@ const useGameStore = create((set, get) => ({
         newState.marriageEventFired = true;
       }
 
-      // Monthly snapshot
+      // Monthly snapshot & Ledger trigger
       if (changes.currentDay % 30 === 0) {
         const currentPool = finalPool;
         const assetValue = (s.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
@@ -389,6 +398,12 @@ const useGameStore = create((set, get) => ({
           ...s.monthlySnapshots,
           { day: changes.currentDay, pool: currentPool, netWorth: currentPool + assetValue },
         ];
+
+        // Trigger full ledger on Month 1 (Day 30) or when financial numbers changed
+        if (s.financialChanged || changes.currentDay === 30) {
+          newState.showMonthlyLedger = true;
+          newState.financialChanged = false;
+        }
       }
 
       // Event triggered
@@ -413,9 +428,9 @@ const useGameStore = create((set, get) => ({
       return newState;
     });
 
-    // If event or milestone appeared, pause the sim
+    // If event, milestone, deficit, or ledger appeared, pause the sim
     const updated = get();
-    if (updated.currentEvent || updated.showMilestone || updated.gameOver) {
+    if (updated.currentEvent || updated.showMilestone || updated.gameOver || updated.deficitInfo || updated.showMonthlyLedger) {
       get().pauseSimulation();
     }
   },
@@ -490,6 +505,15 @@ const useGameStore = create((set, get) => ({
         }
         if (changes.homeNeedsRenovation === false) {
           shortfallState.homeNeedsRenovation = false;
+        }
+
+        // Normalize instruments to 100%
+        const currentInstruments = { ...shortfallState.instruments };
+        const sum = Object.values(currentInstruments).reduce((a, b) => a + b, 0);
+        if (sum < 100 && sum > 0) {
+          const deficit = 100 - sum;
+          currentInstruments.savings = (currentInstruments.savings || 0) + deficit;
+          shortfallState.instruments = currentInstruments;
         }
 
         return shortfallState;
@@ -660,7 +684,7 @@ const useGameStore = create((set, get) => ({
       set(s => ({
         deficitInfo: null,
         instruments: newInstruments,
-        pool: Math.max(0, s.pool - penalty),
+        pool: Math.max(0, s.pool - amount - penalty),
         eventHistory: [
           ...s.eventHistory,
           {
@@ -691,8 +715,17 @@ const useGameStore = create((set, get) => ({
         type: 'personal',
       };
 
+      // Normalize instruments to 100%
+      const currentInstruments = { ...state.instruments };
+      const sum = Object.values(currentInstruments).reduce((a, b) => a + b, 0);
+      if (sum < 100 && sum > 0) {
+        const deficit = 100 - sum;
+        currentInstruments.savings = (currentInstruments.savings || 0) + deficit;
+      }
+
       set(s => ({
         deficitInfo: null,
+        instruments: currentInstruments,
         loans: [...s.loans, newLoan],
         eventHistory: [
           ...s.eventHistory,
@@ -807,6 +840,10 @@ const useGameStore = create((set, get) => ({
       pool: s.pool + saleValue,
       carsOwned: [],
       carMaintenanceCost: 0,
+      hasVehicleInsurance: false,
+      vehicleInsuranceCost: 0,
+      player: { ...s.player, carOwned: false },
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -830,6 +867,7 @@ const useGameStore = create((set, get) => ({
     set(s => ({
       pool: s.pool - amount,
       businessIncome: (s.businessIncome || 0) + monthlyBoost,
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -854,6 +892,7 @@ const useGameStore = create((set, get) => ({
       pool: s.pool + saleValue,
       hasActiveBusiness: false,
       businessIncome: 0,
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -877,6 +916,7 @@ const useGameStore = create((set, get) => ({
         ...s.incomes.filter(i => i.type !== 'job'),
         { id: `gig_${Date.now()}`, type: 'job', amount: gigPay, name: 'Freelance Bridge Income' }
       ],
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -917,6 +957,7 @@ const useGameStore = create((set, get) => ({
 
     set(s => ({
       incomes: newIncomes,
+      financialChanged: true,
       lastJobSwitchDay: s.currentDay,
       eventHistory: [
         ...s.eventHistory,
@@ -955,6 +996,7 @@ const useGameStore = create((set, get) => ({
 
     set(s => ({
       incomes: s.incomes.map(i => i.id === currentJob.id ? { ...i, amount: newSalary, name: newRole } : i),
+      financialChanged: true,
       lastAppraisalDay: s.currentDay,
       eventHistory: [
         ...s.eventHistory,
@@ -981,6 +1023,9 @@ const useGameStore = create((set, get) => ({
       (Math.pow(1 + monthlyRate, tenureMonths) - 1)
     );
 
+    // Check if player can afford this EMI
+    if (!get().canAffordLoan(emi)) return false;
+
     const newLoan = {
       id: `loan_${Date.now()}`,
       name,
@@ -994,6 +1039,7 @@ const useGameStore = create((set, get) => ({
     set(s => ({
       pool: s.pool + principal,
       loans: [...s.loans, newLoan],
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -1011,11 +1057,25 @@ const useGameStore = create((set, get) => ({
   repayLoanEarly: (loanId) => {
     const state = get();
     const loan = state.loans.find(l => l.id === loanId);
-    if (!loan || state.pool < loan.principal) return false;
+    if (!loan) return false;
+    // Compute approximate remaining principal based on remaining EMIs
+    const monthlyRate = (loan.rate / 100) / 12;
+    let remainingPrincipal;
+    if (monthlyRate > 0) {
+      const totalMonths = loan.remainingMonths;
+      remainingPrincipal = Math.round(
+        loan.emi * (1 - Math.pow(1 + monthlyRate, -totalMonths)) / monthlyRate
+      );
+    } else {
+      remainingPrincipal = loan.emi * loan.remainingMonths;
+    }
+    remainingPrincipal = Math.min(remainingPrincipal, loan.principal);
+    if (state.pool < remainingPrincipal) return false;
 
     set(s => ({
-      pool: s.pool - loan.principal,
+      pool: s.pool - remainingPrincipal,
       loans: s.loans.filter(l => l.id !== loanId),
+      financialChanged: true,
       eventHistory: [
         ...s.eventHistory,
         {
@@ -1023,8 +1083,8 @@ const useGameStore = create((set, get) => ({
           eventName: 'Loan Prepayment',
           icon: '✅',
           choice: `Repaid ${loan.name}`,
-          poolDelta: -loan.principal,
-          outcome: `Paid off ₹${loan.principal.toLocaleString('en-IN')} early! Eliminated ₹${loan.emi.toLocaleString('en-IN')}/mo EMI drag.`,
+          poolDelta: -remainingPrincipal,
+          outcome: `Paid off ₹${remainingPrincipal.toLocaleString('en-IN')} early! Eliminated ₹${loan.emi.toLocaleString('en-IN')}/mo EMI drag.`,
         }
       ]
     }));
@@ -1034,7 +1094,7 @@ const useGameStore = create((set, get) => ({
   achieveGoalEarly: (goalId) => {
     const state = get();
     const goal = state.goals.find(g => g.id === goalId);
-    if (!goal || state.pool < goal.currentTarget) return false;
+    if (!goal || goal.achieved || goal.sacrificed || state.pool < goal.currentTarget) return false;
 
     get().resolveMilestone(goalId, 'spend');
     return true;
@@ -1062,6 +1122,9 @@ const useGameStore = create((set, get) => ({
       rate = rate || 0.115;
       defaultDownPct = 0.10;
     }
+
+    const minimumDown = Math.round(goal.currentTarget * 0.05); // At least 5%
+    if (state.pool < minimumDown) return false; // Can't afford minimum down payment
 
     const downPayment = downPaymentAmount !== null
       ? Math.min(state.pool, Math.max(0, downPaymentAmount))
@@ -1323,11 +1386,11 @@ const useGameStore = create((set, get) => ({
     set(s => {
       if (type === 'health') {
         const cost = randInt(INSURANCE_COSTS.health[0], INSURANCE_COSTS.health[1]);
-        return { hasHealthInsurance: true, healthInsuranceCost: cost };
+        return { hasHealthInsurance: true, healthInsuranceCost: cost, financialChanged: true };
       }
       if (type === 'vehicle') {
         const cost = randInt(INSURANCE_COSTS.vehicle[0], INSURANCE_COSTS.vehicle[1]);
-        return { hasVehicleInsurance: true, vehicleInsuranceCost: cost };
+        return { hasVehicleInsurance: true, vehicleInsuranceCost: cost, financialChanged: true };
       }
       return {};
     });
@@ -1349,6 +1412,7 @@ const useGameStore = create((set, get) => ({
       const newRentalIncome = home.isRentedOut ? 0 : randInt(band.min, band.max);
 
       return {
+        financialChanged: true,
         homesOwned: s.homesOwned.map(h =>
           h.id === homeId
             ? { ...h, isRentedOut: !h.isRentedOut, rentalIncome: newRentalIncome }
@@ -1367,6 +1431,7 @@ const useGameStore = create((set, get) => ({
         pool: s.pool + (home.value || 0),
         homesOwned: remainingHomes,
         homeMaintenanceCost: Math.max(0, s.homeMaintenanceCost - (home.maintenanceCost || 0)),
+        financialChanged: true,
         decisionHistory: [
           ...s.decisionHistory,
           { day: s.currentDay, type: 'sell_home', value: home.value },
@@ -1461,6 +1526,11 @@ const useGameStore = create((set, get) => ({
     get().startSimulation();
   },
 
+  closeMonthlyLedger: () => {
+    set({ showMonthlyLedger: false });
+    get().startSimulation();
+  },
+
   setActiveTab: (tab) => set(s => ({ activeTab: s.activeTab === tab ? null : tab })),
 
   // --- Save / Load / Reset ---
@@ -1542,6 +1612,21 @@ const useGameStore = create((set, get) => ({
       married: false,
       homeNeedsRenovation: false,
     });
+  },
+
+  canAffordLoan: (proposedEMI) => {
+    const state = get();
+    const totalIncome = state.incomes.reduce((s, i) => s + i.amount, 0)
+      + (state.businessIncome || 0)
+      + (state.homesOwned || []).filter(h => h.isRentedOut).reduce((s, h) => s + (h.rentalIncome || 0), 0);
+    const totalDeductions = state.fixedDeductions.reduce((s, d) => s + d.amount, 0)
+      + state.loans.reduce((s, l) => s + l.emi, 0)
+      + (state.hasHealthInsurance ? state.healthInsuranceCost : 0)
+      + (state.hasVehicleInsurance ? state.vehicleInsuranceCost : 0)
+      + (state.homeMaintenanceCost || 0)
+      + (state.carMaintenanceCost || 0);
+    const surplus = totalIncome - totalDeductions;
+    return surplus >= proposedEMI;
   },
 }));
 

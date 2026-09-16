@@ -1060,42 +1060,98 @@ export default function LifestyleScene() {
               {/* Contact shadow beneath feet */}
               <ellipse cx="20" cy="48" rx={married ? "24" : "14"} ry="5" fill="black" opacity={theme.shadowOpacity} />
 
-              {/* --- PLAYER AVATAR --- */}
+              {/* --- PLAYER AVATAR & ACTIVITY SCENE --- */}
               <g transform="translate(8, 0)">
-                {/* Modern Hairstyle */}
-                <polygon points="12,4 18,2 24,5 22,12 10,12" fill="#1e293b" />
-                {/* Head */}
+                {/* Dynamic Aging Hairstyle with progressive silver/gray streaks */}
+                {currentDay >= 3650 ? (
+                  /* Mature 38-42 salt & pepper hair */
+                  <polygon points="12,4 18,2 24,5 22,12 10,12" fill="#64748b" />
+                ) : currentDay >= 2190 ? (
+                  /* Mid 32-37 hair with silver accents */
+                  <polygon points="12,4 18,2 24,5 22,12 10,12" fill="#475569" />
+                ) : (
+                  /* Youthful 22-31 dark hair */
+                  <polygon points="12,4 18,2 24,5 22,12 10,12" fill="#1e293b" />
+                )}
+
+                {/* Head with dynamic age lines */}
                 <circle cx="16" cy="12" r="7" fill="#fcd9b6" />
                 <circle cx="14" cy="11" r="0.9" fill="#0f172a" />
                 <circle cx="18" cy="11" r="0.9" fill="#0f172a" />
-
-                {/* Styled Torso / Jacket based on Tier */}
-                {tier === 'wealthy' ? (
-                  /* Designer Overcoat */
-                  <polygon points="10,18 22,18 24,38 8,38" fill="#0f172a" />
-                ) : tier === 'comfortable' ? (
-                  /* Smart Tailored Blazer */
-                  <polygon points="10,18 22,18 23,36 9,36" fill="#0369a1" />
-                ) : (
-                  /* Casual Streetwear Hoodie */
-                  <polygon points="10,18 22,18 23,35 9,35" fill={tier === 'middle' ? '#2563eb' : '#475569'} />
+                {currentDay >= 4380 && (
+                  /* Subtle mature smile lines for 36+ */
+                  <path d="M12,14 Q14,16 13,17 M20,14 Q18,16 19,17" stroke="#d4a373" strokeWidth="0.6" fill="none" />
                 )}
-                {/* White Shirt Collar */}
-                <polygon points="14,18 16,23 18,18" fill="#ffffff" />
 
-                {/* Arms & Hands */}
-                <line x1="10" y1="20" x2="6" y2="30" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="22" y1="20" x2="25" y2="28" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
-                {/* Smartphone in hand */}
-                <rect x="24" y="27" width="3" height="5" rx="0.5" fill="#f59e0b" />
+                {/* Activity State: Working on Laptop vs Idle at Home */}
+                {incomes && incomes.some(i => i.type === 'job') ? (
+                  /* === WORKING STATE (Corporate or Freelance on Laptop) === */
+                  <g>
+                    {/* Upper Body / Outfit */}
+                    {tier === 'wealthy' ? (
+                      <polygon points="10,18 22,18 24,36 8,36" fill="#0f172a" />
+                    ) : tier === 'comfortable' ? (
+                      <polygon points="10,18 22,18 23,35 9,35" fill="#0369a1" />
+                    ) : (
+                      <polygon points="10,18 22,18 23,34 9,34" fill={tier === 'middle' ? '#2563eb' : '#475569'} />
+                    )}
+                    <polygon points="14,18 16,22 18,18" fill="#ffffff" />
 
-                {/* Chinos / Trousers */}
-                <line x1="13" y1="36" x2="12" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
-                <line x1="19" y1="36" x2="20" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+                    {/* Desk & Workstation Prop */}
+                    <polygon points="-6,32 38,32 44,40 -12,40" fill="#334155" opacity="0.9" />
+                    <line x1="-8" y1="40" x2="-8" y2="48" stroke="#1e293b" strokeWidth="2" />
+                    <line x1="40" y1="40" x2="40" y2="48" stroke="#1e293b" strokeWidth="2" />
 
-                {/* Clean White Sneakers */}
-                <rect x="9" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
-                <rect x="18" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+                    {/* Open Glowing Laptop */}
+                    <polygon points="10,34 22,34 24,37 8,37" fill="#64748b" />
+                    <polygon points="10,26 22,26 22,34 10,34" fill="#38bdf8" />
+                    <rect x="11" y="27" width="10" height="6" fill="#f0f9ff" opacity="0.85" />
+                    {/* Typing arms animation */}
+                    <path d="M10,21 Q14,29 12,35" stroke="#fcd9b6" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+                    <path d="M22,21 Q18,29 20,35" stroke="#fcd9b6" strokeWidth="2.4" fill="none" strokeLinecap="round" />
+
+                    {/* Steaming Coffee Mug */}
+                    <rect x="28" y="32" width="4" height="5" rx="1" fill="#f59e0b" />
+                    <path d="M30,30 Q31,28 30,26" stroke="#e2e8f0" strokeWidth="0.8" fill="none" opacity="0.7" />
+
+                    {/* Live Activity Badge */}
+                    <g transform="translate(16, -6)">
+                      <rect x="-24" y="-8" width="48" height="9" rx="3" fill="#0f172a" opacity="0.85" />
+                      <text x="0" y="-2" textAnchor="middle" fill="#38bdf8" fontSize="5" fontWeight="bold" fontFamily="sans-serif">
+                        {incomes.some(i => i.id?.includes('gig')) ? '💻 FREELANCING' : '💼 ON LAPTOP'}
+                      </text>
+                    </g>
+                  </g>
+                ) : (
+                  /* === IDLE STATE (Unemployed / Lounging at Home) === */
+                  <g>
+                    {/* Relaxed Lounger / Patio Chair */}
+                    <path d="M6,26 Q4,38 2,46 L26,46 Q24,38 22,26 Z" fill="#94a3b8" opacity="0.4" />
+                    
+                    {/* Casual Streetwear Hoodie */}
+                    <polygon points="10,18 22,18 23,35 9,35" fill="#64748b" />
+                    
+                    {/* Relaxed Arms resting on lap */}
+                    <line x1="10" y1="20" x2="13" y2="30" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
+                    <line x1="22" y1="20" x2="19" y2="30" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
+                    {/* Smartphone in hand while idle */}
+                    <rect x="14" y="29" width="4" height="6" rx="0.8" fill="#38bdf8" />
+
+                    {/* Trousers & Sneakers */}
+                    <line x1="13" y1="35" x2="11" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+                    <line x1="19" y1="35" x2="21" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+                    <rect x="8" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+                    <rect x="19" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+
+                    {/* Idle Status Badge */}
+                    <g transform="translate(16, -6)">
+                      <rect x="-24" y="-8" width="48" height="9" rx="3" fill="#0f172a" opacity="0.8" />
+                      <text x="0" y="-2" textAnchor="middle" fill="#f59e0b" fontSize="5" fontWeight="bold" fontFamily="sans-serif">
+                        🏖️ AT HOME / IDLE
+                      </text>
+                    </g>
+                  </g>
+                )}
               </g>
 
               {/* --- PARTNER AVATAR (Rendered side-by-side if married) --- */}

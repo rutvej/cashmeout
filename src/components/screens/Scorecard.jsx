@@ -6,7 +6,7 @@ import { calculateResults, generateInsights } from '../../engine/scoring';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { formatCurrency, formatAge } from '../../utils/format';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 const Scorecard = () => {
   const store = useGameStore();
@@ -17,24 +17,55 @@ const Scorecard = () => {
 
   const isBroke = store.gameOverReason === 'broke';
 
-  const results = useMemo(() => calculateResults(store), [store.goals, store.pool]);
-  const insights = useMemo(() => generateInsights(store), [store]);
+  const results = useMemo(() => {
+    try {
+      return calculateResults(store);
+    } catch (e) {
+      console.error('Error calculating results:', e);
+      return {
+        goalsAchieved: [],
+        goalsSacrificed: [],
+        bonusGoals: [],
+        resultScore: 0,
+        finalNetWorth: store.pool || 0,
+        literacyScore: 50,
+        biggestMistake: 'Maintain a diversified buffer for life emergencies.',
+        biggestWin: 'Navigated 20 years of career and life events.',
+        turningPoint: 'Mid-career transitions.',
+      };
+    }
+  }, [store]);
 
-  const achievedGoals = store.goals.filter(g => g.achieved);
-  const sacrificedGoals = store.goals.filter(g => g.sacrificed);
+  const insights = useMemo(() => {
+    try {
+      return generateInsights(store);
+    } catch (e) {
+      return ['You completed your life simulation run.'];
+    }
+  }, [store]);
+
+  const achievedGoals = (store.goals || []).filter(g => g.achieved);
+  const sacrificedGoals = (store.goals || []).filter(g => g.sacrificed);
   const bonusGoals = achievedGoals.filter(g => g.bonus);
 
   const resultScore = achievedGoals.length - sacrificedGoals.length + bonusGoals.length;
 
-  // Prepare chart data
+  // Prepare chart data with safe fallbacks
   const chartData = (store.monthlySnapshots || [])
-    .filter((_, i) => i % 3 === 0) // Sample every 3 months for cleaner chart
+    .filter((_, i) => i % 3 === 0)
     .map(s => ({
-      age: formatAge(s.day),
-      'Net Worth': Math.round(s.netWorth || s.pool),
+      age: formatAge(s.day || 0),
+      'Net Worth': Math.round(s.netWorth ?? s.pool ?? 0),
     }));
 
   const seedNumber = store.gameSeed || 'Standard';
+
+  const realEstateValue = (store.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
+  const businessValue = store.hasActiveBusiness ? (store.businessIncome || 0) * 22 : 0;
+  const totalDebt = (store.loans || []).reduce((sum, l) => sum + (l.principal || 0), 0);
+  const totalNetWorth = results.finalNetWorth ?? (store.pool + realEstateValue + businessValue - totalDebt);
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}?seed=${seedNumber}`;
 
   const generateShareText = () => {
     const achievedSummary = achievedGoals.map(g => {
@@ -45,14 +76,15 @@ const Scorecard = () => {
 
     return `🎮 CashMeOut Life Simulation Run (Age 22→42)
 🌱 World Seed: #${seedNumber}
-💰 Final Net Worth: ${formatCurrency(store.pool)}
+💰 Final Net Worth: ${formatCurrency(totalNetWorth)}
 🧠 Financial Literacy: ${results.literacyScore}/100
-🏆 Goals Achieved (${achievedGoals.length}/${store.goals.length}):
+🏆 Goals Achieved (${achievedGoals.length}/${store.goals?.length || 0}):
 ${achievedSummary || '• None achieved'}
+${results.biggestWin ? `\n🏆 Win: ${results.biggestWin}` : ''}
 ${results.biggestMistake ? `\n💡 Lesson: ${results.biggestMistake}` : ''}
 
 Can you beat my financial score on Seed #${seedNumber}?
-Play here: ${window.location.origin}${window.location.pathname}`;
+Play here: ${shareUrl}`;
   };
 
   const handleCopyShare = async () => {
@@ -70,13 +102,11 @@ Play here: ${window.location.origin}${window.location.pathname}`;
       setCapturing(true);
       const element = document.getElementById('shareable-result-card');
       if (!element) return;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
+      const dataUrl = await toPng(element, {
+        pixelRatio: 2,
         backgroundColor: '#ffffff',
-        logging: false,
+        cacheBust: true,
       });
-      const dataUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.download = `cashmeout-seed-${seedNumber}-scorecard.png`;
       link.href = dataUrl;
@@ -95,40 +125,31 @@ Play here: ${window.location.origin}${window.location.pathname}`;
       setCapturing(true);
       const element = document.getElementById('shareable-result-card');
       if (!element) return;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
+      const dataUrl = await toPng(element, {
+        pixelRatio: 2,
         backgroundColor: '#ffffff',
-        logging: false,
+        cacheBust: true,
       });
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          handleDownloadScreenshot();
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `cashmeout-seed-${seedNumber}.png`, { type: 'image/png' });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `CashMeOut Run — Seed #${seedNumber}`,
+            text: generateShareText(),
+          });
           return;
+        } catch (shareErr) {
+          // Cancelled by user
         }
-        const file = new File([blob], `cashmeout-seed-${seedNumber}.png`, { type: 'image/png' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              files: [file],
-              title: `CashMeOut Run — Seed #${seedNumber}`,
-              text: generateShareText(),
-            });
-            return;
-          } catch (shareErr) {
-            // Cancelled or unsupported
-          }
-        }
-        // Fallback: download the file
-        const dataUrl = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = `cashmeout-seed-${seedNumber}-scorecard.png`;
-        link.href = dataUrl;
-        link.click();
-        setScreenshotSaved(true);
-        setTimeout(() => setScreenshotSaved(false), 2500);
-      }, 'image/png');
+      }
+
+      // Fallback download
+      handleDownloadScreenshot();
     } catch (e) {
       console.error('Share screenshot failed', e);
     } finally {
@@ -189,9 +210,31 @@ Play here: ${window.location.origin}${window.location.pathname}`;
 
           {/* Big Net Worth Card */}
           <div className="bg-surface-card-alt p-4 rounded-2xl text-center mb-4 border border-gray-100">
-            <p className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Final Net Worth</p>
-            <div className={`text-3xl sm:text-4xl font-black tracking-tight mb-3 ${store.pool >= 0 ? 'text-accent-stable-dark' : 'text-accent-caution-dark'}`}>
-              {formatCurrency(store.pool)}
+            <p className="text-[11px] font-bold text-text-muted uppercase tracking-wider mb-0.5">Final Net Worth (Assets - Debt)</p>
+            <div className={`text-3xl sm:text-4xl font-black tracking-tight mb-2 ${totalNetWorth >= 0 ? 'text-accent-stable-dark' : 'text-accent-caution-dark'}`}>
+              {formatCurrency(totalNetWorth)}
+            </div>
+
+            {/* Asset & Debt Micro-Breakdown */}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3 text-[10px] text-slate-600 font-medium">
+              <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                💵 Liquid: <strong className="text-slate-800">{formatCurrency(store.pool || 0)}</strong>
+              </span>
+              {realEstateValue > 0 && (
+                <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                  🏡 Property: <strong className="text-emerald-700">{formatCurrency(realEstateValue)}</strong>
+                </span>
+              )}
+              {businessValue > 0 && (
+                <span className="bg-white px-2 py-0.5 rounded border border-gray-200">
+                  💼 Business: <strong className="text-emerald-700">{formatCurrency(businessValue)}</strong>
+                </span>
+              )}
+              {totalDebt > 0 && (
+                <span className="bg-white px-2 py-0.5 rounded border border-rose-200 text-rose-700">
+                  💳 Debt: <strong>-{formatCurrency(totalDebt)}</strong>
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-2.5">
@@ -210,11 +253,11 @@ Play here: ${window.location.origin}${window.location.pathname}`;
           <div className="mb-4">
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-extrabold text-xs uppercase tracking-wider text-text-primary">
-                Life Milestones ({achievedGoals.length}/{store.goals.length} Achieved)
+                Life Milestones ({achievedGoals.length}/{store.goals?.length || 0} Achieved)
               </h3>
             </div>
             <div className="space-y-1.5">
-              {store.goals.map(g => {
+              {(store.goals || []).map(g => {
                 const year = Math.max(1, Math.ceil((g.achievedDay || 0) / 365));
                 const age = 22 + Math.floor((g.achievedDay || 0) / 365);
 
@@ -334,11 +377,27 @@ Play here: ${window.location.origin}${window.location.pathname}`;
           </motion.div>
         )}
 
+        {/* Biggest Win */}
+        {results.biggestWin && (
+          <Card className="mb-3 bg-emerald-50/70 border border-emerald-200">
+            <h3 className="font-bold text-emerald-800 text-xs uppercase tracking-wider mb-1">🏆 Biggest Financial Win</h3>
+            <p className="text-xs text-emerald-950 leading-relaxed font-medium">{results.biggestWin}</p>
+          </Card>
+        )}
+
         {/* Biggest Takeaway */}
-        <Card className="mb-4 bg-accent-caution/10 border border-accent-caution/30">
+        <Card className="mb-3 bg-accent-caution/10 border border-accent-caution/30">
           <h3 className="font-bold text-accent-caution-dark text-xs uppercase tracking-wider mb-1">💡 Key Financial Lesson</h3>
           <p className="text-xs text-text-primary leading-relaxed">{results.biggestMistake}</p>
         </Card>
+
+        {/* Turning Point */}
+        {results.turningPoint && (
+          <Card className="mb-4 bg-indigo-50/70 border border-indigo-200">
+            <h3 className="font-bold text-indigo-800 text-xs uppercase tracking-wider mb-1">📈 Net Worth Turning Point</h3>
+            <p className="text-xs text-indigo-950 leading-relaxed font-medium">{results.turningPoint}</p>
+          </Card>
+        )}
 
         {/* Financial Insights */}
         {insights.length > 0 && (

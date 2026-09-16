@@ -126,35 +126,6 @@ export const simulateTick = (state) => {
     }
   }
 
-  // --- Annual Tax Assessment (Day 350 of each year) ---
-  if (nextDay % 365 === 350) {
-    const annualEarned = state.annualIncomeAcc || (incomes.reduce((s, i) => s + i.amount, 0) * 12);
-    const taxBill = computeIncomeTax(annualEarned);
-
-    scheduledEvent = {
-      id: 'annual_tax',
-      name: 'Annual Income Tax Assessment',
-      type: taxBill > 0 ? 'bad' : 'neutral',
-      icon: '🏛️',
-      description: taxBill > 0
-        ? `Tax filing season: Assessed based on New Regime slabs on your ₹${annualEarned.toLocaleString('en-IN')} total annual earnings.`
-        : `Tax filing season: Total earnings ₹${annualEarned.toLocaleString('en-IN')} are within the rebate limit (Section 87A). ₹0 tax liability!`,
-      financialImpact: {
-        type: 'loss',
-        amount: taxBill,
-        annualIncome: annualEarned,
-      },
-      options: [
-        {
-          label: taxBill > 0 ? `File Returns & Pay Tax (₹${taxBill.toLocaleString('en-IN')})` : `File Returns (₹0 Tax Payable)`,
-          description: taxBill > 0 ? `Paid strictly from liquid savings buffer.` : `Full rebate applied under New Tax Regime.`
-        }
-      ]
-    };
-
-    stateChanges.annualIncomeAcc = 0;
-  }
-
   // --- Annual Processing & Inflation + Salary Raise (Day 365 of each year) ---
   if (nextDay % 365 === 0) {
     const elapsedYears = nextDay / 365;
@@ -229,6 +200,37 @@ export const simulateTick = (state) => {
     };
   }
 
+  // --- Annual Tax Assessment (Day 365 of each year) ---
+  if (nextDay % 365 === 0) {
+    const annualEarned = state.annualIncomeAcc || (incomes.reduce((s, i) => s + i.amount, 0) * 12);
+    const taxBill = computeIncomeTax(annualEarned);
+
+    // If both events fire on day 365, this will overwrite scheduledEvent.
+    // The player will see the tax assessment and the inflation/raise happens silently.
+    scheduledEvent = {
+      id: 'annual_tax',
+      name: 'Annual Income Tax Assessment',
+      type: taxBill > 0 ? 'bad' : 'neutral',
+      icon: '🏛️',
+      description: taxBill > 0
+        ? `Tax filing season: Assessed based on New Regime slabs on your ₹${annualEarned.toLocaleString('en-IN')} total annual earnings.`
+        : `Tax filing season: Total earnings ₹${annualEarned.toLocaleString('en-IN')} are within the rebate limit (Section 87A). ₹0 tax liability!`,
+      financialImpact: {
+        type: 'loss',
+        amount: taxBill,
+        annualIncome: annualEarned,
+      },
+      options: [
+        {
+          label: taxBill > 0 ? `File Returns & Pay Tax (₹${taxBill.toLocaleString('en-IN')})` : `File Returns (₹0 Tax Payable)`,
+          description: taxBill > 0 ? `Paid strictly from liquid savings buffer.` : `Full rebate applied under New Tax Regime.`
+        }
+      ]
+    };
+
+    stateChanges.annualIncomeAcc = 0;
+  }
+
   // --- Marriage age trigger ---
   if (
     !state.marriageEventFired &&
@@ -262,7 +264,22 @@ export const simulateTick = (state) => {
 
   // Broke check
   const projectedPool = pool + (stateChanges.poolDelta || 0);
-  if (projectedPool <= 0 && state.loans.length > 6 && incomes.length === 0) {
+  
+  const monthlySurplus = incomes.reduce((sum, inc) => sum + inc.amount, 0)
+    + (state.businessIncome || 0)
+    + (state.homesOwned || []).filter(h => h.isRentedOut && h.rentalIncome).reduce((s, h) => s + h.rentalIncome, 0)
+    - fixedDeductions.reduce((sum, ded) => sum + ded.amount, 0)
+    - loans.reduce((sum, loan) => sum + loan.emi, 0)
+    - (state.hasHealthInsurance ? (state.healthInsuranceCost || 0) : 0)
+    - (state.hasVehicleInsurance ? (state.vehicleInsuranceCost || 0) : 0)
+    - (state.homeMaintenanceCost || 0)
+    - (state.carMaintenanceCost || 0);
+
+  const hasAssetsToSell = (state.carsOwned || []).length > 0
+    || (state.homesOwned || []).length > 0
+    || state.hasActiveBusiness;
+
+  if (projectedPool <= 0 && monthlySurplus <= 0 && !hasAssetsToSell) {
     stateChanges.gameOverReason = 'broke';
   }
 
