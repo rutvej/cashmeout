@@ -91,19 +91,19 @@ const InvestmentsTab = () => {
     <div className="space-y-4 pb-24">
       {/* Portfolio Performance Banner */}
       <Card className="bg-gradient-to-br from-emerald-50 via-teal-50/50 to-blue-50 border border-emerald-100">
-        <div className="flex justify-between items-start">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
           <div>
-            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-1">
+            <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-0.5">
               Active Investment Wealth
             </span>
-            <div className="text-3xl font-black text-text-primary tracking-tight">
+            <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
               {formatCurrency(Math.max(0, investedInGrowth))}
             </div>
-            <span className="text-xs text-text-muted">
+            <span className="text-[11px] text-text-muted">
               Out of {formatCurrency(store.pool)} Total Pool
             </span>
           </div>
-          <div className="text-right">
+          <div className="sm:text-right">
             <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full inline-block mb-1">
               ~{(blendedReturn * 100).toFixed(1)}% Blended Return
             </span>
@@ -185,13 +185,13 @@ const InvestmentsTab = () => {
 
                 {/* Adjuster controls */}
                 {!isSavings ? (
-                  <div className="flex items-center space-x-2 pt-1 border-t border-gray-50 mt-1">
+                  <div className="flex items-center space-x-1 sm:space-x-2 pt-1 border-t border-gray-50 mt-1">
                     <div className="flex-1 flex space-x-1">
                       <button
                         type="button"
                         onClick={() => handleQuickStep(key, -10)}
                         disabled={pct < 10}
-                        className="flex-1 text-[10px] py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-30 rounded font-bold transition"
+                        className="flex-1 text-[9px] sm:text-[10px] py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-30 rounded font-bold transition"
                       >
                         -10%
                       </button>
@@ -199,13 +199,13 @@ const InvestmentsTab = () => {
                         type="button"
                         onClick={() => handleQuickStep(key, -5)}
                         disabled={pct < 5}
-                        className="flex-1 text-[10px] py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-30 rounded font-bold transition"
+                        className="flex-1 text-[9px] sm:text-[10px] py-1 bg-gray-100 hover:bg-gray-200 disabled:opacity-30 rounded font-bold transition"
                       >
                         -5%
                       </button>
                     </div>
 
-                    <div className="w-16">
+                    <div className="w-14 sm:w-16 shrink-0">
                       <input
                         type="range"
                         min="0"
@@ -222,7 +222,7 @@ const InvestmentsTab = () => {
                         type="button"
                         onClick={() => handleQuickStep(key, 5)}
                         disabled={!canIncrease || (allocations.savings || 0) < 5}
-                        className="flex-1 text-[10px] py-1 bg-blue-50 text-accent-action-dark hover:bg-blue-100 disabled:opacity-30 rounded font-bold transition"
+                        className="flex-1 text-[9px] sm:text-[10px] py-1 bg-blue-50 text-accent-action-dark hover:bg-blue-100 disabled:opacity-30 rounded font-bold transition"
                       >
                         +5%
                       </button>
@@ -230,7 +230,7 @@ const InvestmentsTab = () => {
                         type="button"
                         onClick={() => handleQuickStep(key, 10)}
                         disabled={!canIncrease || (allocations.savings || 0) < 10}
-                        className="flex-1 text-[10px] py-1 bg-blue-50 text-accent-action-dark hover:bg-blue-100 disabled:opacity-30 rounded font-bold transition"
+                        className="flex-1 text-[9px] sm:text-[10px] py-1 bg-blue-50 text-accent-action-dark hover:bg-blue-100 disabled:opacity-30 rounded font-bold transition"
                       >
                         +10%
                       </button>

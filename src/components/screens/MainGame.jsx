@@ -83,16 +83,16 @@ const MainGame = () => {
   const hasPendingEvent = !!store.currentEvent;
 
   return (
-    <div className="min-h-screen bg-surface-bg flex flex-col pb-20 relative">
+    <div className="min-h-screen bg-surface-bg flex flex-col pb-24 relative overflow-x-hidden w-full max-w-full">
       {/* Floating Cashflow Delta Pill */}
       {poolDelta !== 0 && (
-        <div className="fixed top-28 right-6 z-40 pointer-events-none">
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
           <FloatingDelta delta={poolDelta} keyId={store.currentDay} />
         </div>
       )}
 
       {/* Top Section - Fixed Sticky Timeline & Sim Controls */}
-      <div className="bg-white rounded-b-3xl shadow-sm z-20 sticky top-0 border-b border-gray-100">
+      <div className="bg-white rounded-b-3xl shadow-sm z-20 sticky top-0 border-b border-gray-100 max-w-md w-full mx-auto">
         <Timeline 
           currentDay={store.currentDay} 
           financialHealth={store.pool > 0 ? 'stable' : 'distress'}
@@ -121,9 +121,9 @@ const MainGame = () => {
       </div>
 
       {/* Main Content Area - Scrollable Dashboard */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
         {!store.activeTab ? (
-          <div className="py-3 px-3 max-w-lg mx-auto space-y-3">
+          <div className="py-3 px-3 max-w-md w-full mx-auto space-y-3">
             {/* Active Life Event Card (Slide-In) */}
             {store.currentEvent && (
               <div className="mb-2">
@@ -146,7 +146,7 @@ const MainGame = () => {
             </div>
           </div>
         ) : (
-          <div className="p-4 bg-gray-50/50 min-h-full max-w-lg mx-auto">
+          <div className="p-3 sm:p-4 bg-gray-50/50 min-h-full max-w-md w-full mx-auto overflow-x-hidden pb-24">
             {/* Tab Header with Close Button */}
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-black capitalize text-text-primary">

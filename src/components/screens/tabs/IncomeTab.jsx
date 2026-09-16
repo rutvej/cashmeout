@@ -67,7 +67,7 @@ const IncomeTab = () => {
 
       {/* Career & Employment Hub (Proactive Job Market & Realistic Hikes) */}
       <Card className="p-4 border border-blue-100 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
           <div className="flex items-center space-x-2">
             <span className="text-base">💼</span>
             <div>
@@ -83,7 +83,7 @@ const IncomeTab = () => {
             <Button
               size="sm"
               variant={canRequestAppraisal ? 'primary' : 'secondary'}
-              className="text-[10px] px-2.5 py-1 font-bold"
+              className="text-[10px] px-2.5 py-1 font-bold self-start sm:self-auto shrink-0"
               disabled={!canRequestAppraisal}
               onClick={() => store.requestAppraisal()}
               title={canRequestAppraisal ? 'Ask for a merit raise review' : `Appraisal available in ${270 - daysSinceAppraisal} days`}

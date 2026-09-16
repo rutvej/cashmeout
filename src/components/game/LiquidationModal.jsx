@@ -82,7 +82,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Sell Car */}
             {hasCar && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">🚗 Sell Personal Vehicle</span>
                   <span className="text-[10px] text-emerald-700 font-semibold">
@@ -92,7 +92,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300"
+                  className="w-full sm:w-auto text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shrink-0"
                   onClick={() => onResolve({ action: 'sell_car' })}
                 >
                   Sell Car (+{formatCurrency(carValue)})
@@ -102,7 +102,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Sell Home */}
             {hasHome && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">🏠 Sell Real Estate Property</span>
                   <span className="text-[10px] text-emerald-700 font-semibold">
@@ -112,7 +112,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300"
+                  className="w-full sm:w-auto text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shrink-0"
                   onClick={() => onResolve({ action: 'sell_home' })}
                 >
                   Sell Property (+{formatCurrency(homeValue)})
@@ -122,7 +122,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Sell Business */}
             {hasBusiness && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">💼 Liquidate Business Venture</span>
                   <span className="text-[10px] text-emerald-700 font-semibold">
@@ -132,7 +132,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300"
+                  className="w-full sm:w-auto text-xs bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shrink-0"
                   onClick={() => onResolve({ action: 'sell_business' })}
                 >
                   Exit Business (+{formatCurrency(businessVal)})
@@ -151,7 +151,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Stocks */}
             {stockVal > 0 && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">📈 Direct Stocks</span>
                   <span className="text-[10px] text-text-muted">Available: {formatCurrency(stockVal)}</span>
@@ -159,7 +159,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs"
+                  className="w-full sm:w-auto text-xs shrink-0"
                   onClick={() => onResolve({ action: 'liquidate', assetKey: 'stocks', amount: Math.min(shortfall, stockVal) })}
                 >
                   Sell Stocks ({formatCurrency(Math.min(shortfall, stockVal))})
@@ -169,7 +169,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Mutual Funds */}
             {mfVal > 0 && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">📊 Mutual Funds</span>
                   <span className="text-[10px] text-text-muted">Available: {formatCurrency(mfVal)}</span>
@@ -177,7 +177,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs"
+                  className="w-full sm:w-auto text-xs shrink-0"
                   onClick={() => onResolve({ action: 'liquidate', assetKey: 'mf', amount: Math.min(shortfall, mfVal) })}
                 >
                   Redeem MF ({formatCurrency(Math.min(shortfall, mfVal))})
@@ -187,7 +187,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Gold */}
             {goldVal > 0 && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">🪙 Gold Holdings</span>
                   <span className="text-[10px] text-text-muted">Available: {formatCurrency(goldVal)}</span>
@@ -195,7 +195,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs"
+                  className="w-full sm:w-auto text-xs shrink-0"
                   onClick={() => onResolve({ action: 'liquidate', assetKey: 'gold', amount: Math.min(shortfall, goldVal) })}
                 >
                   Sell Gold ({formatCurrency(Math.min(shortfall, goldVal))})
@@ -205,7 +205,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
 
             {/* Fixed Deposit */}
             {fdVal > 0 && (
-              <div className="p-3 bg-white rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+              <div className="p-3 bg-white rounded-xl border border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
                 <div>
                   <span className="text-xs font-bold text-text-primary block">🔒 Break Fixed Deposit</span>
                   <span className="text-[10px] text-text-muted">Available: {formatCurrency(fdVal)} (1% fee)</span>
@@ -213,7 +213,7 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
                 <Button
                   size="sm"
                   variant="secondary"
-                  className="text-xs text-amber-700"
+                  className="w-full sm:w-auto text-xs text-amber-700 shrink-0"
                   onClick={() => onResolve({ action: 'liquidate', assetKey: 'fd', amount: Math.min(shortfall, fdVal) })}
                 >
                   Break FD ({formatCurrency(Math.min(shortfall, fdVal))})

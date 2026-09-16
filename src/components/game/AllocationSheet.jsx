@@ -51,7 +51,7 @@ const AllocationSheet = ({ isOpen, goals, onConfirm }) => {
 
   return (
     <BottomSheet isOpen={isOpen} title={hasNoActiveGoals ? "Surplus Cashflow Management" : "Allocate Monthly Savings Surplus"}>
-      <div className="space-y-4 mb-24">
+      <div className="space-y-4 mb-4">
         {/* Real Cashflow Overview Card */}
         <div className="bg-gradient-to-br from-blue-50 to-indigo-50/60 p-3.5 rounded-2xl border border-blue-100">
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -187,11 +187,9 @@ const AllocationSheet = ({ isOpen, goals, onConfirm }) => {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Sticky Confirm Bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 z-50">
-        <div className="max-w-md mx-auto">
+        {/* Sticky Confirm Button */}
+        <div className="sticky bottom-0 left-0 right-0 pt-3 pb-safe bg-white border-t border-gray-100 mt-4">
           {hasNoActiveGoals ? (
             <Button 
               fullWidth 
@@ -205,7 +203,7 @@ const AllocationSheet = ({ isOpen, goals, onConfirm }) => {
               onClick={() => onConfirm(allocations)}
               disabled={remaining !== 0}
             >
-              {remaining === 0 ? 'Confirm Monthly Surplus Split' : `Allocate exactly 100% (remaining: ${remaining}%)`}
+              {remaining === 0 ? 'Confirm Monthly Surplus Split' : `Allocate exactly 100% (${remaining}% left)`}
             </Button>
           )}
         </div>

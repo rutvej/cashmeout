@@ -191,10 +191,10 @@ const GoalSetup = () => {
                   onClick={() => togglePredefined(item)}
                   className="p-3.5 flex items-center justify-between cursor-pointer"
                 >
-                  <div className="flex items-center space-x-3">
-                    <div className="text-2xl">{item.icon}</div>
-                    <div>
-                      <h4 className="text-sm font-bold text-text-primary">{item.label}</h4>
+                  <div className="flex items-center space-x-3 min-w-0 flex-1 pr-2">
+                    <div className="text-2xl shrink-0">{item.icon}</div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-bold text-text-primary truncate">{item.label}</h4>
                       <p className="text-[11px] text-text-muted">{item.desc}</p>
                     </div>
                   </div>
@@ -384,14 +384,14 @@ const GoalSetup = () => {
                   : 'border-gray-200 bg-white'
               }`}
             >
-              <div className="flex items-center space-x-2.5">
-                <span className="text-2xl">🏥</span>
-                <div>
+              <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
+                <span className="text-2xl shrink-0">🏥</span>
+                <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-text-primary">Comprehensive Health Insurance</h4>
-                  <span className="text-[10px] text-text-muted">₹750/mo · Protects liquid savings from Day 1 medical shocks</span>
+                  <span className="text-[10px] text-text-muted block">₹750/mo · Protects liquid savings from Day 1 medical shocks</span>
                 </div>
               </div>
-              <div className={`w-5 h-5 rounded-md flex items-center justify-center border ${day1HealthInsurance ? 'bg-green-600 border-green-600 text-white text-xs font-bold' : 'border-gray-300'}`}>
+              <div className={`w-5 h-5 rounded-md flex items-center justify-center border shrink-0 ${day1HealthInsurance ? 'bg-green-600 border-green-600 text-white text-xs font-bold' : 'border-gray-300'}`}>
                 {day1HealthInsurance ? '✓' : ''}
               </div>
             </div>
@@ -405,14 +405,14 @@ const GoalSetup = () => {
                     : 'border-gray-200 bg-white'
                 }`}
               >
-                <div className="flex items-center space-x-2.5">
-                  <span className="text-2xl">🚗</span>
-                  <div>
+                <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
+                  <span className="text-2xl shrink-0">🚗</span>
+                  <div className="min-w-0 flex-1">
                     <h4 className="text-xs font-bold text-text-primary">Mandatory Vehicle Insurance</h4>
-                    <span className="text-[10px] text-text-muted">₹350/mo · 90% accident collision coverage for your car</span>
+                    <span className="text-[10px] text-text-muted block">₹350/mo · 90% accident collision coverage for your car</span>
                   </div>
                 </div>
-                <div className={`w-5 h-5 rounded-md flex items-center justify-center border ${day1VehicleInsurance ? 'bg-green-600 border-green-600 text-white text-xs font-bold' : 'border-gray-300'}`}>
+                <div className={`w-5 h-5 rounded-md flex items-center justify-center border shrink-0 ${day1VehicleInsurance ? 'bg-green-600 border-green-600 text-white text-xs font-bold' : 'border-gray-300'}`}>
                   {day1VehicleInsurance ? '✓' : ''}
                 </div>
               </div>

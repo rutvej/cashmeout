@@ -9,19 +9,19 @@ const InsuranceTab = () => {
   const hasCar = store.player?.carOwned || (store.carsOwned && store.carsOwned.length > 0);
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4 pb-24">
       {/* Health Insurance */}
       <Card className={`border-2 ${store.hasHealthInsurance ? 'border-green-400 bg-green-50/30' : 'border-gray-200'}`}>
         <div className="flex justify-between items-start mb-2">
-          <div className="flex items-center">
-            <span className="text-3xl mr-3">🏥</span>
-            <div>
-              <h3 className="font-bold text-base text-text-primary">Health Insurance Policy</h3>
+          <div className="flex items-center min-w-0 flex-1 pr-2">
+            <span className="text-3xl mr-3 shrink-0">🏥</span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold text-base text-text-primary truncate">Health Insurance Policy</h3>
               <p className="text-xs text-text-muted">Protects liquid wealth from hospitalization shocks</p>
             </div>
           </div>
           {store.hasHealthInsurance && (
-            <span className="bg-green-100 text-green-800 text-xs font-black px-2 py-1 rounded">ACTIVE</span>
+            <span className="bg-green-100 text-green-800 text-xs font-black px-2 py-1 rounded shrink-0">ACTIVE</span>
           )}
         </div>
         
@@ -42,15 +42,15 @@ const InsuranceTab = () => {
       {hasCar ? (
         <Card className={`border-2 ${store.hasVehicleInsurance ? 'border-green-400 bg-green-50/30' : 'border-gray-200'}`}>
           <div className="flex justify-between items-start mb-2">
-            <div className="flex items-center">
-              <span className="text-3xl mr-3">🚗</span>
-              <div>
-                <h3 className="font-bold text-base text-text-primary">Vehicle Insurance Policy</h3>
+            <div className="flex items-center min-w-0 flex-1 pr-2">
+              <span className="text-3xl mr-3 shrink-0">🚗</span>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-bold text-base text-text-primary truncate">Vehicle Insurance Policy</h3>
                 <p className="text-xs text-text-muted">Mandatory collision & damage repair coverage</p>
               </div>
             </div>
             {store.hasVehicleInsurance && (
-              <span className="bg-green-100 text-green-800 text-xs font-black px-2 py-1 rounded">ACTIVE</span>
+              <span className="bg-green-100 text-green-800 text-xs font-black px-2 py-1 rounded shrink-0">ACTIVE</span>
             )}
           </div>
           

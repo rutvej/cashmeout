@@ -25,10 +25,10 @@ export default function LedgerDisplay({
 
   return (
     <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden font-sans">
-      <div className="p-4 bg-gradient-to-r from-slate-800 to-slate-900 text-white flex justify-between items-center">
-        <h3 className="font-semibold tracking-wide uppercase text-sm text-slate-300">Monthly Ledger</h3>
-        <div className="text-xl font-bold flex items-center gap-2">
-          <span className="text-slate-400 text-sm font-normal">Surplus:</span>
+      <div className="p-3 sm:p-4 bg-gradient-to-r from-slate-800 to-slate-900 text-white flex justify-between items-center">
+        <h3 className="font-semibold tracking-wide uppercase text-xs sm:text-sm text-slate-300">Monthly Ledger</h3>
+        <div className="text-base sm:text-xl font-bold flex items-center gap-1.5">
+          <span className="text-slate-400 text-xs font-normal">Surplus:</span>
           <span className={surplus >= 0 ? "text-emerald-400" : "text-rose-400"}>
             {surplus >= 0 ? '+' : ''}<CountUp end={surplus} separator="," prefix="₹" duration={1} />
           </span>
@@ -43,7 +43,7 @@ export default function LedgerDisplay({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50">
+            <div className="p-3 sm:p-5 grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-5 bg-slate-50">
               {/* Income Section */}
               <div className="space-y-3 bg-white p-4 rounded-xl shadow-sm border border-emerald-100">
                 <h4 className="text-sm font-bold text-emerald-700 uppercase tracking-wider flex justify-between border-b border-emerald-100 pb-2">
@@ -101,12 +101,12 @@ export default function LedgerDisplay({
       </AnimatePresence>
       
       {!isExpanded && (
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-sm text-slate-500">
-          <div className="flex gap-4">
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs sm:text-sm text-slate-500">
+          <div className="flex gap-2 sm:gap-4">
             <span>In: <span className="font-medium text-emerald-600">{formatCurrency(totalIncome)}</span></span>
             <span>Out: <span className="font-medium text-rose-600">{formatCurrency(totalExpenses)}</span></span>
           </div>
-          <span className="text-xs text-slate-400">Expand for details</span>
+          <span className="text-[10px] sm:text-xs text-slate-400">Expand</span>
         </div>
       )}
     </div>

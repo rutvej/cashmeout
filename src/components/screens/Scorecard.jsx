@@ -364,10 +364,10 @@ Play here: ${shareUrl}`;
               <h3 className="font-bold text-xs uppercase tracking-wider text-text-muted mb-2">Net Worth Trajectory</h3>
               <div className="h-44">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
+                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: -18, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                    <XAxis dataKey="age" tick={{ fontSize: 10 }} stroke="#8A8781" />
-                    <YAxis tick={{ fontSize: 10 }} stroke="#8A8781" tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(0)}L` : `${(v / 1000).toFixed(0)}K`} />
+                    <XAxis dataKey="age" tick={{ fontSize: 9 }} stroke="#8A8781" />
+                    <YAxis width={42} tick={{ fontSize: 9 }} stroke="#8A8781" tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(0)}L` : `${(v / 1000).toFixed(0)}K`} />
                     <Tooltip formatter={(value) => [formatCurrency(value), 'Net Worth']} />
                     <Line type="monotone" dataKey="Net Worth" stroke="#6A8FC4" strokeWidth={2.5} dot={false} />
                   </LineChart>

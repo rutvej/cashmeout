@@ -53,7 +53,7 @@ const EventCard = ({ event, onChoice }) => {
       initial={{ opacity: 0, y: -16, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -16, scale: 0.98 }}
-      className={`mx-4 my-3 p-4 bg-white rounded-2xl shadow-lg border-2 ${borderColor} relative overflow-hidden`}
+      className={`w-full my-2 p-3.5 sm:p-4 bg-white rounded-2xl shadow-lg border-2 ${borderColor} relative overflow-hidden box-border`}
     >
       {/* Top Banner Tag */}
       <div className="flex items-center justify-between mb-3">
@@ -265,7 +265,7 @@ const EventCard = ({ event, onChoice }) => {
               step="1000"
               value={weddingContributionAmount}
               onChange={(e) => setWeddingContributionAmount(Math.max(0, parseInt(e.target.value) || 0))}
-              className="w-full px-2.5 py-1 text-xs border border-amber-300 rounded-lg bg-white font-bold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              className="min-w-0 flex-1 px-2.5 py-1 text-xs border border-amber-300 rounded-lg bg-white font-bold text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
               placeholder="e.g. 15000"
             />
           </div>

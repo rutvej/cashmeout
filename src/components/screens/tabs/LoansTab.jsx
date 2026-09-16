@@ -53,19 +53,19 @@ const LoansTab = () => {
     <div className="space-y-4 pb-24">
       {/* EMI Debt Burden Card */}
       <Card className="border border-gray-100">
-        <div className="flex justify-between items-start mb-2">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-2">
           <div>
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">
               Total Monthly EMI Burden
             </h3>
-            <div className="text-3xl font-black text-text-primary tracking-tight">
+            <div className="text-2xl sm:text-3xl font-black text-text-primary tracking-tight">
               {formatCurrency(totalEmi)}<span className="text-xs text-text-muted font-normal">/mo</span>
             </div>
           </div>
           <Button
             size="sm"
             onClick={() => setShowApplyModal(!showApplyModal)}
-            className="text-xs"
+            className="text-xs self-start sm:self-auto shrink-0"
           >
             + Apply for Loan
           </Button>
@@ -198,7 +198,7 @@ const LoansTab = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-gray-100 flex justify-between items-center text-xs">
+                <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between sm:items-center gap-2 text-xs">
                   <div>
                     <span className="text-text-muted text-[10px] block">Outstanding Principal:</span>
                     <span className="font-bold">{formatCurrency(loan.principal)}</span>
@@ -208,13 +208,13 @@ const LoansTab = () => {
                     <Button
                       size="sm"
                       variant="secondary"
-                      className="text-xs !py-1 text-green-700 border-green-300 hover:bg-green-50"
+                      className="text-xs !py-1 text-green-700 border-green-300 hover:bg-green-50 shrink-0 self-start sm:self-auto"
                       onClick={() => handleRepay(loan.id)}
                     >
                       Prepay Early (Full)
                     </Button>
                   ) : (
-                    <span className="text-[10px] text-text-muted">
+                    <span className="text-[10px] text-text-muted sm:text-right">
                       Need {formatCurrency(loan.principal)} to prepay
                     </span>
                   )}

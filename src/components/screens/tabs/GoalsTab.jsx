@@ -76,12 +76,12 @@ const GoalsTab = () => {
   return (
     <div className="space-y-4 pb-24">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
+      <div className="flex justify-between items-center gap-2">
+        <div className="min-w-0 flex-1">
           <h3 className="font-extrabold text-sm text-text-primary">Life Goals & Buckets</h3>
-          <p className="text-[11px] text-text-muted">Targets adjust yearly with actual category inflation</p>
+          <p className="text-[11px] text-text-muted truncate">Targets adjust yearly with actual category inflation</p>
         </div>
-        <Button size="sm" onClick={() => setShowAddSheet(true)} className="text-xs">
+        <Button size="sm" onClick={() => setShowAddSheet(true)} className="text-xs shrink-0">
           + Add Goal
         </Button>
       </div>
