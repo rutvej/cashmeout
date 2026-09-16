@@ -25,169 +25,246 @@ export default function LifestyleScene() {
 
   // Time of day toggle: 'day' | 'golden' | 'night'
   const [timeMode, setTimeMode] = useState('day');
-  const [activeTooltip, setActiveTooltip] = useState(null);
+  const [hoveredElement, setHoveredElement] = useState(null);
 
   const tier = getLifestyleTier(incomes, businessIncome, homesOwned, carsOwned);
   const cityTier = player?.cityTier || 2;
   const isRenting = player?.isRenting ?? true;
   const hasHome = homesOwned.length > 0;
   const hasSecondHome = homesOwned.length >= 2;
-  const isVilla = hasHome && (homesOwned[0]?.value || 0) > 8000000;
   const primaryHome = homesOwned[0];
+  const isVilla = hasHome && (primaryHome?.value || 0) > 7500000;
   const primaryCar = carsOwned[0];
 
   const tierMeta = {
     starter: {
-      label: 'Early Career Hustle',
+      label: 'Early Hustle Loft',
       badge: 'bg-slate-100 text-slate-700 border-slate-200',
-      tagline: 'Building the foundation · Lean & focused',
+      tagline: 'Urban rental loft · Lean & agile living',
       color: '#64748b',
     },
     middle: {
-      label: 'Rising Professional',
+      label: 'Scandinavian Townhouse',
       badge: 'bg-sky-50 text-sky-700 border-sky-200',
-      tagline: 'Steady growth & financial momentum',
+      tagline: 'Contemporary 2-level home · Solar powered',
       color: '#0284c7',
     },
     comfortable: {
-      label: 'Established Comfort',
+      label: 'Architectural Estate',
       badge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      tagline: 'Homeowner · Secure surplus & freedom',
+      tagline: 'Spacious modern home · Landscaped courtyard',
       color: '#059669',
     },
     wealthy: {
-      label: 'High Net-Worth Estate',
+      label: 'Cantilevered Luxury Villa',
       badge: 'bg-amber-50 text-amber-800 border-amber-300',
-      tagline: 'Luxury living · Passive income & multi-assets',
+      tagline: 'Infinity pool mansion · Passive multi-assets',
       color: '#d97706',
     },
   };
 
   const cityNames = {
-    1: 'Tier 1 Mega-City',
-    2: 'Tier 2 Metro Hub',
+    1: 'Tier 1 Mega-Metropolis',
+    2: 'Tier 2 Metro Tech Hub',
     3: 'Tier 3 Scenic Valley',
   };
 
   const homeStatusLabel = isRenting || !hasHome
-    ? 'Urban Rental Studio'
+    ? 'Urban Studio Loft'
     : isVilla
-    ? 'Modernist Luxury Villa'
+    ? 'Infinity Pool Villa'
     : hasSecondHome
-    ? 'Townhouse + Investment Asset'
+    ? 'Townhouse + Rental Asset'
     : 'Contemporary Townhouse';
 
   const carStatusLabel = carsOwned.length > 0
-    ? (tier === 'wealthy' ? 'Luxury Performance EV' : 'Smart Electric Crossover')
-    : 'Urban Commuter E-Bike';
+    ? (tier === 'wealthy' ? 'Cyber Hypercar EV' : 'Smart Electric Crossover')
+    : 'Commuter E-Bike';
 
   // Palette settings per time of day
   const skyThemes = {
     day: {
-      skyTop: '#60a5fa',
-      skyMid: '#93c5fd',
-      skyBot: '#e0f2fe',
-      sun: '#fde047',
-      sunGlow: 'rgba(254, 240, 138, 0.45)',
+      skyTop: '#38bdf8',
+      skyMid: '#bae6fd',
+      skyBot: '#f0f9ff',
+      sun: '#facc15',
+      sunGlow: 'rgba(250, 204, 21, 0.45)',
       sunInner: '#fef08a',
-      groundLawn1: '#4ade80',
-      groundLawn2: '#22c55e',
-      groundDriveway: '#e2e8f0',
-      pavementTone: '#cbd5e1',
-      hillFar: '#93c5fd',
-      hillMid: '#86efac',
-      buildingLight: '#ffffff',
-      windowGlow: '#fef3c7',
-      windowOpacity: 0.5,
-      lampGlowOpacity: 0,
-      shadowOpacity: 0.28,
+      cloudFill: '#ffffff',
+      cloudOpacity: 0.85,
+      // Island turf
+      lawnTop1: '#4ade80',
+      lawnTop2: '#22c55e',
+      lawnSideL: '#16a34a',
+      lawnSideR: '#15803d',
+      soilL: '#854d0e',
+      soilR: '#713f12',
+      bedrockL: '#334155',
+      bedrockR: '#1e293b',
+      // Road
+      roadFace: '#64748b',
+      roadSide: '#475569',
+      curb: '#cbd5e1',
+      // Architecture
+      wallWhite: '#ffffff',
+      wallWhiteShade: '#e2e8f0',
+      wallDark: '#334155',
+      wallDarkShade: '#1e293b',
+      roofMetal: '#475569',
+      woodTop: '#d97706',
+      woodSide: '#b45309',
+      // Glass
+      windowGlass: 'rgba(186, 230, 253, 0.75)',
+      windowGlow: '#fef9c3',
+      windowGlowOpacity: 0.35,
+      interiorWarmth: 'rgba(254, 240, 138, 0.3)',
+      // Ambient
+      lampGlow: 0,
+      shadowOpacity: 0.22,
+      islandShadow: 'rgba(15, 23, 42, 0.28)',
+      poolWater: '#06b6d4',
+      poolGleam: '#67e8f9',
     },
     golden: {
-      skyTop: '#fb7185',
-      skyMid: '#fdba74',
-      skyBot: '#fef3c7',
-      sun: '#f97316',
-      sunGlow: 'rgba(251, 146, 60, 0.5)',
-      sunInner: '#fdba74',
-      groundLawn1: '#65a30d',
-      groundLawn2: '#4d7c0f',
-      groundDriveway: '#e5e5e5',
-      pavementTone: '#d4d4d4',
-      hillFar: '#f472b6',
-      hillMid: '#ca8a04',
-      buildingLight: '#fff7ed',
-      windowGlow: '#fde047',
-      windowOpacity: 0.85,
-      lampGlowOpacity: 0.45,
-      shadowOpacity: 0.4,
+      skyTop: '#f43f5e',
+      skyMid: '#fb923c',
+      skyBot: '#fef08a',
+      sun: '#ea580c',
+      sunGlow: 'rgba(234, 88, 12, 0.55)',
+      sunInner: '#fde047',
+      cloudFill: '#ffedd5',
+      cloudOpacity: 0.9,
+      // Island turf
+      lawnTop1: '#65a30d',
+      lawnTop2: '#4d7c0f',
+      lawnSideL: '#3f6212',
+      lawnSideR: '#365314',
+      soilL: '#78350f',
+      soilR: '#451a03',
+      bedrockL: '#292524',
+      bedrockR: '#1c1917',
+      // Road
+      roadFace: '#78716c',
+      roadSide: '#57534e',
+      curb: '#d6d3d1',
+      // Architecture
+      wallWhite: '#fff7ed',
+      wallWhiteShade: '#fed7aa',
+      wallDark: '#44403c',
+      wallDarkShade: '#292524',
+      roofMetal: '#57534e',
+      woodTop: '#ea580c',
+      woodSide: '#c2410c',
+      // Glass
+      windowGlass: 'rgba(253, 186, 116, 0.8)',
+      windowGlow: '#fef08a',
+      windowGlowOpacity: 0.7,
+      interiorWarmth: 'rgba(254, 215, 170, 0.65)',
+      // Ambient
+      lampGlow: 0.4,
+      shadowOpacity: 0.36,
+      islandShadow: 'rgba(67, 20, 7, 0.38)',
+      poolWater: '#0891b2',
+      poolGleam: '#fb923c',
     },
     night: {
-      skyTop: '#090d16',
-      skyMid: '#111827',
+      skyTop: '#030712',
+      skyMid: '#0f172a',
       skyBot: '#1e1b4b',
-      sun: '#f1f5f9',
-      sunGlow: 'rgba(224, 231, 255, 0.25)',
+      sun: '#f8fafc',
+      sunGlow: 'rgba(224, 231, 255, 0.2)',
       sunInner: '#ffffff',
-      groundLawn1: '#14532d',
-      groundLawn2: '#052e16',
-      groundDriveway: '#334155',
-      pavementTone: '#1e293b',
-      hillFar: '#1e1b4b',
-      hillMid: '#064e3b',
-      buildingLight: '#1e293b',
+      cloudFill: '#1e293b',
+      cloudOpacity: 0.4,
+      // Island turf
+      lawnTop1: '#064e3b',
+      lawnTop2: '#022c22',
+      lawnSideL: '#022c22',
+      lawnSideR: '#011c16',
+      soilL: '#451a03',
+      soilR: '#290e03',
+      bedrockL: '#0f172a',
+      bedrockR: '#020617',
+      // Road
+      roadFace: '#1e293b',
+      roadSide: '#0f172a',
+      curb: '#475569',
+      // Architecture
+      wallWhite: '#1e293b',
+      wallWhiteShade: '#0f172a',
+      wallDark: '#0f172a',
+      wallDarkShade: '#020617',
+      roofMetal: '#0f172a',
+      woodTop: '#78350f',
+      woodSide: '#451a03',
+      // Glass
+      windowGlass: 'rgba(254, 240, 138, 0.95)',
       windowGlow: '#fef08a',
-      windowOpacity: 0.98,
-      lampGlowOpacity: 0.85,
+      windowGlowOpacity: 0.95,
+      interiorWarmth: 'rgba(254, 240, 138, 0.9)',
+      // Ambient
+      lampGlow: 0.9,
       shadowOpacity: 0.6,
+      islandShadow: 'rgba(2, 6, 23, 0.75)',
+      poolWater: '#0e7490',
+      poolGleam: '#22d3ee',
     },
   };
 
   const theme = skyThemes[timeMode];
 
   return (
-    <div className="mx-4 my-3 rounded-2xl overflow-hidden shadow-sm border border-stone-200/80 bg-white select-none transition-all">
+    <div className="mx-4 my-3 rounded-2xl overflow-hidden shadow-md border border-stone-200/80 bg-white select-none transition-all">
       {/* 2026 Sleek Glassmorphic Header */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2.5 bg-gradient-to-r from-stone-50 via-white to-stone-50 border-b border-stone-100 gap-2">
         <div className="flex items-center space-x-2.5">
           <div className="flex items-center space-x-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50 animate-pulse" />
             <span className="text-[11px] font-black uppercase tracking-wider text-text-primary">
-              Lifestyle Scene
+              2.5D Isometric World
             </span>
           </div>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${tierMeta[tier].badge}`}>
+          <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-2xs ${tierMeta[tier].badge}`}>
             {tierMeta[tier].label}
           </span>
         </div>
 
         {/* Time of Day & Interactive Controls */}
-        <div className="flex items-center space-x-1.5 text-[10px]">
-          <span className="text-text-muted hidden sm:inline mr-1">{cityNames[cityTier]}</span>
-          <div className="inline-flex rounded-lg border border-stone-200 bg-stone-100/80 p-0.5">
+        <div className="flex items-center space-x-2 text-[10px]">
+          <span className="text-text-muted hidden sm:inline font-semibold mr-1">
+            📍 {cityNames[cityTier]}
+          </span>
+          <div className="inline-flex rounded-lg border border-stone-200 bg-stone-100/90 p-0.5 shadow-inner">
             <button
               onClick={() => setTimeMode('day')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition ${
-                timeMode === 'day' ? 'bg-white shadow-xs text-sky-700 font-bold' : 'text-stone-500 hover:text-stone-800'
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                timeMode === 'day'
+                  ? 'bg-white shadow-xs text-sky-600 scale-[1.02]'
+                  : 'text-stone-500 hover:text-stone-800'
               }`}
-              title="Daylight View"
+              title="Daylight Scene"
             >
               ☀️ Day
             </button>
             <button
               onClick={() => setTimeMode('golden')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition ${
-                timeMode === 'golden' ? 'bg-white shadow-xs text-amber-700 font-bold' : 'text-stone-500 hover:text-stone-800'
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                timeMode === 'golden'
+                  ? 'bg-white shadow-xs text-amber-600 scale-[1.02]'
+                  : 'text-stone-500 hover:text-stone-800'
               }`}
-              title="Golden Hour"
+              title="Golden Hour Sunset"
             >
               🌅 Golden
             </button>
             <button
               onClick={() => setTimeMode('night')}
-              className={`px-2 py-0.5 rounded-md font-semibold transition ${
-                timeMode === 'night' ? 'bg-white shadow-xs text-indigo-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                timeMode === 'night'
+                  ? 'bg-white shadow-xs text-indigo-900 scale-[1.02]'
+                  : 'text-stone-500 hover:text-stone-800'
               }`}
-              title="Night Lights"
+              title="Cyber Midnight Glow"
             >
               🌙 Night
             </button>
@@ -195,17 +272,17 @@ export default function LifestyleScene() {
         </div>
       </div>
 
-      {/* Main 2D Visual Canvas */}
-      <div className="relative w-full overflow-hidden bg-slate-900 group">
+      {/* Main 2.5D Isometric Diorama Canvas */}
+      <div className="relative w-full overflow-hidden bg-slate-950 group">
         <svg
-          viewBox="0 0 800 360"
+          viewBox="0 0 920 500"
           className="w-full h-auto block"
-          style={{ minHeight: '190px', maxHeight: '380px' }}
-          preserveAspectRatio="xMidYMid slice"
-          aria-label="Interactive 2D Lifestyle Scene"
+          style={{ minHeight: '260px', maxHeight: '520px' }}
+          preserveAspectRatio="xMidYMid meet"
+          aria-label="Interactive 2.5D Isometric Lifestyle Diorama"
         >
           <defs>
-            {/* Embedded CSS Animations for dynamic living scene */}
+            {/* Embedded Smooth Animation CSS */}
             <style>{`
               @keyframes cloudDriftSlow {
                 0% { transform: translateX(0px); }
@@ -214,753 +291,920 @@ export default function LifestyleScene() {
               }
               @keyframes cloudDriftFast {
                 0% { transform: translateX(0px); }
-                50% { transform: translateX(-28px); }
+                50% { transform: translateX(-40px); }
                 100% { transform: translateX(0px); }
               }
-              @keyframes avatarFloat {
+              @keyframes islandFloat {
                 0%, 100% { transform: translateY(0px); }
-                50% { transform: translateY(-2.5px); }
+                50% { transform: translateY(-4px); }
               }
-              @keyframes beaconPulse {
-                0%, 100% { opacity: 0.2; }
+              @keyframes waterPulse {
+                0%, 100% { opacity: 0.55; transform: scaleX(1); }
+                50% { opacity: 0.9; transform: scaleX(1.02); }
+              }
+              @keyframes petTail {
+                0%, 100% { transform: rotate(0deg); }
+                50% { transform: rotate(18deg); }
+              }
+              @keyframes beaconFlash {
+                0%, 100% { opacity: 0.3; }
                 50% { opacity: 1; }
               }
-              @keyframes waterShimmer {
-                0%, 100% { opacity: 0.45; transform: scaleX(1); }
-                50% { opacity: 0.85; transform: scaleX(1.05); }
+              @keyframes starTwinkle {
+                0%, 100% { opacity: 0.2; }
+                50% { opacity: 0.9; }
               }
-              @keyframes dogTail {
-                0%, 100% { transform: rotate(0deg); }
-                50% { transform: rotate(20deg); }
-              }
-              .anim-cloud-slow { animation: cloudDriftSlow 18s ease-in-out infinite; }
-              .anim-cloud-fast { animation: cloudDriftFast 12s ease-in-out infinite; }
-              .anim-avatar { animation: avatarFloat 3.6s ease-in-out infinite; }
-              .anim-beacon { animation: beaconPulse 2.2s ease-in-out infinite; }
-              .anim-water { animation: waterShimmer 3s ease-in-out infinite; }
-              .anim-tail { transform-origin: 396px 290px; animation: dogTail 0.8s ease-in-out infinite; }
+              .anim-cloud-slow { animation: cloudDriftSlow 24s ease-in-out infinite; }
+              .anim-cloud-fast { animation: cloudDriftFast 16s ease-in-out infinite; }
+              .anim-island { animation: islandFloat 5.5s ease-in-out infinite; }
+              .anim-water { animation: waterPulse 3s ease-in-out infinite; transform-origin: center; }
+              .anim-tail { transform-origin: 395px 335px; animation: petTail 0.75s ease-in-out infinite; }
+              .anim-beacon { animation: beaconFlash 1.6s ease-in-out infinite; }
+              .anim-star-1 { animation: starTwinkle 2.4s ease-in-out infinite; }
+              .anim-star-2 { animation: starTwinkle 3.2s ease-in-out 0.8s infinite; }
             `}</style>
 
-            {/* Sky Gradients */}
-            <linearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
+            {/* Sky Background Gradient */}
+            <linearGradient id="isoSkyGrad" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={theme.skyTop} />
-              <stop offset="55%" stopColor={theme.skyMid} />
+              <stop offset="60%" stopColor={theme.skyMid} />
               <stop offset="100%" stopColor={theme.skyBot} />
             </linearGradient>
 
-            {/* Lawn Gradients */}
-            <linearGradient id="lawnGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={theme.groundLawn1} />
-              <stop offset="100%" stopColor={theme.groundLawn2} />
+            {/* Floating Island Top Lawn Gradient */}
+            <linearGradient id="islandLawnGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={theme.lawnTop1} />
+              <stop offset="100%" stopColor={theme.lawnTop2} />
             </linearGradient>
 
-            {/* Ground / Patio / Road */}
-            <linearGradient id="pavementGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor={theme.groundDriveway} />
-              <stop offset="50%" stopColor={theme.pavementTone} />
-              <stop offset="100%" stopColor={theme.groundDriveway} />
+            {/* Teak Wood Cladding Gradient */}
+            <linearGradient id="teakSlatGrad" x1="0" y1="0" x2="1" y2="0.3">
+              <stop offset="0%" stopColor={theme.woodTop} />
+              <stop offset="50%" stopColor={theme.woodSide} />
+              <stop offset="100%" stopColor={theme.woodTop} />
             </linearGradient>
 
-            {/* Glass Facade Reflective Gradient */}
-            <linearGradient id="glassReflect" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="rgba(255,255,255,0.75)" />
-              <stop offset="40%" stopColor="rgba(186,230,253,0.4)" />
-              <stop offset="100%" stopColor="rgba(125,211,252,0.15)" />
+            {/* Solar Photovoltaic Panels Sheen */}
+            <linearGradient id="solarGlassGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#1e3a8a" />
+              <stop offset="40%" stopColor="#2563eb" />
+              <stop offset="70%" stopColor="#1d4ed8" />
+              <stop offset="100%" stopColor="#0f172a" />
             </linearGradient>
 
-            {/* Warm Luxury Teak Wood Grain */}
-            <linearGradient id="teakWood" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#d97706" />
-              <stop offset="50%" stopColor="#b45309" />
-              <stop offset="100%" stopColor="#92400e" />
+            {/* Pool Water 3D Depth Gradient */}
+            <linearGradient id="isoPoolGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor={theme.poolGleam} />
+              <stop offset="60%" stopColor={theme.poolWater} />
+              <stop offset="100%" stopColor="#083344" />
             </linearGradient>
 
-            {/* Modern Charcoal Cladding */}
-            <linearGradient id="charcoalPanel" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#334155" />
-              <stop offset="100%" stopColor="#1e293b" />
-            </linearGradient>
-
-            {/* Pool Turquoise Gradient */}
-            <linearGradient id="poolGrad" x1="0" y1="0" x2="1" y2="0.8">
-              <stop offset="0%" stopColor="#06b6d4" />
-              <stop offset="50%" stopColor="#0ea5e9" />
-              <stop offset="100%" stopColor="#0284c7" />
-            </linearGradient>
-
-            {/* Car Paint Gradient */}
-            <linearGradient id="carPaint" x1="0" y1="0" x2="1" y2="0.5">
+            {/* Car Gloss Paint (Dynamic by Tier) */}
+            <linearGradient id="carGlossGrad" x1="0" y1="0" x2="1" y2="0.8">
               {tier === 'wealthy' ? (
                 <>
-                  <stop offset="0%" stopColor="#0f172a" />
-                  <stop offset="45%" stopColor="#1e293b" />
-                  <stop offset="60%" stopColor="#334155" />
-                  <stop offset="100%" stopColor="#0f172a" />
+                  <stop offset="0%" stopColor="#38bdf8" />
+                  <stop offset="35%" stopColor="#0284c7" />
+                  <stop offset="75%" stopColor="#0c4a6e" />
+                  <stop offset="100%" stopColor="#082f49" />
                 </>
               ) : (
                 <>
-                  <stop offset="0%" stopColor="#0284c7" />
-                  <stop offset="45%" stopColor="#38bdf8" />
-                  <stop offset="70%" stopColor="#0369a1" />
-                  <stop offset="100%" stopColor="#075985" />
+                  <stop offset="0%" stopColor="#f8fafc" />
+                  <stop offset="40%" stopColor="#cbd5e1" />
+                  <stop offset="70%" stopColor="#94a3b8" />
+                  <stop offset="100%" stopColor="#475569" />
                 </>
               )}
             </linearGradient>
 
-            {/* Filters */}
-            <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="6" stdDeviation="6" floodOpacity={theme.shadowOpacity} />
+            {/* Glass Facade High-Grade Reflection */}
+            <linearGradient id="glassSheen" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="rgba(255,255,255,0.85)" />
+              <stop offset="30%" stopColor="rgba(224,242,254,0.45)" />
+              <stop offset="60%" stopColor="rgba(186,230,253,0.15)" />
+              <stop offset="100%" stopColor="rgba(125,211,252,0.3)" />
+            </linearGradient>
+
+            {/* Glow & Soft Shadow Filters */}
+            <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="8" />
             </filter>
-            <filter id="groundDrop" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="3" />
+            <filter id="lampGlowFilter" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="14" />
             </filter>
-            <filter id="lampGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="12" />
+            <filter id="islandShadowBlur" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="22" />
             </filter>
-            <filter id="windowBloom" x="-20%" y="-20%" width="140%" height="140%">
+            <filter id="windowBloomFilter" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="4" />
             </filter>
           </defs>
 
-          {/* 1. Dynamic Sky Base */}
-          <rect width="800" height="360" fill="url(#skyGrad)" />
+          {/* ========================================================
+              1. ATMOSPHERIC SKY & HORIZON BACKDROP
+              ======================================================== */}
+          <rect width="920" height="500" fill="url(#isoSkyGrad)" />
 
-          {/* 2. Celestial Body (Sun / Moon) */}
-          <g transform="translate(680, 65)">
-            <circle cx="0" cy="0" r="48" fill={theme.sunGlow} />
-            <circle cx="0" cy="0" r="32" fill={theme.sunGlow} />
-            <circle cx="0" cy="0" r="20" fill={theme.sunInner} />
-            {timeMode === 'night' && (
-              <circle cx="6" cy="-6" r="16" fill={theme.skyTop} opacity="0.9" />
-            )}
-          </g>
-
-          {/* 3. Drifting Fluffy Clouds */}
-          <g className="anim-cloud-slow" opacity={timeMode === 'night' ? 0.22 : 0.85}>
-            {/* Cloud 1 */}
-            <path
-              d="M120,70 Q135,45 165,50 Q195,40 220,60 Q245,65 240,85 Q235,95 210,95 L130,95 Q110,90 120,70 Z"
-              fill="#ffffff"
-              opacity="0.9"
-            />
-            {/* Cloud 2 */}
-            <path
-              d="M480,50 Q500,30 530,35 Q560,25 580,45 Q605,50 600,70 L500,70 Q475,65 480,50 Z"
-              fill="#ffffff"
-              opacity="0.75"
-            />
-          </g>
-          <g className="anim-cloud-fast" opacity={timeMode === 'night' ? 0.15 : 0.65}>
-            <path
-              d="M320,85 Q335,68 360,72 Q385,62 405,80 Q420,84 415,98 L330,98 Q315,94 320,85 Z"
-              fill="#ffffff"
-              opacity="0.8"
-            />
-          </g>
-
-          {/* 4. Distant City Skyline & Mountains */}
-          {cityTier === 3 ? (
-            /* Scenic Valley Hills for Tier 3 */
+          {/* Night Mode: Twinkling Starfield */}
+          {timeMode === 'night' && (
             <g>
-              <path
-                d="M-50,220 Q120,130 320,190 Q520,110 850,210 L850,300 L-50,300 Z"
-                fill={theme.hillFar}
-                opacity="0.45"
-              />
-              <path
-                d="M-20,240 Q180,180 440,230 Q650,170 820,245 L820,300 L-20,300 Z"
-                fill={theme.hillMid}
-                opacity="0.55"
-              />
-            </g>
-          ) : (
-            /* Modern City Skyline for Tier 1 & 2 */
-            <g opacity={timeMode === 'night' ? 0.75 : 0.6}>
-              {/* Distant Towers Layer */}
-              <rect x="420" y="110" width="38" height="150" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} rx="3" />
-              <rect x="470" y="85" width="44" height="175" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} rx="3" />
-              {/* Tower Antenna with Pulsing Beacon */}
-              <line x1="492" y1="85" x2="492" y2="52" stroke="#ef4444" strokeWidth="2" />
-              <circle cx="492" cy="52" r="3" fill="#ef4444" className="anim-beacon" />
-
-              <rect x="525" y="125" width="34" height="135" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} rx="3" />
-              <rect x="570" y="95" width="50" height="165" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} rx="3" />
-              <rect x="630" y="130" width="42" height="130" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} rx="3" />
-              <rect x="685" y="105" width="48" height="155" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} rx="4" />
-
-              {/* Glowing Skyline Windows */}
               {[
-                { x: 476, y: 95 }, { x: 486, y: 95 }, { x: 498, y: 95 },
-                { x: 476, y: 110 }, { x: 498, y: 110 },
-                { x: 486, y: 125 }, { x: 476, y: 140 },
-                { x: 578, y: 108 }, { x: 592, y: 108 }, { x: 606, y: 108 },
-                { x: 578, y: 124 }, { x: 606, y: 124 },
-                { x: 692, y: 118 }, { x: 708, y: 118 }, { x: 720, y: 118 },
-                { x: 692, y: 135 }, { x: 720, y: 135 },
-              ].map((w, i) => (
-                <rect
-                  key={`skywin-${i}`}
-                  x={w.x}
-                  y={w.y}
-                  width="5"
-                  height="7"
-                  rx="1"
-                  fill={theme.windowGlow}
-                  opacity={timeMode === 'night' ? 0.95 : 0.45}
-                />
+                { x: 75, y: 35, r: 1.2, cls: 'anim-star-1' },
+                { x: 140, y: 70, r: 1.5, cls: 'anim-star-2' },
+                { x: 230, y: 40, r: 1, cls: 'anim-star-1' },
+                { x: 310, y: 85, r: 1.4, cls: 'anim-star-2' },
+                { x: 620, y: 45, r: 1.2, cls: 'anim-star-1' },
+                { x: 690, y: 80, r: 1.6, cls: 'anim-star-2' },
+                { x: 760, y: 35, r: 1, cls: 'anim-star-1' },
+                { x: 840, y: 65, r: 1.5, cls: 'anim-star-2' },
+                { x: 480, y: 30, r: 1.2, cls: 'anim-star-1' },
+              ].map((s, i) => (
+                <circle key={`star-${i}`} cx={s.x} cy={s.y} r={s.r} fill="#ffffff" className={s.cls} />
               ))}
             </g>
           )}
 
-          {/* 5. Ground Terraces, Lawn & Modern Paver Driveway */}
-          <g>
-            {/* Back Lawn Slope */}
-            <path
-              d="M0,235 Q250,225 500,238 Q680,245 800,235 L800,360 L0,360 Z"
-              fill="url(#lawnGrad)"
-            />
-
-            {/* Contemporary Concrete Pavement / Sidewalk Strip */}
-            <path
-              d="M0,285 L800,285 L800,360 L0,360 Z"
-              fill="url(#pavementGrad)"
-            />
-
-            {/* Pavement Joint Lines (Modern Architectural Grid) */}
-            {[0, 80, 160, 240, 320, 400, 480, 560, 640, 720, 800].map(x => (
-              <line
-                key={`pave-${x}`}
-                x1={x}
-                y1="285"
-                x2={x - 25}
-                y2="360"
-                stroke="rgba(0,0,0,0.07)"
-                strokeWidth="1.5"
-              />
-            ))}
-            <line x1="0" y1="285" x2="800" y2="285" stroke="rgba(255,255,255,0.4)" strokeWidth="2" />
+          {/* Celestial Body (Sun / Moon) */}
+          <g transform="translate(780, 80)">
+            <circle cx="0" cy="0" r="50" fill={theme.sunGlow} />
+            <circle cx="0" cy="0" r="32" fill={theme.sunGlow} />
+            <circle cx="0" cy="0" r="20" fill={theme.sunInner} />
+            {timeMode === 'night' && (
+              <circle cx="6" cy="-6" r="16" fill={theme.skyTop} opacity="0.95" />
+            )}
           </g>
 
-          {/* 6. PRIMARY ARCHITECTURE (Home Visual Progression) */}
-          {isRenting || !hasHome ? (
-            /* =========================================================
-               TIER A: CHIC URBAN APARTMENT BUILDING (Renting / Starter)
-               ========================================================= */
-            <g
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.005]"
-              onMouseEnter={() => setActiveTooltip('Urban Apartment: Modern rental living with low maintenance overhead.')}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              {/* Building Base Shadow */}
-              <ellipse cx="200" cy="285" rx="145" ry="12" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
-
-              {/* Main Structural Block */}
-              <rect x="65" y="110" width="260" height="175" rx="10" fill={theme.buildingLight} stroke="#cbd5e1" strokeWidth="2" />
-              {/* Charcoal Architectural Trim */}
-              <rect x="65" y="110" width="260" height="12" rx="4" fill="url(#charcoalPanel)" />
-              {/* Vertical Timber Slat Accent Panel */}
-              <rect x="235" y="122" width="60" height="163" fill="url(#teakWood)" opacity="0.9" />
-
-              {/* Modern Building Signage */}
-              <rect x="85" y="96" width="90" height="18" rx="4" fill="#0f172a" />
-              <text x="130" y="108" fill="#f8fafc" fontSize="8" fontWeight="800" textAnchor="middle" letterSpacing="1.5">
-                URBAN RESIDENCES
-              </text>
-
-              {/* Floor 3 Balcony & Floor-to-ceiling Glass */}
-              <g transform="translate(85, 130)">
-                <rect x="0" y="0" width="55" height="38" rx="3" fill="#0f172a" />
-                <rect x="2" y="2" width="51" height="34" rx="2" fill={theme.windowGlow} opacity={theme.windowOpacity} />
-                <rect x="2" y="2" width="51" height="34" rx="2" fill="url(#glassReflect)" />
-                {/* Indoor Pendant Light Silhouette */}
-                <circle cx="28" cy="10" r="3" fill="#eab308" />
-                <line x1="28" y1="2" x2="28" y2="8" stroke="#0f172a" strokeWidth="1" />
-                {/* Balcony Railing with Frosted Glass */}
-                <rect x="-4" y="24" width="63" height="15" rx="2" fill="rgba(255,255,255,0.7)" stroke="#64748b" strokeWidth="1.2" />
-                {/* Potted Plant on Balcony */}
-                <circle cx="5" cy="22" r="5" fill="#22c55e" />
-                <rect x="3" y="24" width="4" height="6" fill="#78350f" rx="1" />
-              </g>
-
-              {/* Floor 2 Balcony & Floor-to-ceiling Glass */}
-              <g transform="translate(85, 180)">
-                <rect x="0" y="0" width="55" height="38" rx="3" fill="#0f172a" />
-                <rect x="2" y="2" width="51" height="34" rx="2" fill={theme.windowGlow} opacity={theme.windowOpacity} />
-                <rect x="2" y="2" width="51" height="34" rx="2" fill="url(#glassReflect)" />
-                {/* Balcony Railing */}
-                <rect x="-4" y="24" width="63" height="15" rx="2" fill="rgba(255,255,255,0.7)" stroke="#64748b" strokeWidth="1.2" />
-                {/* Small potted succulent */}
-                <circle cx="50" cy="23" r="4" fill="#10b981" />
-              </g>
-
-              {/* Floor 3 & 2 Corner Windows */}
-              <g transform="translate(160, 130)">
-                <rect x="0" y="0" width="60" height="38" rx="3" fill={theme.windowGlow} opacity={theme.windowOpacity} stroke="#475569" strokeWidth="1.5" />
-                <rect x="0" y="0" width="60" height="38" rx="3" fill="url(#glassReflect)" />
-                {/* Blinds detail */}
-                <line x1="0" y1="8" x2="60" y2="8" stroke="rgba(0,0,0,0.15)" strokeWidth="1" />
-                <line x1="0" y1="16" x2="60" y2="16" stroke="rgba(0,0,0,0.15)" strokeWidth="1" />
-              </g>
-
-              <g transform="translate(160, 180)">
-                <rect x="0" y="0" width="60" height="38" rx="3" fill={theme.windowGlow} opacity={theme.windowOpacity} stroke="#475569" strokeWidth="1.5" />
-                <rect x="0" y="0" width="60" height="38" rx="3" fill="url(#glassReflect)" />
-              </g>
-
-              {/* Ground Floor Chic Glass Lobby Entrance */}
-              <g transform="translate(125, 230)">
-                {/* Entrance Canopy */}
-                <rect x="-15" y="-6" width="105" height="7" rx="2" fill="url(#charcoalPanel)" />
-                {/* Warm Entrance Recessed Downlight */}
-                <ellipse cx="37" cy="0" rx="30" ry="12" fill={theme.windowGlow} opacity={theme.lampGlowOpacity} filter="url(#lampGlow)" />
-                {/* Glass Entryway */}
-                <rect x="0" y="0" width="75" height="55" rx="2" fill="url(#glassReflect)" stroke="#334155" strokeWidth="2" />
-                {/* Sliding Door Frame */}
-                <line x1="37" y1="0" x2="37" y2="55" stroke="#334155" strokeWidth="2" />
-                <rect x="18" y="24" width="3" height="14" rx="1" fill="#94a3b8" />
-                <rect x="42" y="24" width="3" height="14" rx="1" fill="#94a3b8" />
-              </g>
-
-              {/* Landscaping around apartment */}
-              <circle cx="70" cy="275" r="16" fill="#16a34a" />
-              <circle cx="62" cy="272" r="12" fill="#22c55e" />
-              <circle cx="315" cy="274" r="18" fill="#15803d" />
-              <circle cx="325" cy="270" r="14" fill="#4ade80" />
-            </g>
-          ) : isVilla ? (
-            /* =========================================================
-               TIER C: ULTRA-LUXURY ARCHITECTURAL VILLA (Wealthy Tier)
-               ========================================================= */
-            <g
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.005]"
-              onMouseEnter={() => setActiveTooltip(`Luxury Villa: Est. Value ₹${((primaryHome?.value || 9000000) / 100000).toFixed(0)}L · Prestigious architectural masterwork.`)}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              {/* Villa Ground Shadow */}
-              <ellipse cx="210" cy="285" rx="170" ry="14" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
-
-              {/* Lower Level: Minimalist White Stucco & Panoramic Glass */}
-              <rect x="60" y="160" width="280" height="125" rx="6" fill="#ffffff" stroke="#e2e8f0" strokeWidth="2" />
-
-              {/* Upper Cantilever Volume: Textured Slate & Teak Wood Louvers */}
-              <rect x="40" y="90" width="240" height="85" rx="8" fill="url(#charcoalPanel)" />
-              {/* Teak Wood Slats Accent on Cantilever */}
-              <rect x="45" y="95" width="95" height="75" rx="4" fill="url(#teakWood)" opacity="0.95" />
-
-              {/* Rooftop Garden Terrace & Glass Balustrade */}
-              <rect x="150" y="80" width="130" height="14" rx="2" fill="rgba(255,255,255,0.85)" stroke="#94a3b8" strokeWidth="1" />
-              {/* Rooftop Lounge Chairs */}
-              <path d="M175,82 L190,75 L200,82" stroke="#38bdf8" strokeWidth="3" fill="none" strokeLinecap="round" />
-              {/* Rooftop Planter */}
-              <circle cx="260" cy="76" r="7" fill="#16a34a" />
-              <circle cx="270" cy="74" r="5" fill="#22c55e" />
-
-              {/* Upper Master Suite Panoramic Glass */}
-              <g transform="translate(150, 102)">
-                <rect x="0" y="0" width="120" height="62" rx="4" fill={theme.windowGlow} opacity={theme.windowOpacity} />
-                <rect x="0" y="0" width="120" height="62" rx="4" fill="url(#glassReflect)" stroke="#475569" strokeWidth="1.5" />
-                {/* Modern Chandelier Silhouette */}
-                <circle cx="60" cy="18" r="4" fill="#fbbf24" filter="url(#windowBloom)" />
-                <line x1="60" y1="0" x2="60" y2="15" stroke="#94a3b8" strokeWidth="1" />
-              </g>
-
-              {/* Ground Floor Living Pavilion: Floor-to-Ceiling Curtain Wall */}
-              <g transform="translate(75, 175)">
-                <rect x="0" y="0" width="170" height="98" rx="4" fill={theme.windowGlow} opacity={theme.windowOpacity} />
-                <rect x="0" y="0" width="170" height="98" rx="4" fill="url(#glassReflect)" stroke="#334155" strokeWidth="2" />
-                <line x1="56" y1="0" x2="56" y2="98" stroke="#334155" strokeWidth="1.5" />
-                <line x1="112" y1="0" x2="112" y2="98" stroke="#334155" strokeWidth="1.5" />
-                {/* Interior Living Art & Shelf Silhouette */}
-                <rect x="18" y="35" width="22" height="42" fill="#334155" opacity="0.3" rx="2" />
-              </g>
-
-              {/* Front Private Infinity Reflection Pool */}
-              <g transform="translate(85, 276)">
-                {/* Pool Basin Rim */}
-                <rect x="-4" y="-3" width="158" height="24" rx="4" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1" />
-                {/* Turquoise Pool Water */}
-                <rect x="0" y="0" width="150" height="18" rx="2" fill="url(#poolGrad)" />
-                {/* Animated Light Shimmer */}
-                <ellipse cx="75" cy="8" rx="55" ry="4" fill="#ffffff" className="anim-water" />
-              </g>
-
-              {/* Villa Entryway with Floating Stepping Stones */}
-              <g transform="translate(260, 205)">
-                <rect x="0" y="0" width="65" height="78" fill="url(#teakWood)" rx="4" />
-                <rect x="10" y="0" width="45" height="78" fill="#1e293b" rx="2" />
-                <rect x="42" y="34" width="3" height="18" fill="#f59e0b" rx="1" />
-                {/* Sconce Light */}
-                <circle cx="8" cy="22" r="3" fill="#fef08a" />
-                <ellipse cx="8" cy="22" rx="16" ry="16" fill="#fde047" opacity={theme.lampGlowOpacity} filter="url(#lampGlow)" />
-              </g>
-
-              {/* Manicured Landscaping: Cypress trees & modern planter box */}
-              <g transform="translate(345, 175)">
-                {/* Tall Architectural Italian Cypress Tree */}
-                <path d="M12,0 Q24,45 18,100 L6,100 Q0,45 12,0 Z" fill="#14532d" />
-                <path d="M12,0 Q18,45 14,100 L6,100 Q2,45 12,0 Z" fill="#16a34a" />
-                <rect x="8" y="98" width="8" height="14" fill="#451a03" />
-              </g>
-              <g transform="translate(30, 185)">
-                <path d="M10,0 Q20,38 15,85 L5,85 Q0,38 10,0 Z" fill="#15803d" />
-                <rect x="7" y="83" width="6" height="12" fill="#451a03" />
-              </g>
+          {/* Distant Skyline / Mountains */}
+          {cityTier === 3 ? (
+            /* Scenic Mountain Range for Tier 3 */
+            <g opacity={timeMode === 'night' ? 0.35 : 0.55}>
+              <polygon points="40,240 180,120 320,240" fill={timeMode === 'night' ? '#1e1b4b' : '#93c5fd'} />
+              <polygon points="180,120 230,165 180,180 130,165" fill="#ffffff" opacity="0.8" />
+              <polygon points="260,250 440,110 620,250" fill={timeMode === 'night' ? '#0f172a' : '#60a5fa'} />
+              <polygon points="440,110 500,160 440,175 380,160" fill="#ffffff" opacity="0.8" />
+              <polygon points="560,260 720,135 880,260" fill={timeMode === 'night' ? '#1e1b4b' : '#93c5fd'} />
             </g>
           ) : (
-            /* =========================================================
-               TIER B: CONTEMPORARY SCANDINAVIAN TOWNHOUSE (Comfortable / Middle)
-               ========================================================= */
+            /* Sleek Metropolis Skyline Towers for Tier 1 & 2 */
+            <g opacity={timeMode === 'night' ? 0.65 : 0.45}>
+              {/* Distant Skyscraper 1 */}
+              <polygon points="610,130 655,108 655,270 610,290" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} />
+              <polygon points="655,108 700,130 700,290 655,270" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} />
+              {/* Tower Antenna with Pulsing Beacon */}
+              <line x1="655" y1="108" x2="655" y2="65" stroke="#ef4444" strokeWidth="2" />
+              <circle cx="655" cy="65" r="3.5" fill="#ef4444" className="anim-beacon" />
+
+              {/* Distant Skyscraper 2 */}
+              <polygon points="720,150 760,130 760,285 720,305" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} />
+              <polygon points="760,130 800,150 800,305 760,285" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} />
+
+              {/* Distant Skyscraper 3 */}
+              <polygon points="120,160 160,140 160,280 120,300" fill={timeMode === 'night' ? '#1e293b' : '#94a3b8'} />
+              <polygon points="160,140 200,160 200,300 160,280" fill={timeMode === 'night' ? '#0f172a' : '#64748b'} />
+
+              {/* Glowing Skyline Windows at Night */}
+              {timeMode === 'night' && (
+                <g fill="#fef08a" opacity="0.8">
+                  <rect x="620" y="140" width="6" height="4" rx="1" />
+                  <rect x="635" y="148" width="6" height="4" rx="1" />
+                  <rect x="620" y="165" width="6" height="4" rx="1" />
+                  <rect x="670" y="150" width="6" height="4" rx="1" />
+                  <rect x="685" y="165" width="6" height="4" rx="1" />
+                  <rect x="735" y="170" width="5" height="4" rx="1" />
+                  <rect x="775" y="175" width="5" height="4" rx="1" />
+                </g>
+              )}
+            </g>
+          )}
+
+          {/* Drifting Stylized Clouds */}
+          <g className="anim-cloud-slow" opacity={theme.cloudOpacity}>
+            <path
+              d="M140,85 Q160,65 190,70 Q220,55 250,75 Q275,80 270,105 L150,105 Q125,100 140,85 Z"
+              fill={theme.cloudFill}
+            />
+            <path
+              d="M580,75 Q600,55 630,60 Q660,45 685,65 Q710,70 705,90 L600,90 Q570,85 580,75 Z"
+              fill={theme.cloudFill}
+            />
+          </g>
+          <g className="anim-cloud-fast" opacity={theme.cloudOpacity * 0.75}>
+            <path
+              d="M340,105 Q360,88 385,92 Q410,80 435,98 Q450,105 445,120 L350,120 Q330,115 340,105 Z"
+              fill={theme.cloudFill}
+            />
+          </g>
+
+          {/* ========================================================
+              2. THE FLOATING ISOMETRIC ISLAND DIORAMA (The "Chunk")
+              ======================================================== */}
+          {/* Island Floating Drop Shadow onto the Void */}
+          <ellipse
+            cx="460"
+            cy="445"
+            rx="320"
+            ry="45"
+            fill={theme.islandShadow}
+            filter="url(#islandShadowBlur)"
+          />
+
+          {/* Island Group with gentle hover animation */}
+          <g className="anim-island">
+            {/* --- 3D Under-Cliff Strata (Cross-Section Soil & Bedrock) --- */}
+            {/* Left Soil Face */}
+            <polygon
+              points="140,290 460,440 460,465 140,315"
+              fill={theme.soilL}
+            />
+            {/* Right Soil Face */}
+            <polygon
+              points="460,440 780,290 780,315 460,465"
+              fill={theme.soilR}
+            />
+
+            {/* Left Bedrock Strata (Deep geological layer) */}
+            <polygon
+              points="140,315 460,465 460,480 300,430 140,315"
+              fill={theme.bedrockL}
+            />
+            {/* Right Bedrock Strata */}
+            <polygon
+              points="460,465 780,315 620,430 460,480"
+              fill={theme.bedrockR}
+            />
+            {/* Bottom floating craggy keel */}
+            <polygon
+              points="300,430 460,480 460,490 380,470"
+              fill="#0f172a"
+              opacity="0.8"
+            />
+            <polygon
+              points="460,480 620,430 540,470 460,490"
+              fill="#020617"
+              opacity="0.9"
+            />
+
+            {/* Overhanging Grass Sod Lip (Rich green overhang bevel) */}
+            <polygon
+              points="140,290 460,440 460,446 140,296"
+              fill={theme.lawnSideL}
+            />
+            <polygon
+              points="460,440 780,290 780,296 460,446"
+              fill={theme.lawnSideR}
+            />
+
+            {/* --- Top Isometric Turf Surface (Diamond Island Plot) --- */}
+            {/* Top vertex: (460, 140), Left: (140, 290), Right: (780, 290), Bottom: (460, 440) */}
+            <polygon
+              points="460,140 780,290 460,440 140,290"
+              fill="url(#islandLawnGrad)"
+            />
+
+            {/* Isometric Lawn Grid Texture / Stripes */}
+            {[
+              "M220,252 L540,402",
+              "M300,215 L620,365",
+              "M380,178 L700,328",
+            ].map((d, i) => (
+              <path key={`mow-${i}`} d={d} stroke="rgba(255,255,255,0.08)" strokeWidth="18" />
+            ))}
+
+            {/* --- Isometric Diagonal Road / Paved Access Driveway --- */}
+            {/* Road coming from bottom-left (190, 315) across to (370, 400) */}
+            <polygon
+              points="140,290 280,355 410,295 270,230"
+              fill={theme.roadFace}
+            />
+            {/* Concrete Curb edge */}
+            <polygon
+              points="280,355 410,295 413,296 283,357"
+              fill={theme.curb}
+            />
+            {/* Road markings (dashed white isometric lane divider) */}
+            <line x1="205" y1="260" x2="235" y2="274" stroke="#ffffff" strokeWidth="2" strokeDasharray="6,6" opacity="0.8" />
+            <line x1="275" y1="292" x2="345" y2="325" stroke="#ffffff" strokeWidth="2" strokeDasharray="6,6" opacity="0.8" />
+
+            {/* Modern Architectural Stone Paver Path to Front Entryway */}
+            {[
+              { x: 340, y: 320, w: 22, h: 11 },
+              { x: 365, y: 308, w: 22, h: 11 },
+              { x: 390, y: 296, w: 22, h: 11 },
+              { x: 415, y: 284, w: 22, h: 11 },
+            ].map((p, i) => (
+              <polygon
+                key={`paver-${i}`}
+                points={`${p.x},${p.y} ${p.x + p.w},${p.y + p.h * 0.5} ${p.x},${p.y + p.h} ${p.x - p.w},${p.y + p.h * 0.5}`}
+                fill="#e2e8f0"
+                stroke="#94a3b8"
+                strokeWidth="0.8"
+                opacity={timeMode === 'night' ? 0.4 : 0.85}
+              />
+            ))}
+
+            {/* ========================================================
+                3. ARCHITECTURE PROGRESSION (Isometric 2.5D Buildings)
+                ======================================================== */}
+            {isRenting || !hasHome ? (
+              /* =======================================================
+                 TIER 1: CHIC MINIMALIST URBAN STUDIO LOFT (Starter)
+                 ======================================================= */
+              <g
+                className="cursor-pointer transition-transform hover:scale-[1.01]"
+                onMouseEnter={() => setHoveredElement('Urban Studio Loft: Lean starter pad with high mobility and low overhead.')}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Building Ground Contact Shadow */}
+                <polygon
+                  points="390,320 630,210 670,230 430,340"
+                  fill="black"
+                  opacity={theme.shadowOpacity}
+                />
+
+                {/* --- Main 3-Storey Loft Volume --- */}
+                {/* Center base vertex: (470, 310), Top: (470, 150) */}
+                {/* Left Face (Shaded): Width 110 */}
+                <polygon
+                  points="360,255 470,310 470,160 360,105"
+                  fill={theme.wallWhiteShade}
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                />
+                {/* Right Face (Sunlit/Key lit): Width 140 */}
+                <polygon
+                  points="470,310 610,240 610,90 470,160"
+                  fill={theme.wallWhite}
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                />
+                {/* Roof Top Face (Flat modern terrace) */}
+                <polygon
+                  points="470,160 610,90 500,35 360,105"
+                  fill={theme.roofMetal}
+                  stroke="#334155"
+                  strokeWidth="1"
+                />
+
+                {/* Rooftop Parapet Perimeter Lip */}
+                <polygon
+                  points="470,160 610,90 610,85 470,155"
+                  fill="#64748b"
+                />
+                <polygon
+                  points="360,105 470,155 470,160 360,110"
+                  fill="#475569"
+                />
+
+                {/* Rooftop HVAC Chiller Unit */}
+                <polygon points="430,120 460,105 460,95 430,110" fill="#94a3b8" />
+                <polygon points="460,105 485,118 485,108 460,95" fill="#cbd5e1" />
+                <polygon points="430,110 460,95 485,108 455,123" fill="#e2e8f0" />
+                {/* Satellite Receiver Dish */}
+                <line x1="530" y1="85" x2="530" y2="70" stroke="#0f172a" strokeWidth="2" />
+                <ellipse cx="530" cy="70" rx="8" ry="4" fill="#cbd5e1" stroke="#475569" strokeWidth="1" transform="rotate(-25 530 70)" />
+
+                {/* --- Left Facade Details: Balconies & Glass Windows --- */}
+                {/* 3rd Floor Left Window */}
+                <polygon points="380,135 440,165 440,195 380,165" fill={theme.windowGlass} stroke="#334155" strokeWidth="1" />
+                {timeMode !== 'day' && (
+                  <polygon points="380,135 440,165 440,195 380,165" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+                {/* Balcony Steel Railing */}
+                <polygon points="375,155 445,190 445,198 375,163" fill="rgba(255,255,255,0.6)" stroke="#475569" strokeWidth="0.8" />
+
+                {/* 2nd Floor Left Window */}
+                <polygon points="380,185 440,215 440,245 380,215" fill={theme.windowGlass} stroke="#334155" strokeWidth="1" />
+                {timeMode !== 'day' && (
+                  <polygon points="380,185 440,215 440,245 380,215" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+
+                {/* Ground Floor Chic Glass Entrance Lobby */}
+                <polygon points="380,245 445,278 445,302 380,270" fill="url(#glassSheen)" stroke="#0f172a" strokeWidth="1.5" />
+                {/* Glass Door Frame */}
+                <line x1="412" y1="261" x2="412" y2="286" stroke="#0f172a" strokeWidth="1.5" />
+                {/* Modern Cantilevered Entrance Canopy */}
+                <polygon points="370,245 450,285 460,280 380,240" fill="#0f172a" />
+
+                {/* --- Right Facade Details: Floor-to-Ceiling Panoramic Windows --- */}
+                {/* 3rd Floor Right Window */}
+                <polygon points="490,145 590,95 590,140 490,190" fill={theme.windowGlass} stroke="#334155" strokeWidth="1" />
+                {timeMode !== 'day' && (
+                  <polygon points="490,145 590,95 590,140 490,190" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+                {/* Glass Reflection Streak */}
+                <polygon points="505,145 530,132 530,170 505,182" fill="url(#glassSheen)" />
+
+                {/* 2nd Floor Right Window */}
+                <polygon points="490,195 590,145 590,190 490,240" fill={theme.windowGlass} stroke="#334155" strokeWidth="1" />
+                {timeMode !== 'day' && (
+                  <polygon points="490,195 590,145 590,190 490,240" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+
+                {/* Ground Floor Teak Wood Cladding Accent */}
+                <polygon points="490,245 590,195 590,245 490,295" fill="url(#teakSlatGrad)" stroke="#78350f" strokeWidth="1" />
+                {/* Slats detail */}
+                <line x1="515" y1="233" x2="515" y2="283" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+                <line x1="540" y1="220" x2="540" y2="270" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+                <line x1="565" y1="207" x2="565" y2="257" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+              </g>
+            ) : isVilla ? (
+              /* =======================================================
+                 TIER 4: ULTRA-LUXURY CANTILEVERED GLASS VILLA (Wealthy)
+                 ======================================================= */
+              <g
+                className="cursor-pointer transition-transform hover:scale-[1.01]"
+                onMouseEnter={() => setHoveredElement(`Modernist Villa: ₹${((primaryHome?.value || 9000000) / 100000).toFixed(0)}L · High architectural pedigree & infinity pool.`)}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Villa Dramatic Drop Shadow */}
+                <polygon
+                  points="360,330 650,185 710,215 420,360"
+                  fill="black"
+                  opacity={theme.shadowOpacity}
+                />
+
+                {/* --- Ground Level Pavilion (Crisp White Stucco & Glass) --- */}
+                {/* Base center: (490, 310) */}
+                <polygon points="380,255 490,310 490,210 380,155" fill={theme.wallWhiteShade} />
+                <polygon points="490,310 650,230 650,130 490,210" fill={theme.wallWhite} />
+
+                {/* Floor-to-Ceiling Ground Glass Curtain Wall */}
+                <polygon points="505,215 635,150 635,225 505,290" fill={theme.windowGlass} stroke="#334155" strokeWidth="1.2" />
+                {timeMode !== 'day' && (
+                  <polygon points="505,215 635,150 635,225 505,290" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+                <line x1="550" y1="193" x2="550" y2="268" stroke="#1e293b" strokeWidth="1.5" />
+                <line x1="595" y1="170" x2="595" y2="245" stroke="#1e293b" strokeWidth="1.5" />
+
+                {/* --- Dramatic Upper Cantilever Volume (Floating Box) --- */}
+                {/* Upper Left Shaded Face */}
+                <polygon
+                  points="350,180 470,240 470,140 350,80"
+                  fill={theme.wallDarkShade}
+                  stroke="#0f172a"
+                  strokeWidth="1.2"
+                />
+                {/* Upper Right Sunlit Face (Charcoal Slate & Wood) */}
+                <polygon
+                  points="470,240 640,155 640,55 470,140"
+                  fill={theme.wallDark}
+                  stroke="#0f172a"
+                  strokeWidth="1.2"
+                />
+                {/* Upper Cantilever Flat Roof Terrace */}
+                <polygon
+                  points="470,140 640,55 520,-5 350,80"
+                  fill="#1e293b"
+                  stroke="#334155"
+                  strokeWidth="1"
+                />
+
+                {/* Teak Wood Feature Siding on Upper Box */}
+                <polygon points="360,170 420,200 420,130 360,100" fill="url(#teakSlatGrad)" opacity="0.9" />
+
+                {/* Upper Master Suite Panoramic Glass Front */}
+                <polygon points="490,140 625,72 625,135 490,202" fill={theme.windowGlass} stroke="#0f172a" strokeWidth="1.5" />
+                {timeMode !== 'day' && (
+                  <polygon points="490,140 625,72 625,135 490,202" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+                {/* Chandelier Interior Light Bloom */}
+                <circle cx="550" cy="140" r="5" fill="#fde047" opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+
+                {/* Rooftop Garden Lounge Deck */}
+                <polygon points="480,100 580,50 540,30 440,80" fill="url(#teakSlatGrad)" />
+                {/* Rooftop Tempered Glass Balustrade */}
+                <polygon points="475,135 635,55 635,45 475,125" fill="rgba(255,255,255,0.7)" stroke="#cbd5e1" strokeWidth="1" />
+                {/* Rooftop Lounge Sunbed */}
+                <polygon points="500,80 525,67 535,72 510,85" fill="#38bdf8" />
+
+                {/* --- Sunken Infinity Edge Swimming Pool --- */}
+                {/* Teak Pool Deck Border */}
+                <polygon points="440,340 590,265 630,285 480,360" fill="url(#teakSlatGrad)" stroke="#78350f" strokeWidth="1" />
+                {/* Pool Basin Cavity */}
+                <polygon points="460,345 575,287 610,305 495,362" fill="#083344" />
+                {/* Crystal Turquoise Pool Water */}
+                <polygon points="462,347 573,291 608,307 497,363" fill="url(#isoPoolGrad)" className="anim-water" />
+                {/* Night Underwater Pool Glow */}
+                {timeMode === 'night' && (
+                  <polygon
+                    points="462,347 573,291 608,307 497,363"
+                    fill="#22d3ee"
+                    opacity="0.8"
+                    filter="url(#softGlow)"
+                  />
+                )}
+                {/* Sun Loungers by Pool */}
+                <polygon points="435,325 450,317 458,321 443,329" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+                <polygon points="448,318 463,310 471,314 456,322" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+                {/* Pool Parasol Umbrella */}
+                <line x1="430" y1="315" x2="430" y2="280" stroke="#475569" strokeWidth="2" />
+                <polygon points="430,280 410,290 430,295 450,290" fill="#f43f5e" />
+
+                {/* Manicured Landscaping: Architectural Italian Cypress Trees */}
+                <g transform="translate(640, 180)">
+                  <polygon points="0,40 -8,15 0,-15 8,15" fill="#14532d" />
+                  <polygon points="0,40 0,-15 8,15" fill="#16a34a" />
+                  <rect x="-2" y="38" width="4" height="10" fill="#451a03" />
+                </g>
+                <g transform="translate(665, 195)">
+                  <polygon points="0,35 -7,12 0,-10 7,12" fill="#14532d" />
+                  <polygon points="0,35 0,-10 7,12" fill="#16a34a" />
+                  <rect x="-2" y="33" width="4" height="8" fill="#451a03" />
+                </g>
+              </g>
+            ) : (
+              /* =======================================================
+                 TIER 2 & 3: CONTEMPORARY SCANDINAVIAN TOWNHOUSE (Middle/Comfortable)
+                 ======================================================= */
+              <g
+                className="cursor-pointer transition-transform hover:scale-[1.01]"
+                onMouseEnter={() => setActiveTooltipHelper(`Owned Home: ₹${((primaryHome?.value || 4500000) / 100000).toFixed(0)}L · Detached modern property.`)}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Ground Contact Shadow */}
+                <polygon
+                  points="370,320 630,190 680,215 420,345"
+                  fill="black"
+                  opacity={theme.shadowOpacity}
+                />
+
+                {/* --- House Main Volume --- */}
+                {/* Left Shaded Face */}
+                <polygon
+                  points="360,250 480,310 480,180 360,120"
+                  fill={theme.wallWhiteShade}
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                />
+                {/* Right Sunlit Face */}
+                <polygon
+                  points="480,310 620,240 620,110 480,180"
+                  fill={theme.wallWhite}
+                  stroke="#cbd5e1"
+                  strokeWidth="1.2"
+                />
+
+                {/* Pitched Modern Gable Roof */}
+                {/* Gable triangle on Left Face: Peak at (420, 70) */}
+                <polygon
+                  points="360,120 420,70 480,180"
+                  fill={theme.roofMetal}
+                  stroke="#1e293b"
+                  strokeWidth="1"
+                />
+                {/* Long Sloping Roof Plane to Right: Peak ridge (420, 70) -> (560, 0) */}
+                <polygon
+                  points="420,70 560,0 620,110 480,180"
+                  fill={theme.wallDark}
+                  stroke="#0f172a"
+                  strokeWidth="1"
+                />
+
+                {/* Rooftop High-Efficiency Solar Panel Array */}
+                <polygon
+                  points="450,110 540,65 570,115 480,160"
+                  fill="url(#solarGlassGrad)"
+                  stroke="#60a5fa"
+                  strokeWidth="1.2"
+                />
+                {/* Solar Cell Grid Lines */}
+                <line x1="495" y1="87" x2="525" y2="137" stroke="#93c5fd" strokeWidth="0.8" opacity="0.6" />
+                <line x1="465" y1="135" x2="555" y2="90" stroke="#93c5fd" strokeWidth="0.8" opacity="0.6" />
+
+                {/* Front Cedar Wood Siding Bay */}
+                <polygon points="495,200 560,167 560,240 495,272" fill="url(#teakSlatGrad)" stroke="#78350f" strokeWidth="1" />
+
+                {/* Large Living Room Floor-to-Ceiling Window */}
+                <polygon points="505,205 550,182 550,235 505,258" fill={theme.windowGlass} stroke="#1e293b" strokeWidth="1.5" />
+                {timeMode !== 'day' && (
+                  <polygon points="505,205 550,182 550,235 505,258" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+
+                {/* Left Side Picture Window */}
+                <polygon points="380,195 440,225 440,265 380,235" fill={theme.windowGlass} stroke="#334155" strokeWidth="1.2" />
+                {timeMode !== 'day' && (
+                  <polygon points="380,195 440,225 440,265 380,235" fill={theme.windowGlow} opacity={theme.windowGlowOpacity} filter="url(#windowBloomFilter)" />
+                )}
+
+                {/* Front Entrance Porch & Modern Door */}
+                <polygon points="575,185 615,165 615,225 575,245" fill="#451a03" stroke="#78350f" strokeWidth="1" />
+                <line x1="605" y1="195" x2="605" y2="215" stroke="#fef08a" strokeWidth="1.5" />
+                {/* Porch Sconce Light */}
+                <circle cx="570" cy="180" r="2.5" fill="#fef08a" />
+                {timeMode !== 'day' && (
+                  <ellipse cx="570" cy="180" rx="14" ry="14" fill="#fde047" opacity={theme.lampGlow} filter="url(#lampGlowFilter)" />
+                )}
+
+                {/* Renovation Badge if Home Needs Repair */}
+                {homeNeedsRenovation && (
+                  <g transform="translate(450, 140)">
+                    <rect x="-45" y="-18" width="90" height="20" rx="4" fill="#fee2e2" stroke="#ef4444" strokeWidth="1.5" />
+                    <text x="0" y="-4" fill="#b91c1c" fontSize="8" fontWeight="800" textAnchor="middle">
+                      ⚠️ REPAIR NEEDED
+                    </text>
+                  </g>
+                )}
+
+                {/* Flowering Garden Landscaping */}
+                <g transform="translate(635, 230)">
+                  <circle cx="0" cy="0" r="14" fill="#15803d" />
+                  <circle cx="-5" cy="-4" r="10" fill="#22c55e" />
+                  <circle cx="-2" cy="-6" r="3" fill="#f472b6" />
+                  <circle cx="4" cy="2" r="3.5" fill="#fb7185" />
+                  <circle cx="-6" cy="4" r="3" fill="#fbcfe8" />
+                </g>
+              </g>
+            )}
+
+            {/* Second Property / Rental Investment Asset (If owned) */}
+            {hasSecondHome && (
+              <g
+                transform="translate(180, -35)"
+                className="cursor-pointer transition-transform hover:scale-[1.02]"
+                onMouseEnter={() => setHoveredElement('Rental Asset: Generating steady monthly passive cash flow!')}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Annex Building Left & Right Faces */}
+                <polygon points="490,195 550,225 550,150 490,120" fill="#312e81" stroke="#4338ca" strokeWidth="1" />
+                <polygon points="550,225 610,195 610,120 550,150" fill="#1e1b4b" stroke="#4338ca" strokeWidth="1" />
+                <polygon points="490,120 550,150 610,120 550,90" fill="#4338ca" stroke="#6366f1" strokeWidth="1" />
+                {/* Illuminated Rental Badge */}
+                <polygon points="510,165 540,180 540,165 510,150" fill="#4f46e5" />
+                <polygon points="560,180 590,165 590,150 560,165" fill="#fef08a" opacity={timeMode === 'night' ? 0.9 : 0.6} />
+              </g>
+            )}
+
+            {/* ========================================================
+                4. ISOMETRIC VEHICLE (Progression: E-Bike -> EV Crossover -> Cyber Hypercar)
+                ======================================================== */}
+            {carsOwned.length === 0 ? (
+              /* --- NO CAR: HIGH-TECH COMMUTER E-BIKE / E-SCOOTER --- */
+              <g
+                transform="translate(260, 275)"
+                className="cursor-pointer transition-transform hover:scale-[1.05]"
+                onMouseEnter={() => setHoveredElement('Commuter E-Bike: Zero fuel costs, zero EMIs, low maintenance freedom.')}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Ground Shadow */}
+                <ellipse cx="25" cy="28" rx="26" ry="6" fill="black" opacity={theme.shadowOpacity} />
+                {/* Rear Wheel (Isometric ellipse) */}
+                <ellipse cx="8" cy="20" rx="9" ry="12" fill="none" stroke="#0f172a" strokeWidth="3" transform="rotate(-15 8 20)" />
+                <circle cx="8" cy="20" r="3" fill="#94a3b8" />
+                {/* Front Wheel */}
+                <ellipse cx="44" cy="38" rx="9" ry="12" fill="none" stroke="#0f172a" strokeWidth="3" transform="rotate(-15 44 38)" />
+                <circle cx="44" cy="38" r="3" fill="#94a3b8" />
+                {/* Modern Aero Frame (Vibrant Cyan) */}
+                <path d="M8,20 L24,28 L44,38 L34,16 Z" fill="none" stroke="#0284c7" strokeWidth="3" strokeLinejoin="round" />
+                <line x1="24" y1="28" x2="20" y2="12" stroke="#0284c7" strokeWidth="3" strokeLinecap="round" />
+                {/* Saddle */}
+                <line x1="14" y1="11" x2="24" y2="13" stroke="#0f172a" strokeWidth="4" strokeLinecap="round" />
+                {/* Steering & Handlebars */}
+                <line x1="44" y1="38" x2="38" y2="14" stroke="#0f172a" strokeWidth="2.5" />
+                <line x1="32" y1="12" x2="44" y2="16" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
+                {/* LED Headlight */}
+                <circle cx="41" cy="18" r="2.5" fill="#38bdf8" />
+              </g>
+            ) : (
+              /* --- OWNED CAR: SLEEK ISOMETRIC ELECTRIC VEHICLE --- */
+              <g
+                transform="translate(235, 260)"
+                className="cursor-pointer transition-transform hover:scale-[1.02]"
+                onMouseEnter={() => setHoveredElement(`${carStatusLabel}: High performance mobility & safety.`)}
+                onMouseLeave={() => setHoveredElement(null)}
+              >
+                {/* Vehicle Contact Shadow */}
+                <polygon
+                  points="20,70 125,122 170,100 65,48"
+                  fill="black"
+                  opacity={theme.shadowOpacity}
+                />
+
+                {/* --- 2.5D Isometric Car Body Chassis --- */}
+                {/* Left Side Face */}
+                <polygon
+                  points="25,58 120,105 120,85 25,38"
+                  fill="url(#carGlossGrad)"
+                  stroke="#1e293b"
+                  strokeWidth="1"
+                />
+                {/* Front Nose Face */}
+                <polygon
+                  points="120,105 160,85 160,68 120,85"
+                  fill="url(#carGlossGrad)"
+                  stroke="#1e293b"
+                  strokeWidth="1"
+                />
+                {/* Top Hood & Aerodynamic Cabin Roof */}
+                <polygon
+                  points="25,38 120,85 160,68 65,22"
+                  fill="url(#carGlossGrad)"
+                  stroke="#334155"
+                  strokeWidth="1"
+                />
+
+                {/* Panoramic Glass Cabin / Windshield */}
+                <polygon
+                  points="50,38 105,65 125,55 70,28"
+                  fill="#38bdf8"
+                  opacity="0.8"
+                  stroke="#0f172a"
+                  strokeWidth="1"
+                />
+                <polygon
+                  points="105,65 125,55 125,65 105,75"
+                  fill="#0284c7"
+                  opacity="0.9"
+                />
+
+                {/* Front Continuous LED Lightbar */}
+                <line x1="122" y1="88" x2="158" y2="70" stroke="#fef08a" strokeWidth="3" strokeLinecap="round" />
+                {/* Headlight Beams Projected Forward onto Driveway at Night */}
+                {timeMode !== 'day' && (
+                  <polygon
+                    points="122,88 158,70 240,110 180,140"
+                    fill="#fef08a"
+                    opacity="0.3"
+                    filter="url(#lampGlowFilter)"
+                  />
+                )}
+
+                {/* Rear Sleek Red LED Tail Strip */}
+                <line x1="24" y1="45" x2="28" y2="52" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" />
+
+                {/* 3D Isometric Alloy Wheels */}
+                {/* Front Wheel */}
+                <g transform="translate(108, 92)">
+                  <ellipse cx="0" cy="0" rx="9" ry="14" fill="#0f172a" />
+                  <ellipse cx="0" cy="0" rx="6" ry="10" fill="#475569" />
+                  <circle cx="0" cy="0" r="3" fill="#e2e8f0" />
+                </g>
+                {/* Rear Wheel */}
+                <g transform="translate(48, 62)">
+                  <ellipse cx="0" cy="0" rx="9" ry="14" fill="#0f172a" />
+                  <ellipse cx="0" cy="0" rx="6" ry="10" fill="#475569" />
+                  <circle cx="0" cy="0" r="3" fill="#e2e8f0" />
+                </g>
+              </g>
+            )}
+
+            {/* ========================================================
+                5. LIVING CHARACTERS & PETS (Modern Isometric Vector Avatars)
+                ======================================================== */}
             <g
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.005]"
-              onMouseEnter={() => setActiveTooltip(`Owned Home: Est. Value ₹${((primaryHome?.value || 4500000) / 100000).toFixed(0)}L · Modern detached home.`)}
-              onMouseLeave={() => setActiveTooltip(null)}
+              transform="translate(375, 275)"
+              className="cursor-pointer"
+              onMouseEnter={() => setHoveredElement(married ? 'You & Your Partner: Building wealth and a family legacy.' : 'Your Avatar: On the path to financial independence.')}
+              onMouseLeave={() => setHoveredElement(null)}
             >
-              {/* Base Drop Shadow */}
-              <ellipse cx="190" cy="285" rx="145" ry="12" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
+              {/* Contact shadow beneath feet */}
+              <ellipse cx="20" cy="48" rx={married ? "24" : "14"} ry="5" fill="black" opacity={theme.shadowOpacity} />
 
-              {/* Main House Body */}
-              <rect x="65" y="145" width="245" height="140" rx="6" fill={theme.buildingLight} stroke="#cbd5e1" strokeWidth="2" />
+              {/* --- PLAYER AVATAR --- */}
+              <g transform="translate(8, 0)">
+                {/* Modern Hairstyle */}
+                <polygon points="12,4 18,2 24,5 22,12 10,12" fill="#1e293b" />
+                {/* Head */}
+                <circle cx="16" cy="12" r="7" fill="#fcd9b6" />
+                <circle cx="14" cy="11" r="0.9" fill="#0f172a" />
+                <circle cx="18" cy="11" r="0.9" fill="#0f172a" />
 
-              {/* Pitched Modern Standing-Seam Slate Roof */}
-              <polygon points="50,148 185,82 320,148" fill="url(#charcoalPanel)" stroke="#0f172a" strokeWidth="1.5" />
-              <polygon points="58,145 185,85 312,145" fill="#334155" />
+                {/* Styled Torso / Jacket based on Tier */}
+                {tier === 'wealthy' ? (
+                  /* Designer Overcoat */
+                  <polygon points="10,18 22,18 24,38 8,38" fill="#0f172a" />
+                ) : tier === 'comfortable' ? (
+                  /* Smart Tailored Blazer */
+                  <polygon points="10,18 22,18 23,36 9,36" fill="#0369a1" />
+                ) : (
+                  /* Casual Streetwear Hoodie */
+                  <polygon points="10,18 22,18 23,35 9,35" fill={tier === 'middle' ? '#2563eb' : '#475569'} />
+                )}
+                {/* White Shirt Collar */}
+                <polygon points="14,18 16,23 18,18" fill="#ffffff" />
 
-              {/* Rooftop Solar Panels Array */}
-              <g transform="translate(195, 96)">
-                <polygon points="0,32 45,10 90,32 45,54" fill="#1e3a8a" stroke="#60a5fa" strokeWidth="1" />
-                {/* Solar grid lines */}
-                <line x1="22" y1="21" x2="68" y2="43" stroke="#93c5fd" strokeWidth="0.8" opacity="0.6" />
-                <line x1="45" y1="10" x2="45" y2="54" stroke="#93c5fd" strokeWidth="0.8" opacity="0.6" />
+                {/* Arms & Hands */}
+                <line x1="10" y1="20" x2="6" y2="30" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="22" y1="20" x2="25" y2="28" stroke="#fcd9b6" strokeWidth="2.5" strokeLinecap="round" />
+                {/* Smartphone in hand */}
+                <rect x="24" y="27" width="3" height="5" rx="0.5" fill="#f59e0b" />
+
+                {/* Chinos / Trousers */}
+                <line x1="13" y1="36" x2="12" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+                <line x1="19" y1="36" x2="20" y2="46" stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+
+                {/* Clean White Sneakers */}
+                <rect x="9" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
+                <rect x="18" y="44" width="6" height="3" rx="1.5" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.8" />
               </g>
 
-              {/* Architectural Cedar Accent Wall */}
-              <rect x="75" y="155" width="105" height="125" fill="url(#teakWood)" rx="3" opacity="0.9" />
+              {/* --- PARTNER AVATAR (Rendered side-by-side if married) --- */}
+              {married && (
+                <g transform="translate(28, 2)">
+                  {/* Flowing Styled Hair */}
+                  <path d="M8,10 Q14,2 20,6 Q24,14 20,24 Q16,20 10,20 Z" fill="#78350f" />
+                  {/* Head */}
+                  <circle cx="15" cy="12" r="6.5" fill="#fde2cb" />
+                  <circle cx="13" cy="12" r="0.8" fill="#0f172a" />
+                  <circle cx="17" cy="12" r="0.8" fill="#0f172a" />
 
-              {/* Large Picture Window with Warm Glow */}
-              <g transform="translate(85, 170)">
-                <rect x="0" y="0" width="85" height="68" rx="3" fill={theme.windowGlow} opacity={theme.windowOpacity} />
-                <rect x="0" y="0" width="85" height="68" rx="3" fill="url(#glassReflect)" stroke="#1e293b" strokeWidth="2" />
-                <line x1="42" y1="0" x2="42" y2="68" stroke="#1e293b" strokeWidth="1.5" />
-                {/* Indoor plant silhouette on windowsill */}
-                <circle cx="20" cy="56" r="6" fill="#16a34a" />
-              </g>
+                  {/* Chic Outfit */}
+                  <polygon points="10,18 20,18 22,36 8,36" fill="#ec4899" />
+                  {/* Arms */}
+                  <line x1="10" y1="20" x2="7" y2="28" stroke="#fde2cb" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="20" y1="20" x2="23" y2="28" stroke="#fde2cb" strokeWidth="2" strokeLinecap="round" />
 
-              {/* Upper Attic Gable Circular Window */}
-              <circle cx="185" cy="120" r="13" fill={theme.windowGlow} opacity={theme.windowOpacity} stroke="#0f172a" strokeWidth="2" />
-              <line x1="185" y1="107" x2="185" y2="133" stroke="#0f172a" strokeWidth="1.5" />
-              <line x1="172" y1="120" x2="198" y2="120" stroke="#0f172a" strokeWidth="1.5" />
+                  {/* Slacks & Shoes */}
+                  <line x1="12" y1="36" x2="12" y2="45" stroke="#334155" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="18" y1="36" x2="18" y2="45" stroke="#334155" strokeWidth="3" strokeLinecap="round" />
+                  <rect x="9" y="43" width="5" height="3" rx="1" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.6" />
+                  <rect x="16" y="43" width="5" height="3" rx="1" fill="#ffffff" stroke="#cbd5e1" strokeWidth="0.6" />
 
-              {/* Front Porch & Modern Door */}
-              <g transform="translate(200, 185)">
-                {/* Porch Overhang Canopy */}
-                <rect x="-6" y="-6" width="72" height="8" rx="2" fill="url(#charcoalPanel)" />
-                {/* Modern Solid Oak Door */}
-                <rect x="6" y="2" width="48" height="95" rx="3" fill="#451a03" stroke="#78350f" strokeWidth="1.5" />
-                {/* Sleek Vertical Steel Handle */}
-                <rect x="42" y="44" width="3" height="22" rx="1" fill="#e2e8f0" />
-                {/* Glowing Porch Light */}
-                <circle cx="58" cy="20" r="3" fill="#fde047" />
-                <ellipse cx="58" cy="20" rx="18" ry="18" fill="#fde047" opacity={theme.lampGlowOpacity} filter="url(#lampGlow)" />
-                {/* Welcome Doormat */}
-                <rect x="10" y="94" width="40" height="6" rx="1" fill="#a16207" />
-              </g>
-
-              {/* Renovation Cue Overlay if Home Needs Repair */}
-              {homeNeedsRenovation && (
-                <g transform="translate(130, 130)">
-                  <path d="M0,0 L18,22 L10,35 L24,50" stroke="#ef4444" strokeWidth="2.5" fill="none" strokeLinecap="round" />
-                  <rect x="-40" y="-25" width="115" height="20" rx="4" fill="#fee2e2" stroke="#ef4444" strokeWidth="1" />
-                  <text x="18" y="-12" fill="#b91c1c" fontSize="8" fontWeight="800" textAnchor="middle">
-                    ⚠️ MAINTENANCE DUE
-                  </text>
+                  {/* Floating Love Heart */}
+                  <path
+                    d="M-2,6 C-2,3 -6,3 -6,6 C-6,9 -2,11 -2,13 C-2,11 2,9 2,6 C2,3 -2,3 -2,6 Z"
+                    fill="#f43f5e"
+                    opacity="0.9"
+                  />
                 </g>
               )}
 
-              {/* Garden Landscaping & Flowering Bushes */}
-              <circle cx="60" cy="275" r="16" fill="#15803d" />
-              <circle cx="52" cy="270" r="12" fill="#22c55e" />
-              {/* Pink Flower Blooms */}
-              <circle cx="50" cy="265" r="3" fill="#f472b6" />
-              <circle cx="62" cy="272" r="3" fill="#fb7185" />
-              <circle cx="315" cy="274" r="15" fill="#16a34a" />
+              {/* --- PLAYFUL PET COMPANION (Golden Retriever if comfortable or wealthy) --- */}
+              {(tier === 'comfortable' || tier === 'wealthy') && (
+                <g transform="translate(-25, 20)">
+                  {/* Dog Body */}
+                  <ellipse cx="14" cy="14" rx="10" ry="7" fill="#f59e0b" />
+                  {/* Head */}
+                  <circle cx="23" cy="9" r="5.5" fill="#f59e0b" />
+                  <circle cx="25" cy="8" r="0.9" fill="#0f172a" />
+                  <ellipse cx="27" cy="11" rx="2" ry="1.5" fill="#b45309" />
+                  <ellipse cx="20" cy="9" rx="2" ry="4" fill="#b45309" />
+                  {/* Legs */}
+                  <line x1="9" y1="17" x2="8" y2="24" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="18" y1="17" x2="18" y2="24" stroke="#d97706" strokeWidth="2.5" strokeLinecap="round" />
+                  {/* Wagging Tail */}
+                  <path d="M5,12 Q0,8 1,3" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" fill="none" className="anim-tail" />
+                  {/* Red Toy Ball */}
+                  <circle cx="32" cy="22" r="3" fill="#ef4444" />
+                </g>
+              )}
             </g>
-          )}
 
-          {/* 7. SECOND PROPERTY / INVESTMENT ASSET (If owned) */}
-          {hasSecondHome && (
-            <g
-              transform="translate(325, 160)"
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.01]"
-              onMouseEnter={() => setActiveTooltip('Investment Asset: Generating monthly rental yield.')}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              {/* Annex Building */}
-              <rect x="0" y="25" width="85" height="98" rx="6" fill="#1e1b4b" stroke="#6366f1" strokeWidth="2" />
-              <polygon points="-5,28 42,0 90,28" fill="#312e81" stroke="#4338ca" strokeWidth="1.5" />
-              {/* Active Rental Badge */}
-              <rect x="10" y="34" width="65" height="15" rx="3" fill="#4338ca" />
-              <text x="42" y="44" fill="#e0e7ff" fontSize="7" fontWeight="800" textAnchor="middle">
-                RENTAL ASSET
-              </text>
-              {/* Lit Windows */}
-              <rect x="12" y="55" width="26" height="24" rx="2" fill="#fef08a" opacity="0.85" />
-              <rect x="46" y="55" width="26" height="24" rx="2" fill="#fef08a" opacity="0.85" />
-              {/* Door */}
-              <rect x="28" y="86" width="28" height="37" fill="#0f172a" rx="2" />
-            </g>
-          )}
-
-          {/* 8. VEHICLE DISPLAY (Progression: E-Bike -> EV Crossover -> Luxury Grand Tourer) */}
-          {carsOwned.length === 0 ? (
-            /* =========================================================
-               NO CAR: URBAN COMMUTER E-BIKE / E-SCOOTER
-               ========================================================= */
-            <g
-              transform="translate(450, 255)"
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.03]"
-              onMouseEnter={() => setActiveTooltip('E-Bike: Eco-friendly commuting with zero fuel/loan debt.')}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              {/* Bike Shadow */}
-              <ellipse cx="40" cy="30" rx="36" ry="5" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
-
-              {/* Front and Rear Spoke Wheels */}
-              <circle cx="16" cy="20" r="12" fill="none" stroke="#0f172a" strokeWidth="3" />
-              <circle cx="16" cy="20" r="4" fill="#94a3b8" />
-              <circle cx="64" cy="20" r="12" fill="none" stroke="#0f172a" strokeWidth="3" />
-              <circle cx="64" cy="20" r="4" fill="#94a3b8" />
-
-              {/* Sleek Modern Frame with Cyan Battery Pack */}
-              <path d="M16,20 L36,20 L52,6 L64,20" stroke="#0284c7" strokeWidth="3.5" fill="none" strokeLinecap="round" />
-              <path d="M36,20 L44,2 L32,2" stroke="#0284c7" strokeWidth="3" fill="none" strokeLinecap="round" />
-              <line x1="52" y1="6" x2="56" y2="-4" stroke="#0f172a" strokeWidth="2.5" strokeLinecap="round" />
-              {/* Handlebars */}
-              <line x1="50" y1="-4" x2="62" y2="-4" stroke="#0f172a" strokeWidth="3" strokeLinecap="round" />
-              {/* Saddle */}
-              <path d="M28,2 L40,2" stroke="#0f172a" strokeWidth="4" strokeLinecap="round" />
-              {/* Glowing LED Headlight */}
-              <circle cx="62" cy="-2" r="2.5" fill="#38bdf8" />
-            </g>
-          ) : (
-            /* =========================================================
-               OWNED CAR: SLEEK 2026 MODERN EV / LUXURY GT
-               ========================================================= */
-            <g
-              transform="translate(430, 240)"
-              filter="url(#softShadow)"
-              className="cursor-pointer transition-transform hover:scale-[1.01]"
-              onMouseEnter={() => setActiveTooltip(`${carStatusLabel}: Reliable mobility and comfort.`)}
-              onMouseLeave={() => setActiveTooltip(null)}
-            >
-              {/* Vehicle Underbody Shadow */}
-              <ellipse cx="85" cy="46" rx="80" ry="8" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
-
-              {/* Lower Body Aero Aerodynamics */}
-              <rect x="6" y="24" width="160" height="22" rx="9" fill="url(#carPaint)" />
-
-              {/* Sweeping Aerodynamic Greenhouse / Glass Cabin */}
-              <path
-                d="M26,24 L48,6 Q100,2 135,10 L152,24 Z"
-                fill="url(#carPaint)"
-              />
-              {/* Tinted Panoramic Windshields & Side Windows */}
-              <path
-                d="M32,22 L50,8 Q85,5 110,8 L110,22 Z"
-                fill="#38bdf8"
-                opacity="0.75"
-              />
-              <path
-                d="M115,22 L115,8 Q130,10 144,22 Z"
-                fill="#38bdf8"
-                opacity="0.75"
-              />
-
-              {/* Shoulder Line Chrome / Specular Highlight */}
-              <path d="M8,25 Q80,21 162,25" stroke="rgba(255,255,255,0.75)" strokeWidth="1.8" fill="none" />
-
-              {/* Front Continuous LED Lightbar */}
-              <path d="M152,24 L165,27 L158,32" stroke="#fef08a" strokeWidth="3" fill="none" strokeLinecap="round" />
+            {/* ========================================================
+                6. MODERN SOLAR STREET FURNITURE & AMBIENT BOLLARDS
+                ======================================================== */}
+            {/* Front Left Solar Bollard Lamp */}
+            <g transform="translate(190, 310)">
+              <polygon points="0,0 5,2 5,16 0,14" fill="#334155" />
+              <polygon points="5,2 10,0 10,14 5,16" fill="#1e293b" />
+              <polygon points="0,0 5,2 10,0 5,-2" fill="#fef08a" />
               {timeMode !== 'day' && (
-                <polygon points="165,26 230,15 230,45" fill="#fef08a" opacity="0.35" filter="url(#lampGlow)" />
+                <ellipse cx="5" cy="14" rx="24" ry="10" fill="#fef08a" opacity={theme.lampGlow} filter="url(#lampGlowFilter)" />
               )}
-
-              {/* Rear Sleek Red LED Tail Strip */}
-              <path d="M8,26 L6,30" stroke="#ef4444" strokeWidth="3" fill="none" strokeLinecap="round" />
-
-              {/* Aero Turbine Alloy Wheels */}
-              {/* Rear Wheel */}
-              <g transform="translate(42, 44)">
-                <circle cx="0" cy="0" r="14" fill="#0f172a" />
-                <circle cx="0" cy="0" r="9" fill="#475569" />
-                <circle cx="0" cy="0" r="4" fill="#e2e8f0" />
-                <line x1="-7" y1="-7" x2="7" y2="7" stroke="#94a3b8" strokeWidth="1.5" />
-                <line x1="-7" y1="7" x2="7" y2="-7" stroke="#94a3b8" strokeWidth="1.5" />
-              </g>
-              {/* Front Wheel */}
-              <g transform="translate(132, 44)">
-                <circle cx="0" cy="0" r="14" fill="#0f172a" />
-                <circle cx="0" cy="0" r="9" fill="#475569" />
-                <circle cx="0" cy="0" r="4" fill="#e2e8f0" />
-                <line x1="-7" y1="-7" x2="7" y2="7" stroke="#94a3b8" strokeWidth="1.5" />
-                <line x1="-7" y1="7" x2="7" y2="-7" stroke="#94a3b8" strokeWidth="1.5" />
-              </g>
-            </g>
-          )}
-
-          {/* 9. THE CHARACTERS (Modern 2026 Stylized Vector Avatars) */}
-          <g
-            className="anim-avatar cursor-pointer"
-            onMouseEnter={() => setActiveTooltip(married ? 'You & Your Partner: Growing your life and net worth together.' : 'Your Avatar: In pursuit of financial independence.')}
-            onMouseLeave={() => setActiveTooltip(null)}
-          >
-            {/* Soft Ground Contact Shadow beneath character feet */}
-            <ellipse cx={married ? "382" : "368"} cy="290" rx={married ? "36" : "20"} ry="5" fill="black" opacity={theme.shadowOpacity} filter="url(#groundDrop)" />
-
-            {/* PLAYER AVATAR */}
-            <g transform="translate(355, 205)">
-              {/* Hair (Layered Modern Cut) */}
-              <path d="M8,12 Q14,0 26,4 Q34,6 30,16 Q28,12 18,12 Z" fill="#1e293b" />
-
-              {/* Head & Neck */}
-              <circle cx="18" cy="18" r="11" fill="#fcd9b6" />
-              {/* Stylized Eyes & Smile */}
-              <circle cx="15" cy="18" r="1.2" fill="#0f172a" />
-              <circle cx="21" cy="18" r="1.2" fill="#0f172a" />
-              <path d="M16,22 Q18,24 20,22" stroke="#0f172a" strokeWidth="1" fill="none" strokeLinecap="round" />
-
-              {/* Upper Garment based on lifestyle tier */}
-              {tier === 'wealthy' ? (
-                /* Tailored Designer Overcoat */
-                <path d="M6,30 Q18,26 30,30 L32,60 L4,60 Z" fill="#0f172a" />
-              ) : tier === 'comfortable' ? (
-                /* Smart Tailored Blazer */
-                <path d="M7,30 Q18,27 29,30 L31,58 L5,58 Z" fill="#0369a1" />
-              ) : (
-                /* Casual Streetwear Hoodie */
-                <path d="M7,30 Q18,27 29,30 L30,56 L6,56 Z" fill={tier === 'middle' ? '#2563eb' : '#475569'} />
-              )}
-              {/* Collar Accent */}
-              <polygon points="15,30 18,36 21,30" fill="#ffffff" />
-
-              {/* Arms & Hands */}
-              <rect x="2" y="32" width="6" height="22" rx="3" fill="#fcd9b6" />
-              <rect x="28" y="32" width="6" height="22" rx="3" fill="#fcd9b6" />
-
-              {/* Coffee Tumbler / Smartphone in Hand */}
-              <rect x="31" y="48" width="5" height="8" rx="1.5" fill="#f59e0b" />
-
-              {/* Trousers / Jeans */}
-              <rect x="9" y="58" width="8" height="24" rx="2" fill="#1e293b" />
-              <rect x="19" y="58" width="8" height="24" rx="2" fill="#1e293b" />
-
-              {/* Clean White Modern Sneakers */}
-              <rect x="7" y="80" width="11" height="5" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-              <rect x="18" y="80" width="11" height="5" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
             </g>
 
-            {/* PARTNER (Rendered seamlessly side-by-side if married) */}
-            {married && (
-              <g transform="translate(385, 208)">
-                {/* Long Flowing Styled Hair */}
-                <path d="M4,14 Q14,0 26,6 Q32,16 28,34 Q22,26 12,26 Z" fill="#78350f" />
-
-                {/* Head */}
-                <circle cx="16" cy="18" r="10" fill="#fde2cb" />
-                {/* Face */}
-                <circle cx="13" cy="18" r="1.1" fill="#0f172a" />
-                <circle cx="19" cy="18" r="1.1" fill="#0f172a" />
-                <path d="M14,22 Q16,24 18,22" stroke="#e11d48" strokeWidth="1" fill="none" strokeLinecap="round" />
-
-                {/* Stylish Knit / Wrap Dress */}
-                <path d="M6,29 Q16,26 26,29 L28,58 L4,58 Z" fill="#ec4899" />
-                <circle cx="16" cy="34" r="2" fill="#fbcfe8" />
-
-                {/* Arms */}
-                <rect x="2" y="31" width="5" height="20" rx="2.5" fill="#fde2cb" />
-                <rect x="25" y="31" width="5" height="20" rx="2.5" fill="#fde2cb" />
-
-                {/* Trousers / Skirt & Boots */}
-                <rect x="8" y="56" width="7" height="24" rx="2" fill="#334155" />
-                <rect x="17" y="56" width="7" height="24" rx="2" fill="#334155" />
-                <rect x="7" y="78" width="9" height="5" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-                <rect x="16" y="78" width="9" height="5" rx="2" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
-
-                {/* Floating Heart between the couple */}
-                <path
-                  d="M-2,10 C-2,6 -7,6 -7,10 C-7,13 -2,16 -2,18 C-2,16 3,13 3,10 C3,6 -2,6 -2,10 Z"
-                  fill="#f43f5e"
-                  opacity="0.9"
-                />
-              </g>
-            )}
-
-            {/* PET COMPANION (Playful Golden Retriever if comfortable or wealthy) */}
-            {(tier === 'comfortable' || tier === 'wealthy') && (
-              <g transform="translate(320, 260)">
-                {/* Dog Body */}
-                <ellipse cx="22" cy="18" rx="14" ry="9" fill="#f59e0b" />
-                {/* Dog Head */}
-                <circle cx="36" cy="12" r="7" fill="#f59e0b" />
-                <circle cx="38" cy="11" r="1" fill="#0f172a" />
-                <ellipse cx="42" cy="14" rx="3" ry="2" fill="#d97706" />
-                {/* Droopy Ear */}
-                <ellipse cx="33" cy="12" rx="3" ry="6" fill="#b45309" />
-                {/* Legs */}
-                <rect x="12" y="22" width="4" height="9" rx="1.5" fill="#d97706" />
-                <rect x="26" y="22" width="4" height="9" rx="1.5" fill="#d97706" />
-                {/* Wagging Tail */}
-                <path d="M8,16 Q2,12 4,6" stroke="#f59e0b" strokeWidth="3" strokeLinecap="round" fill="none" className="anim-tail" />
-              </g>
-            )}
-          </g>
-
-          {/* 10. MODERN STREET FURNITURE & AMBIENT LIGHTING */}
-          <g>
-            {/* Sleek Minimalist Solar Bollard Lights */}
-            {[20, 760].map(lampX => (
-              <g key={`lamp-${lampX}`} transform={`translate(${lampX}, 255)`}>
-                {/* Post */}
-                <rect x="0" y="0" width="6" height="36" rx="2" fill="url(#charcoalPanel)" />
-                {/* Light Fixture */}
-                <rect x="-2" y="0" width="10" height="7" rx="2" fill="#fef08a" />
-                {/* Soft Radial Light Cone on Ground */}
-                <ellipse cx="3" cy="35" rx="38" ry="12" fill="#fef08a" opacity={theme.lampGlowOpacity} filter="url(#lampGlow)" />
-              </g>
-            ))}
+            {/* Front Right Solar Bollard Lamp */}
+            <g transform="translate(420, 420)">
+              <polygon points="0,0 5,2 5,16 0,14" fill="#334155" />
+              <polygon points="5,2 10,0 10,14 5,16" fill="#1e293b" />
+              <polygon points="0,0 5,2 10,0 5,-2" fill="#fef08a" />
+              {timeMode !== 'day' && (
+                <ellipse cx="5" cy="14" rx="24" ry="10" fill="#fef08a" opacity={theme.lampGlow} filter="url(#lampGlowFilter)" />
+              )}
+            </g>
           </g>
         </svg>
 
-        {/* Dynamic Tooltip / Milestone Overlay */}
-        {activeTooltip && (
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-stone-900/90 text-white text-[11px] font-medium px-3.5 py-1.5 rounded-full shadow-lg backdrop-blur-sm pointer-events-none transition-all flex items-center space-x-2 z-10 border border-white/10">
+        {/* Dynamic Interactive Hotspot Popover Tooltip */}
+        {hoveredElement && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-stone-900/90 text-white text-[11px] font-semibold px-4 py-2 rounded-full shadow-xl backdrop-blur-md pointer-events-none transition-all duration-200 flex items-center space-x-2 z-10 border border-white/15">
             <span className="text-amber-400">✨</span>
-            <span>{activeTooltip}</span>
+            <span>{hoveredElement}</span>
           </div>
         )}
       </div>
 
       {/* Modern 2026 Metric Snapshot Footer */}
-      <div className="grid grid-cols-3 divide-x divide-stone-100 bg-stone-50/60 text-center py-2 px-1 border-t border-stone-100">
+      <div className="grid grid-cols-3 divide-x divide-stone-100 bg-stone-50/70 text-center py-2.5 px-2 border-t border-stone-100">
         <div>
-          <p className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Residence</p>
+          <p className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Property</p>
           <p className="text-xs font-black text-text-primary truncate px-1">{homeStatusLabel}</p>
         </div>
         <div>
-          <p className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Transport</p>
+          <p className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Transit</p>
           <p className="text-xs font-black text-text-primary truncate px-1">{carStatusLabel}</p>
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wider text-text-muted font-bold">Household</p>
           <p className="text-xs font-black text-text-primary truncate px-1">
-            {married ? 'Married Couple' : 'Solo Professional'}
+            {married ? 'Couple + Partner' : 'Solo Professional'}
           </p>
         </div>
       </div>
     </div>
   );
+
+  function setActiveTooltipHelper(msg) {
+    setHoveredElement(msg);
+  }
 }
