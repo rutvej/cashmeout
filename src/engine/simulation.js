@@ -232,6 +232,7 @@ export const simulateTick = (state) => {
   // --- Marriage age trigger ---
   if (
     !state.marriageEventFired &&
+    !state.married &&
     state.player?.marriageAge &&
     (22 + nextDay / 365) >= state.player.marriageAge &&
     !scheduledEvent

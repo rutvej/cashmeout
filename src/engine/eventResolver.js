@@ -101,18 +101,37 @@ export const resolveEvent = (event, playerChoice, state) => {
       if (playerChoice === 0) {
         const currentJob = state.incomes.find(i => i.type === 'job');
         const base = currentJob ? currentJob.amount : 40000;
-        const newSalary = impact.newSalary || Math.round(Math.max(base * 1.5, 75000));
+        const newSalary = impact.newSalary || Math.round(base * 1.5);
+        const role = impact.roleName || 'Director / VP of Strategy';
         changes.newIncomes.push({
           id: `job_${Date.now()}`,
           type: 'job',
           amount: newSalary,
-          name: 'Executive Leadership Role',
+          name: role,
         });
         if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Accepted Executive Leadership Role at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+        changes.statusMessages.push(`Accepted Executive Mandate as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
         changes.triggerAllocation = true;
       } else {
         changes.statusMessages.push(`Declined executive offer to maintain work-life balance.`);
+      }
+      break;
+    }
+
+    case 'new_job_offer': {
+      if (playerChoice === 0) {
+        const newSalary = impact.newSalary || 45000;
+        const role = impact.roleName || 'Full-Time Corporate Specialist';
+        changes.newIncomes.push({
+          id: `job_${Date.now()}`,
+          type: 'job',
+          amount: newSalary,
+          name: role,
+        });
+        changes.statusMessages.push(`Accepted full-time salaried position as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+        changes.triggerAllocation = true;
+      } else {
+        changes.statusMessages.push(`Passed on the job offer to hold out for higher pay.`);
       }
       break;
     }
@@ -172,26 +191,46 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'salary_hike': {
       const primaryJob = state.incomes.find(i => i.type === 'job');
       if (primaryJob) {
-        const hike = impact.hikeAmount || Math.round(primaryJob.amount * 0.15);
-        changes.newIncomes.push({ ...primaryJob, amount: primaryJob.amount + hike, id: `job_${Date.now()}` });
+        const hike = impact.hikeAmount || Math.round(primaryJob.amount * 0.18);
+        const newSalary = impact.newSalary || (primaryJob.amount + hike);
+        const role = impact.newRole || primaryJob.name;
+        changes.newIncomes.push({ ...primaryJob, amount: newSalary, name: role, id: `job_${Date.now()}` });
         changes.removedIncomes.push(primaryJob.id);
-        changes.statusMessages.push(`Salary increased by +₹${hike.toLocaleString('en-IN')}/mo!`);
+        changes.statusMessages.push(`Promoted to ${role}! Salary increased by +₹${hike.toLocaleString('en-IN')}/mo (+${impact.hikePercent || 18}%)!`);
         changes.triggerAllocation = true;
       }
       break;
     }
 
     case 'job_switch': {
+      const currentJob = state.incomes.find(i => i.type === 'job');
+      const currentSalary = currentJob ? currentJob.amount : 40000;
+
       if (playerChoice === 0) {
-        const currentJob = state.incomes.find(i => i.type === 'job');
-        const base = currentJob ? currentJob.amount : 35000;
-        const newSalary = impact.newSalary || Math.round(base * 1.35);
-        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: 'Senior Role Salary' });
+        // High-Growth Tech Venture Offer
+        const newSalary = impact.startupSalary || impact.newSalary || Math.round(currentSalary * 1.38);
+        const role = impact.startupRole || 'Lead Specialist (High-Growth Tech)';
+        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
         if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Accepted senior job offer at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+        changes.statusMessages.push(`Accepted High-Growth Tech offer as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo (+${impact.startupHikePct || 38}% hike)!`);
+        changes.triggerAllocation = true;
+      } else if (playerChoice === 1) {
+        // Premier Global Enterprise MNC Offer
+        const newSalary = impact.mncSalary || Math.round(currentSalary * 1.26);
+        const role = impact.mncRole || 'Senior Manager (Global MNC)';
+        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
+        if (currentJob) changes.removedIncomes.push(currentJob.id);
+        changes.statusMessages.push(`Accepted Enterprise MNC offer as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo (+${impact.mncHikePct || 26}% hike)!`);
         changes.triggerAllocation = true;
       } else {
-        changes.statusMessages.push(`Stayed at current stable position.`);
+        // Current Employer Retention Counter-Offer
+        const retentionHike = impact.retentionHike || Math.round(currentSalary * 0.15);
+        const newSalary = impact.retentionSalary || (currentSalary + retentionHike);
+        const role = currentJob ? `${currentJob.name} (Retained)` : 'Senior Retained Role';
+        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
+        if (currentJob) changes.removedIncomes.push(currentJob.id);
+        changes.statusMessages.push(`Leveraged offer for a counter-offer! Current employer gave you a +₹${retentionHike.toLocaleString('en-IN')}/mo (+15%) retention raise to stay.`);
+        changes.triggerAllocation = true;
       }
       break;
     }

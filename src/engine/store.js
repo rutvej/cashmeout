@@ -7,6 +7,7 @@ import { createGoal, redistributeBuckets } from './goals.js';
 import { calculateResults, generateInsights } from './scoring.js';
 import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES } from './constants.js';
 import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
+import { getCareerRole, generateJobMarketOffers } from './careers.js';
 
 /**
  * Central Zustand store — single source of truth for all game state.
@@ -80,6 +81,8 @@ const useGameStore = create((set, get) => ({
   marriageEventFired: false,
   married: false,
   homeNeedsRenovation: false,
+  lastJobSwitchDay: 0,
+  lastAppraisalDay: 0,
 
   // ═══════════════════════════════════════════
   // ACTIONS
@@ -157,6 +160,8 @@ const useGameStore = create((set, get) => ({
       marriageEventFired: false,
       married: false,
       homeNeedsRenovation: false,
+      lastJobSwitchDay: 0,
+      lastAppraisalDay: 0,
     });
   },
 
@@ -369,6 +374,11 @@ const useGameStore = create((set, get) => ({
         newState.experienceMonths = s.experienceMonths + changes.experienceIncrement;
       }
 
+      // Marriage event fired flag
+      if (changes.marriageEventFired) {
+        newState.marriageEventFired = true;
+      }
+
       // Monthly snapshot
       if (changes.currentDay % 30 === 0) {
         const currentPool = finalPool;
@@ -568,6 +578,10 @@ const useGameStore = create((set, get) => ({
       // Marriage
       if (changes.married === true) {
         newState.married = true;
+        newState.marriageEventFired = true;
+      }
+      if (event.id === 'marriage_event') {
+        newState.marriageEventFired = true;
       }
 
       // Course raise used (one-time)
@@ -843,6 +857,87 @@ const useGameStore = create((set, get) => ({
     }));
   },
 
+  applyForNewJob: (offer) => {
+    const state = get();
+    if (!offer || !offer.salary) return false;
+
+    // Cooldown: at least 150 days between proactive job switches
+    if (state.lastJobSwitchDay && (state.currentDay - state.lastJobSwitchDay) < 150) {
+      return false;
+    }
+
+    const currentJob = state.incomes.find(i => i.type === 'job');
+    const oldSalary = currentJob ? currentJob.amount : 0;
+    const hike = offer.salary - oldSalary;
+    const hikePct = oldSalary > 0 ? Math.round((hike / oldSalary) * 100) : 100;
+
+    const newIncomes = [
+      ...state.incomes.filter(i => i.type !== 'job'),
+      {
+        id: `job_${Date.now()}`,
+        type: 'job',
+        amount: offer.salary,
+        name: offer.role || 'Corporate Specialist',
+      }
+    ];
+
+    set(s => ({
+      incomes: newIncomes,
+      lastJobSwitchDay: s.currentDay,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Career Move / Job Switch',
+          icon: '💼',
+          choice: `Accepted offer at ${offer.company}`,
+          poolDelta: 0,
+          outcome: oldSalary > 0
+            ? `Switched to ${offer.role} at ${offer.company}! Salary grew from ₹${oldSalary.toLocaleString('en-IN')}/mo to ₹${offer.salary.toLocaleString('en-IN')}/mo (+₹${hike.toLocaleString('en-IN')}/mo, +${hikePct}% hike).`
+            : `Secured full-time employment as ${offer.role} at ${offer.company} earning ₹${offer.salary.toLocaleString('en-IN')}/mo!`,
+        }
+      ]
+    }));
+
+    return true;
+  },
+
+  requestAppraisal: () => {
+    const state = get();
+    const currentJob = state.incomes.find(i => i.type === 'job');
+    if (!currentJob) return false;
+
+    // Cooldown: at least 270 days between appraisal reviews
+    if (state.lastAppraisalDay && (state.currentDay - state.lastAppraisalDay) < 270) {
+      return false;
+    }
+
+    const currentSalary = currentJob.amount;
+    const hikePercent = randFloat(0.12, 0.18);
+    const hikeAmount = Math.round(currentSalary * hikePercent);
+    const newSalary = currentSalary + hikeAmount;
+    const expMonths = (state.experienceMonths || 0) + 12;
+    const newRole = getCareerRole(expMonths, newSalary);
+
+    set(s => ({
+      incomes: s.incomes.map(i => i.id === currentJob.id ? { ...i, amount: newSalary, name: newRole } : i),
+      lastAppraisalDay: s.currentDay,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Annual Merit Appraisal',
+          icon: '📈',
+          choice: 'Requested Performance Appraisal',
+          poolDelta: 0,
+          outcome: `Management approved your merit appraisal! Promoted to ${newRole} with a +₹${hikeAmount.toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}%) raise to ₹${newSalary.toLocaleString('en-IN')}/mo.`,
+        }
+      ]
+    }));
+
+    return true;
+  },
+
   // --- Proactive Financial Actions (Player Choice) ---
 
   takePersonalLoan: (principal, tenureMonths = 24, rate = 0.12, name = 'Personal Loan') => {
@@ -1038,6 +1133,7 @@ const useGameStore = create((set, get) => ({
         newState.businessIncome = randInt(0, 12000);
       } else if (goal.type === 'marriage') {
         newState.married = true;
+        newState.marriageEventFired = true;
       }
 
       return newState;
@@ -1545,17 +1641,22 @@ function buildEventOptions(event, state) {
     case 'salary_hike': {
       const primaryJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = primaryJob?.amount || 40000;
-      const hikePercent = randFloat(0.10, 0.15);
+      const hikePercent = randFloat(0.14, 0.22);
       const hikeAmount = Math.round(currentSalary * hikePercent);
+      const newSalary = currentSalary + hikeAmount;
+      const expMonths = (state.experienceMonths || 0) + 12;
+      const newRole = getCareerRole(expMonths, newSalary);
+
       financialImpact = {
         type: 'gain_recurring',
         hikeAmount,
         hikePercent: Math.round(hikePercent * 100),
-        newSalary: currentSalary + hikeAmount
+        newSalary,
+        newRole,
       };
       options.push({
-        label: `Accept +₹${hikeAmount.toLocaleString('en-IN')}/mo Raise 🎉`,
-        description: `Monthly salary grows from ₹${currentSalary.toLocaleString('en-IN')} to ₹${(currentSalary + hikeAmount).toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}%).`
+        label: `Accept Merit Promotion (+₹${hikeAmount.toLocaleString('en-IN')}/mo) 🎉`,
+        description: `Promoted to ${newRole}! Monthly salary rises from ₹${currentSalary.toLocaleString('en-IN')} to ₹${newSalary.toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}% hike).`
       });
       break;
     }
@@ -1563,21 +1664,75 @@ function buildEventOptions(event, state) {
     case 'job_switch': {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = currentJob ? currentJob.amount : 40000;
-      const newSalary = Math.round(currentSalary * randFloat(1.20, 1.28));
-      const diff = newSalary - currentSalary;
+      const expMonths = state.experienceMonths || 0;
+
+      // Realistic hike rates:
+      // Option 1: Fast-Growing Tech Scaleup (+36% to +46% hike)
+      const startupHikePct = randFloat(0.36, 0.46);
+      const startupSalary = Math.round(currentSalary * (1 + startupHikePct));
+      const startupDiff = startupSalary - currentSalary;
+      const startupRole = getCareerRole(expMonths + 18, startupSalary);
+
+      // Option 2: Established Global MNC (+22% to +30% hike, solid stability)
+      const mncHikePct = randFloat(0.22, 0.30);
+      const mncSalary = Math.round(currentSalary * (1 + mncHikePct));
+      const mncDiff = mncSalary - currentSalary;
+      const mncRole = getCareerRole(expMonths + 12, mncSalary);
+
+      // Option 3: Counter-offer to stay (+14% to +18% retention raise)
+      const retentionPct = randFloat(0.14, 0.18);
+      const retentionHike = Math.round(currentSalary * retentionPct);
+      const retentionSalary = currentSalary + retentionHike;
+
       financialImpact = {
         type: 'job_switch',
         currentSalary,
-        newSalary,
-        diff,
+        startupSalary,
+        startupRole,
+        startupHikePct: Math.round(startupHikePct * 100),
+        mncSalary,
+        mncRole,
+        mncHikePct: Math.round(mncHikePct * 100),
+        retentionSalary,
+        retentionHike,
+        retentionPct: Math.round(retentionPct * 100),
       };
+
       options.push({
-        label: `Accept New Offer (₹${newSalary.toLocaleString('en-IN')}/mo)`,
-        description: `+₹${diff.toLocaleString('en-IN')}/mo jump. Opens allocation screen for surplus.`
+        label: `Join Tech Venture — ₹${startupSalary.toLocaleString('en-IN')}/mo (+${Math.round(startupHikePct * 100)}%) 🚀`,
+        description: `${startupRole} at high-growth scaleup (+₹${startupDiff.toLocaleString('en-IN')}/mo jump). High upside and equity.`
       });
       options.push({
-        label: `Stay at Current Job (₹${currentSalary.toLocaleString('en-IN')}/mo)`,
-        description: 'Keep stability, comfort, and existing team.'
+        label: `Join Global MNC — ₹${mncSalary.toLocaleString('en-IN')}/mo (+${Math.round(mncHikePct * 100)}%) 🏢`,
+        description: `${mncRole} at Tier-1 Enterprise (+₹${mncDiff.toLocaleString('en-IN')}/mo jump). High job security and bonus.`
+      });
+      options.push({
+        label: `Negotiate Counter-Offer (+15% Raise to Stay) 💼`,
+        description: `Current employer matches market pressure! Stay with +₹${retentionHike.toLocaleString('en-IN')}/mo raise (new pay: ₹${retentionSalary.toLocaleString('en-IN')}/mo).`
+      });
+      break;
+    }
+
+    case 'new_job_offer': {
+      const expMonths = state.experienceMonths || 0;
+      const cityTier = state.player?.cityTier || 2;
+      const cityMult = cityTier === 1 ? 1.25 : cityTier === 2 ? 1.0 : 0.8;
+      const baseSalary = Math.round(Math.max(32000 * cityMult, (state.player?.startingSalary || 35000) * (1 + (expMonths / 60))));
+      const roleName = getCareerRole(expMonths, baseSalary);
+
+      financialImpact = {
+        type: 'new_job',
+        newSalary: baseSalary,
+        roleName,
+      };
+
+      options.push({
+        label: `Accept Position — ₹${baseSalary.toLocaleString('en-IN')}/mo 🎉`,
+        description: `Full-time role as ${roleName} at established firm. Re-enters salaried workforce with steady cashflow.`
+      });
+      options.push({
+        label: 'Decline Offer',
+        description: 'Hold out for higher pay or continue freelancing.'
       });
       break;
     }
@@ -1762,21 +1917,26 @@ function buildEventOptions(event, state) {
     case 'senior_job_offer': {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const base = currentJob ? currentJob.amount : (state.player?.startingSalary || 40000);
-      const offeredSalary = Math.round(Math.max(base * 1.5, 75000));
+      const hikePct = randFloat(0.42, 0.55);
+      const offeredSalary = Math.round(Math.max(base * (1 + hikePct), 85000));
       const hike = offeredSalary - (currentJob ? currentJob.amount : 0);
+      const hikePercent = Math.round((hike / Math.max(1, base)) * 100);
+      const role = 'Director / VP of Strategy';
       financialImpact = {
         type: 'job_switch',
         currentSalary: currentJob ? currentJob.amount : 0,
         newSalary: offeredSalary,
         diff: hike,
+        hikePercent,
+        roleName: role,
       };
       options.push({
-        label: `Accept Leadership Role (₹${offeredSalary.toLocaleString('en-IN')}/mo) 🎉`,
-        description: `+₹${hike.toLocaleString('en-IN')}/mo raise with senior executive scope.`
+        label: `Accept Leadership Role (₹${offeredSalary.toLocaleString('en-IN')}/mo) 🏆`,
+        description: `+₹${hike.toLocaleString('en-IN')}/mo (+${hikePercent}% hike) as ${role} with executive bonus and stock equity.`
       });
       options.push({
-        label: 'Decline Offer',
-        description: 'Stay at current position.'
+        label: 'Decline Executive Role',
+        description: 'Stay at current position to maintain work-life balance.'
       });
       break;
     }

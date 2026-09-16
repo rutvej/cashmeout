@@ -27,6 +27,15 @@ export const EVENT_DECK = [
     eligibilityCheck: (state) => !state.incomes.some(i => i.type === 'job'),
   },
   {
+    id: 'new_job_offer',
+    name: 'Corporate Re-hire Recruiter Offer',
+    type: 'choice',
+    icon: '🤝',
+    weight: 12,
+    description: 'A headhunter approached you with an attractive full-time corporate role matching your professional experience.',
+    eligibilityCheck: (state) => !state.incomes.some(i => i.type === 'job'),
+  },
+  {
     id: 'senior_job_offer',
     name: 'Executive Leadership Offer',
     type: 'good',
@@ -115,8 +124,10 @@ export const EVENT_DECK = [
     weight: 8,
     description: 'A close sibling/cousin is marrying. You are invited to contribute to ceremonies.',
     eligibilityCheck: (state) => {
-      const lastWedding = state.eventHistory?.filter(e => e.eventName?.includes('Wedding'))?.pop();
-      return !lastWedding || (state.currentDay - lastWedding.day) > 365;
+      const pastWeddings = state.eventHistory?.filter(e => 
+        e.eventName?.includes('Wedding') || e.eventName?.includes('Marriage')
+      ) || [];
+      return pastWeddings.length === 0;
     },
   },
   {

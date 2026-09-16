@@ -4,6 +4,7 @@ import Card from '../../ui/Card';
 import Button from '../../ui/Button';
 import { formatCurrency } from '../../../utils/format';
 import { CITY_TIERS } from '../../../engine/constants';
+import { getCareerRole, generateJobMarketOffers } from '../../../engine/careers';
 
 const IncomeTab = () => {
   const store = useGameStore();
@@ -32,7 +33,17 @@ const IncomeTab = () => {
 
   const netMonthlySurplus = totalMonthlyIncome - totalDeductions;
   const hasJob = store.incomes.some(i => i.type === 'job');
+  const primaryJob = store.incomes.find(i => i.type === 'job');
   const cityTierMeta = CITY_TIERS[store.player?.cityTier || 1];
+
+  const careerRole = getCareerRole(store.experienceMonths, primaryJob?.amount, store.courseCompleted);
+  const jobMarketOffers = generateJobMarketOffers(store);
+  const expYears = Math.floor((store.experienceMonths || 0) / 12);
+  const expRemainingMonths = (store.experienceMonths || 0) % 12;
+  const daysSinceAppraisal = store.lastAppraisalDay ? (store.currentDay - store.lastAppraisalDay) : 999;
+  const canRequestAppraisal = daysSinceAppraisal >= 270;
+  const daysSinceSwitch = store.lastJobSwitchDay ? (store.currentDay - store.lastJobSwitchDay) : 999;
+  const canSwitchJob = daysSinceSwitch >= 150;
 
   return (
     <div className="space-y-4 pb-24">
@@ -54,30 +65,160 @@ const IncomeTab = () => {
         </div>
       </Card>
 
-      {/* Unemployment Alert & Freelance Recovery Action */}
-      {!hasJob && (
-        <Card className="p-3.5 bg-red-50 border-2 border-red-300">
-          <div className="flex items-start justify-between">
+      {/* Career & Employment Hub (Proactive Job Market & Realistic Hikes) */}
+      <Card className="p-4 border border-blue-100 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-base">💼</span>
             <div>
-              <span className="text-xs font-bold text-red-900 block mb-1">
-                ⚠️ Unemployed: Salaried Income Disrupted
+              <h3 className="font-black text-xs text-text-primary uppercase tracking-wider">
+                Career & Job Market Hub
+              </h3>
+              <span className="text-[10px] text-text-muted">
+                {expYears > 0 ? `${expYears}y ` : ''}{expRemainingMonths}m experience · {cityTierMeta.name}
               </span>
-              <p className="text-[11px] text-red-700 leading-snug">
-                Fixed costs keep deducting every month. Take freelance gigs or cut living expenses to survive the transition.
-              </p>
             </div>
           </div>
-          <div className="mt-3 flex space-x-2">
+          {hasJob && (
             <Button
               size="sm"
-              className="text-xs flex-1 bg-red-600 text-white hover:bg-red-700"
-              onClick={() => store.takeFreelanceGig()}
+              variant={canRequestAppraisal ? 'primary' : 'secondary'}
+              className="text-[10px] px-2.5 py-1 font-bold"
+              disabled={!canRequestAppraisal}
+              onClick={() => store.requestAppraisal()}
+              title={canRequestAppraisal ? 'Ask for a merit raise review' : `Appraisal available in ${270 - daysSinceAppraisal} days`}
             >
-              + Take Freelance Gig (+₹20k/mo)
+              {canRequestAppraisal ? '📈 Request Merit Review' : `Review in ${270 - daysSinceAppraisal}d`}
             </Button>
+          )}
+        </div>
+
+        {hasJob ? (
+          <div className="bg-white p-3 rounded-xl border border-sky-100 shadow-xs mb-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-sky-700 block">
+                  Current Position
+                </span>
+                <p className="text-xs font-black text-text-primary mt-0.5">
+                  {primaryJob.name || careerRole}
+                </p>
+                <span className="text-[10px] text-text-muted">
+                  Designation level: {careerRole}
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black text-green-700 block">
+                  +{formatCurrency(primaryJob.amount)}/mo
+                </span>
+                <span className="text-[9px] text-text-muted">
+                  Base Salary
+                </span>
+              </div>
+            </div>
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3">
+            <span className="text-xs font-bold text-amber-900 block">
+              ⚠️ Currently In Transition (Unemployed)
+            </span>
+            <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
+              Choose a full-time corporate re-entry role below with realistic compensation, or take a freelance bridge gig.
+            </p>
+            <div className="mt-2.5">
+              <Button
+                size="sm"
+                className="text-[11px] w-full bg-amber-700 text-white hover:bg-amber-800 font-semibold"
+                onClick={() => store.takeFreelanceGig()}
+              >
+                + Take Interim Freelance Project (+₹20k/mo)
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Live Job Openings (Realistic Market Hikes on top of current job) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">
+              {hasJob ? 'Recruiter Openings · Realistic Market Hikes' : 'Available Full-Time Salaried Positions'}
+            </span>
+            {!canSwitchJob && hasJob && (
+              <span className="text-[9px] text-amber-700 font-semibold">
+                Switch cooldown: {150 - daysSinceSwitch} days
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            {jobMarketOffers.map(offer => {
+              const meetsExp = (store.experienceMonths || 0) >= offer.requiredExp || store.courseCompleted;
+              const isEligible = meetsExp && (canSwitchJob || !hasJob);
+
+              return (
+                <div
+                  key={offer.id}
+                  className="p-3 bg-white rounded-xl border border-stone-200/90 hover:border-sky-300 transition shadow-xs"
+                >
+                  <div className="flex justify-between items-start mb-1.5">
+                    <div>
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs font-black text-text-primary">
+                          {offer.role}
+                        </span>
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          {offer.badge}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-text-muted block">
+                        {offer.company} · {offer.type}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-xs font-black text-text-primary block">
+                        {formatCurrency(offer.salary)}<span className="text-[10px] font-normal text-text-muted">/mo</span>
+                      </span>
+                      {hasJob && offer.hikeAmount > 0 && (
+                        <span className="text-[10px] font-bold text-green-700 block">
+                          +{formatCurrency(offer.hikeAmount)}/mo hike
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-stone-600 mb-2 leading-relaxed">
+                    {offer.description}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-stone-100">
+                    <span className="text-[9px] text-text-muted">
+                      Stability: <strong className="text-stone-700">{offer.stability}</strong>
+                      {offer.requiredExp > 0 ? ` · Req: ${Math.round(offer.requiredExp / 12)}y exp` : ''}
+                    </span>
+
+                    <Button
+                      size="sm"
+                      variant={isEligible ? 'primary' : 'secondary'}
+                      className="text-[10px] px-3 py-1 font-bold"
+                      disabled={!isEligible}
+                      onClick={() => store.applyForNewJob(offer)}
+                    >
+                      {!meetsExp
+                        ? `Req. ${Math.round(offer.requiredExp / 12)}y Exp`
+                        : !canSwitchJob && hasJob
+                        ? `Cooldown (${150 - daysSinceSwitch}d)`
+                        : hasJob
+                        ? `Accept Offer (+${offer.hikePercent}%)`
+                        : 'Accept Position'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
 
       {/* 1. Incomes Breakdown */}
       <Card className="p-3.5 border border-gray-100">
