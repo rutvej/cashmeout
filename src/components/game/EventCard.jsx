@@ -8,6 +8,7 @@ const EventCard = ({ event, onChoice }) => {
   const store = useGameStore();
   const [optInInsurance, setOptInInsurance] = useState(true);
   const [weddingContributionAmount, setWeddingContributionAmount] = useState(25000);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   if (!event) return null;
 
@@ -48,6 +49,38 @@ const EventCard = ({ event, onChoice }) => {
     }
   };
 
+  if (isCollapsed) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className={`w-full my-2 p-3 bg-white rounded-2xl shadow-md border-2 ${borderColor} cursor-pointer hover:bg-gray-50 transition`}
+        onClick={() => setIsCollapsed(false)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
+            <span className="text-2xl shrink-0">{event.icon || '⚡'}</span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 block">
+                ⚡ Decision Pending (Sim Paused)
+              </span>
+              <h3 className="text-xs sm:text-sm font-extrabold text-text-primary truncate">
+                {event.name}
+              </h3>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIsCollapsed(false); }}
+            className="text-xs font-bold text-accent-action bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full shrink-0 transition"
+          >
+            Expand Details ↓
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -16, scale: 0.98 }}
@@ -57,20 +90,30 @@ const EventCard = ({ event, onChoice }) => {
     >
       {/* Top Banner Tag */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <span className="text-2xl">{event.icon || '⚡'}</span>
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted">
+        <div className="flex items-center space-x-2 min-w-0 flex-1 pr-2">
+          <span className="text-2xl shrink-0">{event.icon || '⚡'}</span>
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted block">
               {event.type === 'choice' ? 'Decision Required' : 'Life Event'}
             </span>
-            <h3 className="text-base font-extrabold text-text-primary leading-tight">
+            <h3 className="text-base font-extrabold text-text-primary leading-tight truncate">
               {event.name}
             </h3>
           </div>
         </div>
-        <span className="text-[10px] font-semibold bg-gray-100 text-text-muted px-2 py-0.5 rounded-full">
-          Sim Paused
-        </span>
+        <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+          <span className="text-[10px] font-semibold bg-gray-100 text-text-muted px-2 py-0.5 rounded-full">
+            Sim Paused
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(true)}
+            className="text-[10px] text-text-muted hover:text-text-primary px-2 py-0.5 rounded border border-gray-200 hover:bg-gray-100 transition font-medium"
+            title="Minimize event card to view dashboard"
+          >
+            Minimize ⤡
+          </button>
+        </div>
       </div>
 
       <p className="text-xs text-text-muted mb-3 leading-relaxed">

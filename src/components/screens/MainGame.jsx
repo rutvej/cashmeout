@@ -42,7 +42,11 @@ const MainGame = () => {
   }, []);
 
   const handleTabChange = (tab) => {
-    useGameStore.setState({ activeTab: store.activeTab === tab ? null : tab });
+    if (tab === 'home' || tab === null) {
+      useGameStore.setState({ activeTab: null });
+    } else {
+      useGameStore.setState({ activeTab: store.activeTab === tab ? null : tab });
+    }
   };
 
   const renderTabContent = () => {
@@ -70,10 +74,9 @@ const MainGame = () => {
     (store.homeMaintenanceCost || 0) +
     (store.carMaintenanceCost || 0);
 
-  // Strict modal priority to prevent any overlapping dialogs
+  // Strict modal priority to prevent any overlapping dialogs (events never block navigation)
   const activeModal = (() => {
     if (store.deficitInfo) return 'liquidation';
-    if (store.currentEvent) return 'event';
     if (store.showMilestone) return 'milestone';
     if (store.showAllocation) return 'allocation';
     if (store.showMonthlyLedger) return 'ledger';
@@ -109,13 +112,15 @@ const MainGame = () => {
         {hasPendingEvent && store.activeTab && (
           <div
             onClick={() => handleTabChange(null)}
-            className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-between cursor-pointer hover:bg-amber-600 transition shadow-inner"
+            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 text-xs font-bold flex items-center justify-between cursor-pointer transition shadow-sm"
           >
             <div className="flex items-center space-x-2 truncate">
-              <span>⚡</span>
+              <span className="text-base animate-pulse">⚡</span>
               <span className="truncate">Decision Pending: {store.currentEvent.name}</span>
             </div>
-            <span className="underline whitespace-nowrap ml-2 text-[11px]">Decide Now →</span>
+            <span className="bg-white/20 hover:bg-white/30 text-white px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap ml-2">
+              Decide on Home →
+            </span>
           </div>
         )}
       </div>
@@ -165,7 +170,11 @@ const MainGame = () => {
       </div>
 
       {/* Persistent Bottom Tab Bar */}
-      <TabBar activeTab={store.activeTab} onTabChange={handleTabChange} />
+      <TabBar 
+        activeTab={store.activeTab} 
+        onTabChange={handleTabChange} 
+        hasPendingEvent={hasPendingEvent}
+      />
 
       {/* ========================================================
           NON-OVERLAPPING MODALS (Strict Priority Hierarchy)
@@ -179,19 +188,7 @@ const MainGame = () => {
         />
       )}
 
-      {/* 2. Event Dialog Overlay (if browsing sub-tabs when event triggers) */}
-      {activeModal === 'event' && store.activeTab && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="max-w-md w-full max-h-[90vh] overflow-y-auto">
-            <EventCard 
-              event={store.currentEvent} 
-              onChoice={store.resolveEvent} 
-            />
-          </div>
-        </div>
-      )}
-
-      {/* 3. Milestone Modal (Goal Achieved) */}
+      {/* 2. Milestone Modal (Goal Achieved) */}
       {activeModal === 'milestone' && (
         <MilestoneModal 
           milestone={store.showMilestone} 
