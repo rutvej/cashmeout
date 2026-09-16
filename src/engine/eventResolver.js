@@ -260,6 +260,7 @@ export const resolveEvent = (event, playerChoice, state) => {
         giftAmt = impact.tierHigh || 75000;
       }
 
+      changes.familyWeddingFired = true;
       changes.poolDelta = -giftAmt;
       changes.statusMessages.push(`Contributed ₹${giftAmt.toLocaleString('en-IN')} towards family wedding.`);
       break;
@@ -370,6 +371,7 @@ export const resolveEvent = (event, playerChoice, state) => {
 
     case 'marriage_event': {
       changes.married = true;
+      changes.marriageEventFired = true;
       if (playerChoice === 0) {
         changes.poolDelta = -(impact.weddingCost || 0);
         changes.statusMessages.push(`Grand wedding celebrated! Paid ₹${(impact.weddingCost || 0).toLocaleString('en-IN')}.`);

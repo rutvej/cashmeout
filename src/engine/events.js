@@ -124,10 +124,15 @@ export const EVENT_DECK = [
     weight: 8,
     description: 'A close sibling/cousin is marrying. You are invited to contribute to ceremonies.',
     eligibilityCheck: (state) => {
-      const pastWeddings = state.eventHistory?.filter(e => 
+      if (state.familyWeddingFired || state.married || state.marriageEventFired) return false;
+      const pastWeddings = (state.eventHistory || []).filter(e => 
         e.eventName?.includes('Wedding') || e.eventName?.includes('Marriage')
-      ) || [];
-      return pastWeddings.length === 0;
+      );
+      if (pastWeddings.length > 0) return false;
+      const pastDecisions = (state.decisionHistory || []).filter(d =>
+        d.eventId === 'family_wedding' || d.eventId === 'marriage_event'
+      );
+      return pastDecisions.length === 0;
     },
   },
   {

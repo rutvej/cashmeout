@@ -79,6 +79,7 @@ const useGameStore = create((set, get) => ({
 
   // --- Life events ---
   marriageEventFired: false,
+  familyWeddingFired: false,
   married: false,
   homeNeedsRenovation: false,
   lastJobSwitchDay: 0,
@@ -158,6 +159,7 @@ const useGameStore = create((set, get) => ({
       courseCompleted: false,
       courseRaiseUsed: false,
       marriageEventFired: false,
+      familyWeddingFired: false,
       married: false,
       homeNeedsRenovation: false,
       lastJobSwitchDay: 0,
@@ -310,7 +312,7 @@ const useGameStore = create((set, get) => ({
     }
 
     // Marriage age trigger — fires as a priority event
-    if (changes.shouldTriggerMarriage && !nextEvent) {
+    if (changes.shouldTriggerMarriage && !state.married && !state.marriageEventFired) {
       nextEvent = buildMarriageEvent(state);
     }
 
@@ -375,7 +377,7 @@ const useGameStore = create((set, get) => ({
       }
 
       // Marriage event fired flag
-      if (changes.marriageEventFired) {
+      if (changes.marriageEventFired || (nextEvent && nextEvent.id === 'marriage_event')) {
         newState.marriageEventFired = true;
       }
 
@@ -439,27 +441,59 @@ const useGameStore = create((set, get) => ({
       const remainingPool = Math.max(0, state.pool - savingsRupees);
       const updatedInstruments = { ...state.instruments, savings: 0 };
 
-      set(s => ({
-        pool: remainingPool,
-        instruments: updatedInstruments,
-        currentEvent: null,
-        deficitInfo: {
-          shortfall,
-          reason: eventWithData.name || 'Expense',
-        },
-        eventHistory: [
-          ...s.eventHistory,
-          {
-            day: s.currentDay,
-            eventName: eventWithData.name || 'Life Event',
-            icon: eventWithData.icon || '⚠️',
-            choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
-            choiceIndex,
-            poolDelta: -savingsRupees,
-            outcome: `Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
-          }
-        ]
-      }));
+      const finalLoans = [...state.loans];
+      if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
+
+      const finalDeductions = [...state.fixedDeductions];
+      if (changes.newDeductions && changes.newDeductions.length > 0) finalDeductions.push(...changes.newDeductions);
+
+      set(s => {
+        const shortfallState = {
+          pool: remainingPool,
+          instruments: updatedInstruments,
+          currentEvent: null,
+          loans: finalLoans,
+          fixedDeductions: finalDeductions,
+          deficitInfo: {
+            shortfall,
+            reason: eventWithData.name || 'Expense',
+          },
+          eventHistory: [
+            ...s.eventHistory,
+            {
+              day: s.currentDay,
+              eventName: eventWithData.name || 'Life Event',
+              icon: eventWithData.icon || '⚠️',
+              choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
+              choiceIndex,
+              poolDelta: -savingsRupees,
+              outcome: `Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
+            }
+          ],
+          decisionHistory: [
+            ...s.decisionHistory,
+            { day: s.currentDay, type: 'event', eventId: eventWithData.id, choiceIndex, poolDelta },
+          ],
+        };
+
+        // Guarantee life milestones are preserved even during shortfall
+        if (changes.married || eventWithData.id === 'marriage_event') {
+          shortfallState.married = true;
+          shortfallState.marriageEventFired = true;
+        }
+        if (changes.familyWeddingFired || eventWithData.id === 'family_wedding') {
+          shortfallState.familyWeddingFired = true;
+        }
+        if (changes.optInHealthInsurance) {
+          shortfallState.hasHealthInsurance = true;
+          shortfallState.healthInsuranceCost = 750;
+        }
+        if (changes.homeNeedsRenovation === false) {
+          shortfallState.homeNeedsRenovation = false;
+        }
+
+        return shortfallState;
+      });
 
       get().pauseSimulation();
       return;
@@ -575,13 +609,13 @@ const useGameStore = create((set, get) => ({
         newState.homeNeedsRenovation = false;
       }
 
-      // Marriage
-      if (changes.married === true) {
+      // Marriage & Family Milestone flags
+      if (changes.married === true || eventWithData.id === 'marriage_event') {
         newState.married = true;
         newState.marriageEventFired = true;
       }
-      if (event.id === 'marriage_event') {
-        newState.marriageEventFired = true;
+      if (changes.familyWeddingFired === true || eventWithData.id === 'family_wedding') {
+        newState.familyWeddingFired = true;
       }
 
       // Course raise used (one-time)
@@ -1251,6 +1285,9 @@ const useGameStore = create((set, get) => ({
           newState.hasActiveBusiness = true;
           // Initial venture phase: modest early traction (₹0 - ₹12,000/mo) that fluctuates
           newState.businessIncome = randInt(0, 12000);
+        } else if (goal.type === 'marriage') {
+          newState.married = true;
+          newState.marriageEventFired = true;
         }
       } else if (action === 'grow') {
         // Raise the target by 25%
@@ -1501,6 +1538,7 @@ const useGameStore = create((set, get) => ({
       courseRaiseUsed: false,
       salaryCeiling: 0,
       marriageEventFired: false,
+      familyWeddingFired: false,
       married: false,
       homeNeedsRenovation: false,
     });
