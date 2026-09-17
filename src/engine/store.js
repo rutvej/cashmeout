@@ -86,6 +86,9 @@ const useGameStore = create((set, get) => ({
   calendarQueue: null,
   showMonthlyLedger: false,
   financialChanged: true,
+  recentAutoToast: null,
+  currentYearStatements: [],
+  monthlyStatementsHistory: [],
 
   // --- Game tracking ---
   gameOver: false,
@@ -195,10 +198,15 @@ const useGameStore = create((set, get) => ({
       calendarQueue: generateEventCalendar(seed, p, EVENT_DECK),
       showMonthlyLedger: false,
       financialChanged: true,
+      recentAutoToast: null,
+      currentYearStatements: [],
+      monthlyStatementsHistory: [],
       lastJobSwitchDay: 0,
       lastAppraisalDay: 0,
     });
   },
+
+  clearAutoToast: () => set({ recentAutoToast: null }),
 
   setScreen: (screen) => set({ screen }),
 
@@ -397,6 +405,12 @@ const useGameStore = create((set, get) => ({
         if (!hasPhysicalAssets && !hasInvestments && !canLoan) {
           newState.gameOver = true;
           newState.gameOverReason = 'broke';
+          try {
+            newState.results = calculateResults({ ...s, ...newState });
+          } catch (e) {
+            console.error("Scorecard calculation error at insolvency:", e);
+          }
+          newState.screen = 'scorecard';
         } else {
           newState.deficitInfo = {
             shortfall: deficit,
@@ -445,6 +459,34 @@ const useGameStore = create((set, get) => ({
         newState.incomes = changes.incomesUpdate;
       }
 
+      // Monthly statement tracking and ledger integration
+      if (changes.newMonthlyStatement) {
+        const stmt = changes.newMonthlyStatement;
+        newState.currentYearStatements = [...(s.currentYearStatements || []), stmt];
+        newState.monthlyStatementsHistory = [stmt, ...(s.monthlyStatementsHistory || [])];
+
+        // Add to live eventHistory ledger so newest statement appears at top of ledger!
+        const stmtEntry = {
+          day: changes.currentDay,
+          type: 'statement',
+          eventName: `Month ${stmt.month} Statement (Year ${stmt.year})`,
+          icon: stmt.surplus >= 0 ? '📊' : '📉',
+          choice: `Net Surplus: ${stmt.surplus >= 0 ? '+' : ''}₹${stmt.surplus.toLocaleString('en-IN')}`,
+          poolDelta: stmt.surplus,
+          outcome: `Total Inflow: ₹${stmt.totalEarned.toLocaleString('en-IN')} (Salary: ₹${stmt.salaryEarned.toLocaleString('en-IN')}${stmt.businessEarned ? `, Biz: ₹${stmt.businessEarned.toLocaleString('en-IN')}` : ''}${stmt.rentEarned ? `, Rent: ₹${stmt.rentEarned.toLocaleString('en-IN')}` : ''}${stmt.investmentGains ? `, Returns: ₹${stmt.investmentGains.toLocaleString('en-IN')}` : ''}) · Expenses: -₹${stmt.totalExpenses.toLocaleString('en-IN')}`,
+          statementDetails: stmt,
+        };
+        newState.eventHistory = [stmtEntry, ...(newState.eventHistory || s.eventHistory)];
+      }
+
+      if (changes.resetYearStatements) {
+        newState.currentYearStatements = [];
+      }
+
+      if (changes.annualIncomeAcc !== undefined) {
+        newState.annualIncomeAcc = changes.annualIncomeAcc;
+      }
+
       // Experience tracking
       if (changes.experienceIncrement) {
         newState.experienceMonths = s.experienceMonths + changes.experienceIncrement;
@@ -455,7 +497,7 @@ const useGameStore = create((set, get) => ({
         newState.marriageEventFired = true;
       }
 
-      // Monthly snapshot & Ledger trigger
+      // Monthly snapshot (for net worth graph)
       if (changes.currentDay % 30 === 0) {
         const currentPool = finalPool;
         const assetValue = (s.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
@@ -463,18 +505,123 @@ const useGameStore = create((set, get) => ({
           ...s.monthlySnapshots,
           { day: changes.currentDay, pool: currentPool, netWorth: currentPool + assetValue },
         ];
-
-        // Trigger full ledger on Month 1 (Day 30) or when financial numbers changed
-        if (s.financialChanged || changes.currentDay === 30) {
-          newState.showMonthlyLedger = true;
-          newState.financialChanged = false;
-        }
       }
 
       // Event triggered
       if (nextEvent) {
-        newState.currentEvent = nextEvent;
-        newState.lastEventDay = changes.currentDay;
+        const isSingleOption = !nextEvent.options || nextEvent.options.length <= 1;
+        if (isSingleOption) {
+          // Auto-advance 1-option event! Apply directly without pausing the simulation.
+          const autoEventWithData = { ...nextEvent };
+          const autoChanges = resolveEventFn(autoEventWithData, 0, { ...s, ...newState });
+
+          const poolDelta = autoChanges.poolDelta || 0;
+          const currentInstruments = newState.instruments || s.instruments;
+          const savingsPercent = currentInstruments.savings || 0;
+          const currentPool = newState.pool != null ? newState.pool : s.pool;
+          const savingsRupees = Math.round((savingsPercent / 100) * currentPool);
+          const expense = Math.abs(poolDelta);
+
+          if (poolDelta < 0 && savingsRupees < expense) {
+            // Shortfall! Needs liquidation resolution, so we pause and present shortfall modal
+            const shortfall = expense - savingsRupees;
+            const remainingPool = Math.max(0, currentPool - savingsRupees);
+            newState.pool = remainingPool;
+            newState.deficitInfo = {
+              shortfall,
+              reason: nextEvent.name || 'Expense',
+            };
+            newState.lastEventDay = changes.currentDay;
+            newState.eventHistory = [
+              {
+                day: changes.currentDay,
+                eventName: nextEvent.name || 'Life Event',
+                icon: nextEvent.icon || '⚠️',
+                choice: nextEvent.options?.[0]?.label || 'Obligation',
+                poolDelta: -savingsRupees,
+                outcome: `Savings covered ₹${savingsRupees.toLocaleString('en-IN')}. Shortfall ₹${shortfall.toLocaleString('en-IN')} pending liquidation.`,
+                isAuto: true,
+              },
+              ...(newState.eventHistory || s.eventHistory),
+            ];
+          } else {
+            // Normal auto-resolution! Apply pool delta directly
+            let updatedPool = currentPool + poolDelta;
+            if (poolDelta < 0) {
+              const newSavingsRupees = Math.max(0, savingsRupees - expense);
+              if (updatedPool > 0) {
+                const newSavingsPct = Math.min(100, Math.max(0, Math.round((newSavingsRupees / updatedPool) * 100)));
+                const currentNonSavings = (currentInstruments.stocks || 0) + (currentInstruments.mf || 0) + (currentInstruments.gold || 0) + (currentInstruments.fd || 0);
+                if (currentNonSavings > 0) {
+                  const scale = (100 - newSavingsPct) / currentNonSavings;
+                  newState.instruments = normalizeInstruments({
+                    savings: newSavingsPct,
+                    stocks: Math.round((currentInstruments.stocks || 0) * scale),
+                    mf: Math.round((currentInstruments.mf || 0) * scale),
+                    gold: Math.round((currentInstruments.gold || 0) * scale),
+                    fd: Math.round((currentInstruments.fd || 0) * scale),
+                  });
+                }
+              }
+            }
+            newState.pool = updatedPool;
+            if (autoChanges.newLoans && autoChanges.newLoans.length > 0) {
+              newState.loans = [...(newState.loans || s.loans), ...autoChanges.newLoans];
+            }
+            if (autoChanges.newDeductions && autoChanges.newDeductions.length > 0) {
+              newState.fixedDeductions = [...(newState.fixedDeductions || s.fixedDeductions), ...autoChanges.newDeductions];
+            }
+            if (autoChanges.married || nextEvent.id === 'marriage_event') {
+              newState.married = true;
+              newState.marriageEventFired = true;
+            }
+            if (autoChanges.familyWeddingFired || nextEvent.id === 'family_wedding') {
+              newState.familyWeddingFired = true;
+            }
+            if (autoChanges.optInHealthInsurance) {
+              newState.hasHealthInsurance = true;
+              newState.healthInsuranceCost = 750;
+            }
+            if (autoChanges.homeNeedsRenovation === false) {
+              newState.homeNeedsRenovation = false;
+            }
+
+            const choiceLabel = nextEvent.options?.[0]?.label || 'Processed';
+            const outcomeMessage = autoChanges.statusMessages?.[0] || 'Processed automatically.';
+            newState.eventHistory = [
+              {
+                day: changes.currentDay,
+                eventName: nextEvent.name || 'Life Event',
+                icon: nextEvent.icon || '⚡',
+                choice: choiceLabel,
+                choiceIndex: 0,
+                poolDelta,
+                outcome: outcomeMessage,
+                isAuto: true,
+              },
+              ...(newState.eventHistory || s.eventHistory),
+            ];
+
+            newState.decisionHistory = [
+              ...(s.decisionHistory || []),
+              { day: changes.currentDay, type: 'event', eventId: nextEvent.id, choiceIndex: 0, poolDelta, isAuto: true },
+            ];
+
+            newState.recentAutoToast = {
+              id: Date.now(),
+              name: nextEvent.name,
+              icon: nextEvent.icon || '⚡',
+              poolDelta,
+              choice: choiceLabel,
+              message: outcomeMessage,
+            };
+            newState.lastEventDay = changes.currentDay;
+          }
+        } else {
+          // Multi-choice event: real player choice required!
+          newState.currentEvent = nextEvent;
+          newState.lastEventDay = changes.currentDay;
+        }
       }
 
       // Milestone triggered
@@ -486,16 +633,20 @@ const useGameStore = create((set, get) => ({
       if (changes.gameOverReason) {
         newState.gameOver = true;
         newState.gameOverReason = changes.gameOverReason;
-        newState.results = calculateResults({ ...s, ...newState });
+        try {
+          newState.results = calculateResults({ ...s, ...newState });
+        } catch (e) {
+          console.error("Scorecard calculation error at game over:", e);
+        }
         newState.screen = 'scorecard';
       }
 
       return newState;
     });
 
-    // If event, milestone, deficit, or ledger appeared, pause the sim
+    // If decision event, milestone, or deficit appeared, pause the sim
     const updated = get();
-    if (updated.currentEvent || updated.showMilestone || updated.gameOver || updated.deficitInfo || updated.showMonthlyLedger) {
+    if (updated.currentEvent || updated.showMilestone || updated.gameOver || updated.deficitInfo) {
       get().pauseSimulation();
     }
   },
@@ -933,11 +1084,19 @@ const useGameStore = create((set, get) => ({
 
       get().startSimulation();
     } else if (action === 'declare_insolvency') {
+      let results = null;
+      try {
+        results = calculateResults(get());
+      } catch (e) {
+        console.error("Scorecard calculation error at declare_insolvency:", e);
+      }
       set({
         deficitInfo: null,
         gameOver: true,
         gameOverReason: 'broke',
         simRunning: false,
+        results,
+        screen: 'scorecard',
       });
       get().pauseSimulation();
     }
@@ -1813,6 +1972,10 @@ const useGameStore = create((set, get) => ({
       familyWeddingFired: false,
       married: false,
       homeNeedsRenovation: false,
+      recentAutoToast: null,
+      currentYearStatements: [],
+      monthlyStatementsHistory: [],
+      annualIncomeAcc: 0,
     });
   },
 

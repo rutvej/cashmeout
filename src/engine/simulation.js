@@ -103,14 +103,46 @@ export const simulateTick = (state) => {
 
     // Apply returns
     const poolAfterReturns = calculateMonthlyReturns(instruments, poolAfterCashflow);
+    const monthlyInvestmentReturns = Math.max(0, poolAfterReturns - poolAfterCashflow);
     
     stateChanges.poolDelta = poolAfterReturns - pool;
     stateChanges.monthlySurplus = monthlySurplus;
     stateChanges.totalIncome = netIncome;
     stateChanges.totalDeductions = netDeductions;
 
-    // Accumulate annual income for precise tax computation
-    stateChanges.annualIncomeAcc = (state.annualIncomeAcc || 0) + netIncome;
+    // Accumulate annual income for precise tax computation across ALL income streams (Salary, Business, Rental, Capital Gains)
+    stateChanges.annualIncomeAcc = (state.annualIncomeAcc || 0) + netIncome + monthlyInvestmentReturns;
+
+    const monthNumberInYear = Math.min(12, Math.floor(((nextDay - 1) % 365) / 30) + 1);
+    const currentYear = Math.floor((nextDay - 1) / 365) + 1;
+    const salaryEarned = incomes.filter(i => i.type === 'job' || i.type === 'family_business').reduce((sum, inc) => sum + inc.amount, 0);
+    const businessEarned = state.businessIncome || 0;
+    let rentEarned = 0;
+    if (state.homesOwned) {
+      state.homesOwned.forEach(h => {
+        if (h.isRentedOut && h.rentalIncome) rentEarned += h.rentalIncome;
+      });
+    }
+    const otherEarned = incomes.filter(i => i.type !== 'job' && i.type !== 'family_business').reduce((sum, inc) => sum + inc.amount, 0);
+    const totalEarnedThisMonth = salaryEarned + businessEarned + rentEarned + otherEarned + monthlyInvestmentReturns;
+
+    stateChanges.newMonthlyStatement = {
+      id: `stmt_y${currentYear}_m${monthNumberInYear}`,
+      day: nextDay,
+      year: currentYear,
+      month: monthNumberInYear,
+      salaryEarned,
+      businessEarned,
+      rentEarned,
+      otherEarned,
+      investmentGains: monthlyInvestmentReturns,
+      totalEarned: totalEarnedThisMonth,
+      totalExpenses: netDeductions,
+      surplus: monthlySurplus,
+      liquidPoolAfter: poolAfterReturns,
+      incomesList: incomes.map(i => ({ ...i })),
+      deductionsList: fixedDeductions.map(d => ({ ...d })),
+    };
 
     // Loans countdown
     if (loans.length > 0) {
@@ -202,8 +234,21 @@ export const simulateTick = (state) => {
 
   // --- Annual Tax Assessment (Day 360 of each year, after month 12 earnings) ---
   if (nextDay % 365 === 360) {
-    const annualEarned = state.annualIncomeAcc || (incomes.reduce((s, i) => s + i.amount, 0) * 12);
+    // Strictly calculate tax by adding up the actual earnings from each monthly statement of the year
+    const statements = state.currentYearStatements || [];
+    const statementSum = statements.reduce((sum, s) => sum + (s.totalEarned || 0), 0);
+    const month12Earned = stateChanges.newMonthlyStatement ? stateChanges.newMonthlyStatement.totalEarned : 0;
+    const hasMonth12InHistory = statements.some(s => s.month === 12);
+    const actualYearTotal = hasMonth12InHistory ? statementSum : (statementSum + month12Earned);
+
+    const rentalIncome = (state.homesOwned || [])
+      .filter(h => h.isRentedOut && h.rentalIncome)
+      .reduce((sum, h) => sum + h.rentalIncome, 0);
+    const fallbackAllIncome = ((incomes.reduce((s, i) => s + i.amount, 0) + (state.businessIncome || 0) + rentalIncome) * 12);
+    const annualEarned = actualYearTotal > 0 ? actualYearTotal : fallbackAllIncome;
     const taxBill = computeIncomeTax(annualEarned);
+
+    const statementCount = statements.length + (hasMonth12InHistory ? 0 : (stateChanges.newMonthlyStatement ? 1 : 0));
 
     scheduledEvent = {
       id: 'annual_tax',
@@ -211,21 +256,24 @@ export const simulateTick = (state) => {
       type: taxBill > 0 ? 'bad' : 'neutral',
       icon: '🏛️',
       description: taxBill > 0
-        ? `Tax filing season: Assessed based on New Regime slabs on your ₹${annualEarned.toLocaleString('en-IN')} total annual earnings.`
-        : `Tax filing season: Total earnings ₹${annualEarned.toLocaleString('en-IN')} are within the rebate limit (Section 87A). ₹0 tax liability!`,
+        ? `Tax filing season: Assessed based on New Regime slabs on your actual ₹${annualEarned.toLocaleString('en-IN')} total annual earnings added up across your 12 monthly statements (reflecting all salary changes, gaps, business, rent & returns).`
+        : `Tax filing season: Actual total earnings ₹${annualEarned.toLocaleString('en-IN')} across your 12 monthly statements are within the rebate limit (Section 87A). ₹0 tax liability!`,
       financialImpact: {
         type: 'loss',
         amount: taxBill,
         annualIncome: annualEarned,
+        isAllIncome: true,
+        statementCount,
       },
       options: [
         {
           label: taxBill > 0 ? `File Returns & Pay Tax (₹${taxBill.toLocaleString('en-IN')})` : `File Returns (₹0 Tax Payable)`,
-          description: taxBill > 0 ? `Paid strictly from liquid savings buffer.` : `Full rebate applied under New Tax Regime.`
+          description: taxBill > 0 ? `Assessed on actual statements. Paid strictly from liquid savings buffer.` : `Full rebate applied under New Tax Regime.`
         }
       ]
     };
 
+    stateChanges.resetYearStatements = true;
     stateChanges.annualIncomeAcc = 0;
   }
 

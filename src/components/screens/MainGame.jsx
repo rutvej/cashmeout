@@ -8,11 +8,10 @@ import InstrumentBar from '../game/InstrumentBar';
 import IncomeDeductions from '../game/IncomeDeductions';
 import TabBar from '../ui/TabBar';
 import EventCard from '../game/EventCard';
-import EventLog from '../game/EventLog';
+import LiveFinancialLedger from '../game/LiveFinancialLedger';
 import AllocationSheet from '../game/AllocationSheet';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
-import LedgerDisplay from '../game/LedgerDisplay';
 import FloatingDelta from '../game/FloatingDelta';
 
 // Tab screens
@@ -74,12 +73,11 @@ const MainGame = () => {
     (store.homeMaintenanceCost || 0) +
     (store.carMaintenanceCost || 0);
 
-  // Strict modal priority to prevent any overlapping dialogs (events never block navigation)
+  // Strict modal priority to prevent any overlapping dialogs
   const activeModal = (() => {
     if (store.deficitInfo) return 'liquidation';
     if (store.showMilestone) return 'milestone';
     if (store.showAllocation) return 'allocation';
-    if (store.showMonthlyLedger) return 'ledger';
     return null;
   })();
 
@@ -141,14 +139,19 @@ const MainGame = () => {
 
             {/* Core Financial Dashboard Metrics */}
             <PoolDisplay pool={store.pool} prevPool={prevPool} />
+
+            {/* Live Financial Statement & Event Ledger (Newest on top) */}
+            <LiveFinancialLedger
+              eventHistory={store.eventHistory}
+              simRunning={store.simRunning}
+              onPause={store.pauseSimulation}
+              recentAutoToast={store.recentAutoToast}
+              onDismissToast={store.clearAutoToast}
+            />
+
             <IncomeDeductions totalIncome={totalIncome} totalDeductions={totalDeductions} />
             <InstrumentBar instruments={store.instruments} pool={store.pool} />
             <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
-
-            {/* Recent Activity Log */}
-            <div className="pt-2">
-              <EventLog events={[...store.eventHistory].reverse()} />
-            </div>
           </div>
         ) : (
           <div className="p-3 sm:p-4 bg-gray-50/50 min-h-full max-w-md w-full mx-auto overflow-x-hidden pb-24">
@@ -205,50 +208,6 @@ const MainGame = () => {
           initialAllocations={store.buckets}
           onConfirm={store.confirmAllocation} 
         />
-      )}
-
-      {/* 5. Monthly Ledger Modal (Day 1 Statement When Financials Change) */}
-      {activeModal === 'ledger' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="max-w-md w-full max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-5 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">📊</span>
-                <span className="font-extrabold text-sm text-slate-800">Monthly Financial Statement</span>
-              </div>
-              <span className="text-xs bg-emerald-50 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full border border-emerald-200">
-                1st of Month
-              </span>
-            </div>
-
-            <LedgerDisplay
-              incomes={store.incomes}
-              deductions={store.fixedDeductions}
-              loans={store.loans}
-              insuranceCosts={[
-                ...(store.hasHealthInsurance ? [{ name: 'Health Insurance', amount: store.healthInsuranceCost }] : []),
-                ...(store.hasVehicleInsurance ? [{ name: 'Vehicle Insurance', amount: store.vehicleInsuranceCost }] : []),
-              ]}
-              maintenanceCosts={[
-                ...(store.homeMaintenanceCost > 0 ? [{ name: 'Home Maintenance', amount: store.homeMaintenanceCost }] : []),
-                ...(store.carMaintenanceCost > 0 ? [{ name: 'Car Maintenance', amount: store.carMaintenanceCost }] : []),
-              ]}
-              surplus={totalIncome - totalDeductions}
-              buckets={store.buckets}
-              goals={store.goals}
-              pool={store.pool}
-              instruments={store.instruments}
-              isExpanded={true}
-            />
-
-            <button
-              onClick={store.closeMonthlyLedger}
-              className="mt-4 w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold rounded-2xl shadow-lg transition"
-            >
-              Acknowledge & Continue Sim →
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );

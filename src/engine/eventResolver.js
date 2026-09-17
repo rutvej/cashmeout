@@ -28,9 +28,13 @@ export const resolveEvent = (event, playerChoice, state) => {
 
   switch (event.id) {
     case 'annual_tax': {
-      const taxBill = impact.amount || Math.round((state.annualIncomeAcc || 300000) * 0.08);
+      const taxBill = impact.amount != null ? impact.amount : Math.round((state.annualIncomeAcc || 300000) * 0.08);
       changes.poolDelta = -taxBill;
-      changes.statusMessages.push(`Annual tax of ₹${taxBill.toLocaleString('en-IN')} paid to income tax department.`);
+      changes.annualIncomeAcc = 0;
+      changes.statusMessages.push(taxBill > 0
+        ? `Annual tax of ₹${taxBill.toLocaleString('en-IN')} paid across all income streams (Salary, Business, Rent, Capital Gains).`
+        : `Tax return filed: ₹0 liability due to rebate limit under New Tax Regime.`
+      );
       break;
     }
 

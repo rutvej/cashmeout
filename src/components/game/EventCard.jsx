@@ -127,15 +127,15 @@ const EventCard = ({ event, onChoice }) => {
           {event.id === 'annual_tax' && (
             <div className="flex justify-between items-center">
               <div>
-                <span className="text-xs font-bold block">Annual Tax Due (8%)</span>
-                <span className="text-[10px] text-text-muted">Computed strictly on past year's income</span>
+                <span className="text-xs font-bold block">Annual Tax Due (New Regime)</span>
+                <span className="text-[10px] text-text-muted">Assessed on past 12 monthly statements</span>
               </div>
               <div className="text-right">
                 <span className="text-base font-extrabold text-red-600">
                   -{formatCurrency(impact.amount || 0)}
                 </span>
                 <span className="text-[10px] text-text-muted block">
-                  Earned: {formatCurrency(impact.annualIncome || 0)}
+                  Total Earned: {formatCurrency(impact.annualIncome || 0)}
                 </span>
               </div>
             </div>

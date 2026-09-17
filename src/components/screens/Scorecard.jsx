@@ -19,7 +19,7 @@ const Scorecard = () => {
 
   const results = useMemo(() => {
     try {
-      return calculateResults(store);
+      return store.results || calculateResults(store);
     } catch (e) {
       console.error('Error calculating results:', e);
       return {
@@ -35,6 +35,18 @@ const Scorecard = () => {
       };
     }
   }, [store]);
+
+  const safeResults = results || {
+    goalsAchieved: [],
+    goalsSacrificed: [],
+    bonusGoals: [],
+    resultScore: 0,
+    finalNetWorth: store.pool || 0,
+    literacyScore: 50,
+    biggestMistake: 'Maintain a diversified buffer for life emergencies.',
+    biggestWin: 'Navigated 20 years of career and life events.',
+    turningPoint: 'Mid-career transitions.',
+  };
 
   const insights = useMemo(() => {
     try {
@@ -63,9 +75,9 @@ const Scorecard = () => {
   const realEstateValue = (store.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
   const businessValue = store.hasActiveBusiness ? (store.businessIncome || 0) * 22 : 0;
   const totalDebt = (store.loans || []).reduce((sum, l) => sum + (l.principal || 0), 0);
-  const totalNetWorth = results.finalNetWorth ?? (store.pool + realEstateValue + businessValue - totalDebt);
+  const totalNetWorth = safeResults.finalNetWorth ?? (store.pool + realEstateValue + businessValue - totalDebt);
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}?seed=${seedNumber}`;
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}?seed=${seedNumber}` : '';
 
   const generateShareText = () => {
     const achievedSummary = achievedGoals.map(g => {
@@ -77,11 +89,11 @@ const Scorecard = () => {
     return `🎮 CashMeOut Life Simulation Run (Age 22→42)
 🌱 World Seed: #${seedNumber}
 💰 Final Net Worth: ${formatCurrency(totalNetWorth)}
-🧠 Financial Literacy: ${results.literacyScore}/100
+🧠 Financial Literacy: ${safeResults.literacyScore}/100
 🏆 Goals Achieved (${achievedGoals.length}/${store.goals?.length || 0}):
 ${achievedSummary || '• None achieved'}
-${results.biggestWin ? `\n🏆 Win: ${results.biggestWin}` : ''}
-${results.biggestMistake ? `\n💡 Lesson: ${results.biggestMistake}` : ''}
+${safeResults.biggestWin ? `\n🏆 Win: ${safeResults.biggestWin}` : ''}
+${safeResults.biggestMistake ? `\n💡 Lesson: ${safeResults.biggestMistake}` : ''}
 
 Can you beat my financial score on Seed #${seedNumber}?
 Play here: ${shareUrl}`;
@@ -240,7 +252,7 @@ Play here: ${shareUrl}`;
             <div className="grid grid-cols-2 gap-2 border-t border-gray-200/60 pt-2.5">
               <div>
                 <p className="text-[10px] text-text-muted uppercase font-bold">Financial Literacy</p>
-                <p className="text-xl font-black">{results.literacyScore}<span className="text-xs text-text-muted">/100</span></p>
+                <p className="text-xl font-black">{safeResults.literacyScore}<span className="text-xs text-text-muted">/100</span></p>
               </div>
               <div>
                 <p className="text-[10px] text-text-muted uppercase font-bold">Goal Score</p>
@@ -362,8 +374,8 @@ Play here: ${shareUrl}`;
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
             <Card className="mb-4">
               <h3 className="font-bold text-xs uppercase tracking-wider text-text-muted mb-2">Net Worth Trajectory</h3>
-              <div className="h-44">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-44 w-full">
+                <ResponsiveContainer width="100%" height={176} minWidth={100} minHeight={176}>
                   <LineChart data={chartData} margin={{ top: 5, right: 10, left: -18, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                     <XAxis dataKey="age" tick={{ fontSize: 9 }} stroke="#8A8781" />
@@ -378,24 +390,24 @@ Play here: ${shareUrl}`;
         )}
 
         {/* Biggest Win */}
-        {results.biggestWin && (
+        {safeResults.biggestWin && (
           <Card className="mb-3 bg-emerald-50/70 border border-emerald-200">
             <h3 className="font-bold text-emerald-800 text-xs uppercase tracking-wider mb-1">🏆 Biggest Financial Win</h3>
-            <p className="text-xs text-emerald-950 leading-relaxed font-medium">{results.biggestWin}</p>
+            <p className="text-xs text-emerald-950 leading-relaxed font-medium">{safeResults.biggestWin}</p>
           </Card>
         )}
 
         {/* Biggest Takeaway */}
         <Card className="mb-3 bg-accent-caution/10 border border-accent-caution/30">
           <h3 className="font-bold text-accent-caution-dark text-xs uppercase tracking-wider mb-1">💡 Key Financial Lesson</h3>
-          <p className="text-xs text-text-primary leading-relaxed">{results.biggestMistake}</p>
+          <p className="text-xs text-text-primary leading-relaxed">{safeResults.biggestMistake}</p>
         </Card>
 
         {/* Turning Point */}
-        {results.turningPoint && (
+        {safeResults.turningPoint && (
           <Card className="mb-4 bg-indigo-50/70 border border-indigo-200">
             <h3 className="font-bold text-indigo-800 text-xs uppercase tracking-wider mb-1">📈 Net Worth Turning Point</h3>
-            <p className="text-xs text-indigo-950 leading-relaxed font-medium">{results.turningPoint}</p>
+            <p className="text-xs text-indigo-950 leading-relaxed font-medium">{safeResults.turningPoint}</p>
           </Card>
         )}
 

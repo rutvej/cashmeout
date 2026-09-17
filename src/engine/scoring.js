@@ -66,55 +66,61 @@ export const calculateFinancialLiteracyScore = (state) => {
 };
 
 export const findBiggestMistake = (state) => {
-  const events = state.eventHistory || [];
+  const events = state?.eventHistory || [];
   let worstEvent = null;
   let minDelta = 0;
 
   events.forEach(ev => {
-    if (ev.poolDelta < minDelta) {
+    if (ev && typeof ev.poolDelta === 'number' && ev.poolDelta < minDelta) {
       minDelta = ev.poolDelta;
       worstEvent = ev;
     }
   });
 
   if (worstEvent) {
-    return `Lost ₹${Math.abs(minDelta)} from: ${worstEvent.eventName}${worstEvent.outcome ? ` (${worstEvent.outcome})` : ''}`;
+    const name = worstEvent.eventName || worstEvent.name || 'Expense';
+    return `Lost ₹${Math.abs(Math.round(minDelta)).toLocaleString('en-IN')} from: ${name}${worstEvent.outcome ? ` (${worstEvent.outcome})` : ''}`;
   }
   return "No major financial mistakes recorded.";
 };
 
 export const findBiggestWin = (state) => {
-  const events = state.eventHistory || [];
+  const events = state?.eventHistory || [];
   let bestEvent = null;
   let maxDelta = 0;
 
   events.forEach(ev => {
-    if (ev.poolDelta > maxDelta) {
+    if (ev && typeof ev.poolDelta === 'number' && ev.poolDelta > maxDelta) {
       maxDelta = ev.poolDelta;
       bestEvent = ev;
     }
   });
 
   if (bestEvent) {
-    return `Gained ₹${maxDelta} from: ${bestEvent.eventName}${bestEvent.outcome ? ` (${bestEvent.outcome})` : ''}`;
+    const name = bestEvent.eventName || bestEvent.name || 'Windfall';
+    return `Gained ₹${Math.round(maxDelta).toLocaleString('en-IN')} from: ${name}${bestEvent.outcome ? ` (${bestEvent.outcome})` : ''}`;
   }
   return "No major financial windfalls recorded.";
 };
 
 export const findTurningPoint = (state) => {
-  const snapshots = state.monthlySnapshots || [];
+  const snapshots = state?.monthlySnapshots || [];
   if (snapshots.length < 3) return "Not enough history to determine a turning point.";
 
   let maxDiff = 0;
   let turningMonth = null;
 
   for (let i = 2; i < snapshots.length; i++) {
-    const prevDelta = snapshots[i - 1].netWorth - snapshots[i - 2].netWorth;
-    const currDelta = snapshots[i].netWorth - snapshots[i - 1].netWorth;
+    const s0 = snapshots[i - 2];
+    const s1 = snapshots[i - 1];
+    const s2 = snapshots[i];
+    if (!s0 || !s1 || !s2) continue;
+    const prevDelta = (s1.netWorth ?? s1.pool ?? 0) - (s0.netWorth ?? s0.pool ?? 0);
+    const currDelta = (s2.netWorth ?? s2.pool ?? 0) - (s1.netWorth ?? s1.pool ?? 0);
     const change = Math.abs(currDelta - prevDelta);
-    if (change > maxDiff) {
+    if (!isNaN(change) && change > maxDiff) {
       maxDiff = change;
-      turningMonth = snapshots[i].day;
+      turningMonth = s2.day;
     }
   }
 
@@ -122,6 +128,7 @@ export const findTurningPoint = (state) => {
 };
 
 export const generateInsights = (state) => {
+  if (!state) return ["You played it safe and steady."];
   const insights = [];
 
   if (!state.hasHealthInsurance) insights.push("You lived dangerously without health insurance.");
@@ -150,7 +157,7 @@ export const generateInsights = (state) => {
 
   const totalEmi = (state.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
   const totalIncome = (state.incomes || []).reduce((sum, inc) => sum + (inc.amount || 0), 0) + (state.businessIncome || 0) +
-                      (state.homesOwned || []).reduce((sum, h) => sum + (h.isRentedOut ? h.rentalIncome || 0 : 0), 0);
+                      (state.homesOwned || []).reduce((sum, h) => sum + (h.isRentedOut ? (h.rentalIncome || 0) : 0), 0);
   if (totalIncome > 0 && (totalEmi / totalIncome) < 0.4) {
     insights.push("You maintained a very healthy debt-to-income (EMI) ratio.");
   }
@@ -159,6 +166,19 @@ export const generateInsights = (state) => {
 };
 
 export const calculateResults = (state) => {
+  if (!state) {
+    return {
+      goalsAchieved: [],
+      goalsSacrificed: [],
+      bonusGoals: [],
+      resultScore: 0,
+      finalNetWorth: 0,
+      literacyScore: 50,
+      biggestMistake: "No major financial mistakes recorded.",
+      biggestWin: "Completed full career timeline.",
+      turningPoint: "Trajectory remained steady."
+    };
+  }
   const achieved = (state.goals || []).filter(g => g.achieved);
   const sacrificed = (state.goals || []).filter(g => g.sacrificed);
   const bonus = achieved.filter(g => g.bonus);
