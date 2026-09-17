@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import useGameStore from '../../engine/store';
 import Button from '../ui/Button';
@@ -18,6 +18,7 @@ const EventCard = ({ event, onChoice }) => {
   const isBusiness = impact.type === 'business';
   const isMedical = event.id === 'medical_emergency' || event.id === 'uninsured_illness';
   const isWedding = event.id === 'family_wedding';
+  const isSingleOption = !event.options || event.options.length <= 1;
 
   let borderColor = 'border-accent-action';
   let badgeBg = 'bg-blue-50 text-blue-800 border-blue-200';
@@ -36,8 +37,17 @@ const EventCard = ({ event, onChoice }) => {
   const expenseAmt = isWedding ? weddingSelectedAmount : (impact.outOfPocket || impact.amount || 0);
   const isDeficit = expenseAmt > 0 && expenseAmt > store.pool;
 
-  const handleChoiceClick = (choiceIdx) => {
-    const extraData = {};
+  const [countdown, setCountdown] = useState(5.0);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
+
+  // Reset timer on new event
+  useEffect(() => {
+    setCountdown(5.0);
+    setIsTimerPaused(false);
+  }, [event?.id, event?.name]);
+
+  const handleChoiceClick = (choiceIdx, isAuto = false) => {
+    const extraData = { isAuto };
     if (isMedical && optInInsurance) {
       extraData.optInHealthInsurance = true;
     }
@@ -48,6 +58,26 @@ const EventCard = ({ event, onChoice }) => {
       onChoice(choiceIdx, extraData);
     }
   };
+
+  // 5-second auto-select countdown for single-option cards
+  useEffect(() => {
+    if (!isSingleOption || isWedding) return;
+    if (isTimerPaused || isCollapsed || store.activeTab) return;
+
+    const interval = 100;
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 0.15) {
+          clearInterval(timer);
+          handleChoiceClick(0, true);
+          return 0;
+        }
+        return Math.max(0, +(prev - 0.1).toFixed(1));
+      });
+    }, interval);
+
+    return () => clearInterval(timer);
+  }, [event?.id, isSingleOption, isWedding, isTimerPaused, isCollapsed, store.activeTab, optInInsurance, weddingSelectedAmount]);
 
   if (isCollapsed) {
     return (
@@ -102,9 +132,25 @@ const EventCard = ({ event, onChoice }) => {
           </div>
         </div>
         <div className="flex items-center space-x-1.5 shrink-0 ml-2">
-          <span className="text-[10px] font-semibold bg-gray-100 text-text-muted px-2 py-0.5 rounded-full">
-            Sim Paused
-          </span>
+          {isSingleOption && !isWedding ? (
+            <button
+              type="button"
+              onClick={() => setIsTimerPaused(!isTimerPaused)}
+              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border transition flex items-center gap-1 ${
+                isTimerPaused
+                  ? 'bg-amber-100 text-amber-800 border-amber-300'
+                  : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+              }`}
+              title={isTimerPaused ? "Click to resume 5-second countdown" : "Click to pause timer and read"}
+            >
+              <span>{isTimerPaused ? '▶️ Resume' : '⏸️'}</span>
+              <span>{isTimerPaused ? 'Paused' : `${Math.ceil(countdown)}s`}</span>
+            </button>
+          ) : (
+            <span className="text-[10px] font-semibold bg-gray-100 text-text-muted px-2 py-0.5 rounded-full">
+              Sim Paused
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setIsCollapsed(true)}
@@ -342,6 +388,37 @@ const EventCard = ({ event, onChoice }) => {
         </div>
       )}
 
+      {/* 5-Second Auto-Select Countdown Progress Bar */}
+      {isSingleOption && !isWedding && (
+        <div className="mb-2.5 p-2 bg-indigo-50/70 rounded-xl border border-indigo-100">
+          <div className="flex justify-between items-center text-[11px] font-bold mb-1">
+            <span className="flex items-center gap-1.5 text-indigo-700">
+              <span className={isTimerPaused ? '' : 'animate-spin'}>{isTimerPaused ? '⏸️' : '⏳'}</span>
+              <span>
+                {isTimerPaused
+                  ? 'Auto-advance paused — take your time'
+                  : `Auto-selecting option in ${Math.ceil(countdown)}s...`}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsTimerPaused(!isTimerPaused)}
+              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline"
+            >
+              {isTimerPaused ? 'Resume' : 'Pause'}
+            </button>
+          </div>
+          <div className="w-full bg-indigo-100 h-1.5 rounded-full overflow-hidden">
+            <div
+              className={`h-full transition-all duration-100 ease-linear rounded-full ${
+                isTimerPaused ? 'bg-amber-400' : 'bg-gradient-to-r from-indigo-500 to-emerald-500'
+              }`}
+              style={{ width: `${Math.min(100, Math.max(0, (countdown / 5) * 100))}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Choice Buttons */}
       <div className="space-y-2">
         {isWedding ? (
@@ -349,7 +426,7 @@ const EventCard = ({ event, onChoice }) => {
             fullWidth
             variant="primary"
             className="!py-2.5 !px-3 text-left justify-start"
-            onClick={() => handleChoiceClick(0)}
+            onClick={() => handleChoiceClick(0, false)}
           >
             <div className="flex flex-col text-left w-full">
               <span className="font-bold text-xs sm:text-sm text-text-primary">
@@ -367,12 +444,19 @@ const EventCard = ({ event, onChoice }) => {
               fullWidth
               variant={i === 0 ? 'primary' : 'secondary'}
               className="!py-2.5 !px-3 text-left justify-start"
-              onClick={() => handleChoiceClick(i)}
+              onClick={() => handleChoiceClick(i, false)}
             >
               <div className="flex flex-col text-left w-full">
-                <span className="font-bold text-xs sm:text-sm text-text-primary">
-                  {opt.label}
-                </span>
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-xs sm:text-sm text-text-primary">
+                    {opt.label}
+                  </span>
+                  {isSingleOption && (
+                    <span className="text-[10px] bg-white/80 text-indigo-800 font-bold px-2 py-0.5 rounded-full border border-indigo-200 ml-2 shrink-0">
+                      {isTimerPaused ? 'Paused' : `${Math.ceil(countdown)}s`}
+                    </span>
+                  )}
+                </div>
                 {opt.description && (
                   <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
                     {opt.description}
@@ -381,6 +465,24 @@ const EventCard = ({ event, onChoice }) => {
               </div>
             </Button>
           ))
+        )}
+
+        {(!event.options || event.options.length === 0) && !isWedding && (
+          <Button
+            fullWidth
+            variant="primary"
+            className="!py-2.5 !px-3 text-left justify-start"
+            onClick={() => handleChoiceClick(0, false)}
+          >
+            <div className="flex justify-between items-center w-full">
+              <span className="font-bold text-xs sm:text-sm text-text-primary">
+                Acknowledge & Continue
+              </span>
+              <span className="text-[10px] bg-white/80 text-indigo-800 font-bold px-2 py-0.5 rounded-full border border-indigo-200 ml-2 shrink-0">
+                {isTimerPaused ? 'Paused' : `${Math.ceil(countdown)}s`}
+              </span>
+            </div>
+          </Button>
         )}
       </div>
 

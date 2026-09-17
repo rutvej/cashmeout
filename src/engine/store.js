@@ -507,121 +507,11 @@ const useGameStore = create((set, get) => ({
         ];
       }
 
-      // Event triggered
+      // Event triggered: show the card as it is! 1-option cards auto-select in 5s inside EventCard
       if (nextEvent) {
-        const isSingleOption = !nextEvent.options || nextEvent.options.length <= 1;
-        if (isSingleOption) {
-          // Auto-advance 1-option event! Apply directly without pausing the simulation.
-          const autoEventWithData = { ...nextEvent };
-          const autoChanges = resolveEventFn(autoEventWithData, 0, { ...s, ...newState });
-
-          const poolDelta = autoChanges.poolDelta || 0;
-          const currentInstruments = newState.instruments || s.instruments;
-          const savingsPercent = currentInstruments.savings || 0;
-          const currentPool = newState.pool != null ? newState.pool : s.pool;
-          const savingsRupees = Math.round((savingsPercent / 100) * currentPool);
-          const expense = Math.abs(poolDelta);
-
-          if (poolDelta < 0 && savingsRupees < expense) {
-            // Shortfall! Needs liquidation resolution, so we pause and present shortfall modal
-            const shortfall = expense - savingsRupees;
-            const remainingPool = Math.max(0, currentPool - savingsRupees);
-            newState.pool = remainingPool;
-            newState.deficitInfo = {
-              shortfall,
-              reason: nextEvent.name || 'Expense',
-            };
-            newState.lastEventDay = changes.currentDay;
-            newState.eventHistory = [
-              {
-                day: changes.currentDay,
-                eventName: nextEvent.name || 'Life Event',
-                icon: nextEvent.icon || '⚠️',
-                choice: nextEvent.options?.[0]?.label || 'Obligation',
-                poolDelta: -savingsRupees,
-                outcome: `Savings covered ₹${savingsRupees.toLocaleString('en-IN')}. Shortfall ₹${shortfall.toLocaleString('en-IN')} pending liquidation.`,
-                isAuto: true,
-              },
-              ...(newState.eventHistory || s.eventHistory),
-            ];
-          } else {
-            // Normal auto-resolution! Apply pool delta directly
-            let updatedPool = currentPool + poolDelta;
-            if (poolDelta < 0) {
-              const newSavingsRupees = Math.max(0, savingsRupees - expense);
-              if (updatedPool > 0) {
-                const newSavingsPct = Math.min(100, Math.max(0, Math.round((newSavingsRupees / updatedPool) * 100)));
-                const currentNonSavings = (currentInstruments.stocks || 0) + (currentInstruments.mf || 0) + (currentInstruments.gold || 0) + (currentInstruments.fd || 0);
-                if (currentNonSavings > 0) {
-                  const scale = (100 - newSavingsPct) / currentNonSavings;
-                  newState.instruments = normalizeInstruments({
-                    savings: newSavingsPct,
-                    stocks: Math.round((currentInstruments.stocks || 0) * scale),
-                    mf: Math.round((currentInstruments.mf || 0) * scale),
-                    gold: Math.round((currentInstruments.gold || 0) * scale),
-                    fd: Math.round((currentInstruments.fd || 0) * scale),
-                  });
-                }
-              }
-            }
-            newState.pool = updatedPool;
-            if (autoChanges.newLoans && autoChanges.newLoans.length > 0) {
-              newState.loans = [...(newState.loans || s.loans), ...autoChanges.newLoans];
-            }
-            if (autoChanges.newDeductions && autoChanges.newDeductions.length > 0) {
-              newState.fixedDeductions = [...(newState.fixedDeductions || s.fixedDeductions), ...autoChanges.newDeductions];
-            }
-            if (autoChanges.married || nextEvent.id === 'marriage_event') {
-              newState.married = true;
-              newState.marriageEventFired = true;
-            }
-            if (autoChanges.familyWeddingFired || nextEvent.id === 'family_wedding') {
-              newState.familyWeddingFired = true;
-            }
-            if (autoChanges.optInHealthInsurance) {
-              newState.hasHealthInsurance = true;
-              newState.healthInsuranceCost = 750;
-            }
-            if (autoChanges.homeNeedsRenovation === false) {
-              newState.homeNeedsRenovation = false;
-            }
-
-            const choiceLabel = nextEvent.options?.[0]?.label || 'Processed';
-            const outcomeMessage = autoChanges.statusMessages?.[0] || 'Processed automatically.';
-            newState.eventHistory = [
-              {
-                day: changes.currentDay,
-                eventName: nextEvent.name || 'Life Event',
-                icon: nextEvent.icon || '⚡',
-                choice: choiceLabel,
-                choiceIndex: 0,
-                poolDelta,
-                outcome: outcomeMessage,
-                isAuto: true,
-              },
-              ...(newState.eventHistory || s.eventHistory),
-            ];
-
-            newState.decisionHistory = [
-              ...(s.decisionHistory || []),
-              { day: changes.currentDay, type: 'event', eventId: nextEvent.id, choiceIndex: 0, poolDelta, isAuto: true },
-            ];
-
-            newState.recentAutoToast = {
-              id: Date.now(),
-              name: nextEvent.name,
-              icon: nextEvent.icon || '⚡',
-              poolDelta,
-              choice: choiceLabel,
-              message: outcomeMessage,
-            };
-            newState.lastEventDay = changes.currentDay;
-          }
-        } else {
-          // Multi-choice event: real player choice required!
-          newState.currentEvent = nextEvent;
-          newState.lastEventDay = changes.currentDay;
-        }
+        newState.currentEvent = nextEvent;
+        newState.lastEventDay = changes.currentDay;
+        setTimeout(() => get().pauseSimulation(), 0);
       }
 
       // Milestone triggered
@@ -710,7 +600,6 @@ const useGameStore = create((set, get) => ({
             reason: eventWithData.name || 'Expense',
           },
           eventHistory: [
-            ...s.eventHistory,
             {
               day: s.currentDay,
               eventName: eventWithData.name || 'Life Event',
@@ -719,11 +608,13 @@ const useGameStore = create((set, get) => ({
               choiceIndex,
               poolDelta: -savingsRupees,
               outcome: `Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
-            }
+              isAuto: !!extraData.isAuto,
+            },
+            ...s.eventHistory,
           ],
           decisionHistory: [
-            ...s.decisionHistory,
-            { day: s.currentDay, type: 'event', eventId: eventWithData.id, choiceIndex, poolDelta },
+            ...(s.decisionHistory || []),
+            { day: s.currentDay, type: 'event', eventId: eventWithData.id, choiceIndex, poolDelta, isAuto: !!extraData.isAuto },
           ],
         };
 
@@ -786,7 +677,6 @@ const useGameStore = create((set, get) => ({
         currentEvent: null,
         loans: finalLoans,
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: currentEvt?.name || 'Life Event',
@@ -795,12 +685,22 @@ const useGameStore = create((set, get) => ({
             choiceIndex,
             poolDelta: poolDelta,
             outcome: allMessages.join(' '),
+            isAuto: !!extraData.isAuto,
           },
+          ...s.eventHistory,
         ],
         decisionHistory: [
-          ...s.decisionHistory,
-          { day: s.currentDay, type: 'event', eventId: currentEvt?.id, choiceIndex, poolDelta },
+          ...(s.decisionHistory || []),
+          { day: s.currentDay, type: 'event', eventId: currentEvt?.id, choiceIndex, poolDelta, isAuto: !!extraData.isAuto },
         ],
+        recentAutoToast: extraData.isAuto ? {
+          id: Date.now(),
+          name: currentEvt?.name,
+          icon: currentEvt?.icon || '⚡',
+          poolDelta,
+          choice: choiceLabel,
+          message: allMessages.join(' ') || 'Auto-selected after 5s.',
+        } : null,
       };
 
       // Applied instrument updates (e.g. Booking profit sets stocks to 0%)
@@ -917,7 +817,6 @@ const useGameStore = create((set, get) => ({
         instruments: normalizeInstruments(newInstruments),
         pool: Math.max(0, s.pool - paidAmount - penalty),
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Liquidated Investment Holding',
@@ -925,7 +824,8 @@ const useGameStore = create((set, get) => ({
             choice: `Sold ${assetKey.toUpperCase()} (₹${paidAmount.toLocaleString('en-IN')})`,
             poolDelta: -paidAmount,
             outcome: `Liquidated ₹${paidAmount.toLocaleString('en-IN')} of ${assetKey.toUpperCase()} to cover shortfall.`,
-          }
+          },
+          ...s.eventHistory,
         ]
       }));
 
@@ -950,7 +850,6 @@ const useGameStore = create((set, get) => ({
         player: { ...s.player, carOwned: false },
         financialChanged: true,
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Sold Vehicle to Clear Shortfall',
@@ -958,7 +857,8 @@ const useGameStore = create((set, get) => ({
             choice: 'Sold Car',
             poolDelta: netCashAdded,
             outcome: `Sold car for ₹${saleValue.toLocaleString('en-IN')}, paid ₹${paidAmount.toLocaleString('en-IN')} shortfall, and pocketed ₹${netCashAdded.toLocaleString('en-IN')} cash buffer!`,
-          }
+          },
+          ...s.eventHistory,
         ]
       }));
 
@@ -996,7 +896,6 @@ const useGameStore = create((set, get) => ({
         instruments: normalizeInstruments(s.instruments),
         financialChanged: true,
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Sold Real Estate to Clear Shortfall',
@@ -1004,7 +903,8 @@ const useGameStore = create((set, get) => ({
             choice: 'Sold Property',
             poolDelta: netCashAdded,
             outcome: `Sold property for ₹${saleValue.toLocaleString('en-IN')}, cleared ₹${paidAmount.toLocaleString('en-IN')} shortfall, and added ₹${netCashAdded.toLocaleString('en-IN')} to cash pool!`,
-          }
+          },
+          ...s.eventHistory,
         ]
       }));
 
@@ -1026,7 +926,6 @@ const useGameStore = create((set, get) => ({
         instruments: normalizeInstruments(s.instruments),
         financialChanged: true,
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Liquidated Business Equity',
@@ -1034,7 +933,8 @@ const useGameStore = create((set, get) => ({
             choice: 'Exited Venture',
             poolDelta: netCashAdded,
             outcome: `Sold venture for ₹${saleValue.toLocaleString('en-IN')}, cleared ₹${paidAmount.toLocaleString('en-IN')} shortfall, and added ₹${netCashAdded.toLocaleString('en-IN')} cash!`,
-          }
+          },
+          ...s.eventHistory,
         ]
       }));
 
@@ -1070,7 +970,6 @@ const useGameStore = create((set, get) => ({
         instruments: normalizeInstruments(s.instruments),
         loans: [...s.loans, newLoan],
         eventHistory: [
-          ...s.eventHistory,
           {
             day: s.currentDay,
             eventName: 'Emergency Loan Issued',
@@ -1078,7 +977,8 @@ const useGameStore = create((set, get) => ({
             choice: 'Preserved Portfolio via Loan',
             poolDelta: 0,
             outcome: `Funded ₹${loanAmount.toLocaleString('en-IN')} shortfall via an Emergency Loan (EMI: ₹${emi}/mo) at 12% p.a.`,
-          }
+          },
+          ...s.eventHistory,
         ]
       }));
 
