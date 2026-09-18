@@ -88,6 +88,14 @@ export const getEligibleEvents = (state, eventDeck) => {
         return daysSince('Merit Promotion') > 270;
       case 'job_switch':
         return daysSince('Recruiter Offer') > 180 && state.experienceMonths >= 18;
+      case 'job_loss':
+        // Cooldown: at least 900 days (~2.5-3 years) since any layoff / restructuring
+        // Must not happen in first 365 days of player's career
+        return daysSince('Layoff') > 900 && 
+               daysSince('Restructuring') > 900 && 
+               daysSince('downsizing') > 900 && 
+               state.currentDay > 365 &&
+               (!isBull || Math.random() < 0.25);
       default:
         return true;
     }

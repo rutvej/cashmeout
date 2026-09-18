@@ -79,19 +79,29 @@ const AllocationSheet = ({ isOpen, goals = [], onConfirm }) => {
   };
 
   const handleBalancedPreset = () => {
-    // 60% to Goals, 30% to Funds, 10% Unallocated cash buffer
+    // 50% to Goals, 25% to Funds, 25% Unallocated cash buffer
     const newGoals = {};
     if (activeGoals.length > 0) {
-      const perGoal = Math.floor(60 / activeGoals.length);
+      const perGoal = Math.floor(50 / activeGoals.length);
       activeGoals.forEach(g => { newGoals[g.id] = perGoal; });
     }
 
     const newFunds = {};
     if (activeFunds.length > 0) {
-      const perFund = Math.floor(30 / activeFunds.length);
+      const perFund = Math.floor(25 / activeFunds.length);
       activeFunds.forEach(f => { newFunds[f.id] = perFund; });
     }
 
+    setGoalAllocs(newGoals);
+    setFundAllocs(newFunds);
+  };
+
+  const handleKeepCashPreset = () => {
+    // 0% assigned: 100% flows directly into liquid cash savings
+    const newGoals = {};
+    activeGoals.forEach(g => { newGoals[g.id] = 0; });
+    const newFunds = {};
+    activeFunds.forEach(f => { newFunds[f.id] = 0; });
     setGoalAllocs(newGoals);
     setFundAllocs(newFunds);
   };
@@ -139,10 +149,18 @@ const AllocationSheet = ({ isOpen, goals = [], onConfirm }) => {
           <div className="flex gap-1.5">
             <button
               type="button"
+              onClick={handleKeepCashPreset}
+              className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-200 transition"
+              title="Leave 100% of surplus unassigned to flow into cash savings"
+            >
+              100% Cash (0% Assigned)
+            </button>
+            <button
+              type="button"
               onClick={handleBalancedPreset}
               className="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold px-2 py-1 rounded-lg border border-indigo-200 transition"
             >
-              60/30 Balanced
+              50/25 Balanced
             </button>
             <button
               type="button"
@@ -240,6 +258,16 @@ const AllocationSheet = ({ isOpen, goals = [], onConfirm }) => {
                       >
                         +
                       </button>
+                      {pct > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleFundUpdate(f.id, 0)}
+                          className="px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-red-600 hover:bg-gray-100 font-bold ml-1 transition"
+                          title="Unassign fund allocation (0%)"
+                        >
+                          0%
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -308,6 +336,16 @@ const AllocationSheet = ({ isOpen, goals = [], onConfirm }) => {
                     >
                       +
                     </button>
+                    {pct > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => handleGoalUpdate(g.id, 0)}
+                        className="px-1.5 py-0.5 rounded text-[10px] text-gray-400 hover:text-red-600 hover:bg-gray-100 font-bold ml-1 transition"
+                        title="Unassign goal allocation (0%)"
+                      >
+                        0%
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -349,8 +387,10 @@ const AllocationSheet = ({ isOpen, goals = [], onConfirm }) => {
           >
             {totalAllocated > 100
               ? `Reduce Allocations (Over by ${totalAllocated - 100}%)`
+              : totalAllocated === 0
+              ? 'Save Plan (100% Kept Unassigned in Liquid Cash) →'
               : remaining > 0
-              ? `Save Allocation (${remaining}% to Liquid Savings) →`
+              ? `Save Plan (${remaining}% Kept Unassigned in Liquid Cash) →`
               : 'Confirm Monthly Allocation (100% Deployed) →'}
           </Button>
         </div>

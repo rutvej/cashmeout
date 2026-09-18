@@ -13,7 +13,7 @@ export const EVENT_DECK = [
     name: 'Job Layoff / Restructuring',
     type: 'bad',
     icon: '📉',
-    weight: 9,
+    weight: 4,
     description: 'Macro headwinds led to departmental downsizing. Your salaried position was eliminated.',
     eligibilityCheck: (state) => state.incomes.some(i => i.type === 'job'),
   },

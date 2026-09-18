@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import useGameStore from '../../engine/store';
+import useGameStore, { calculateExpenseWaterfall } from '../../engine/store';
 import Button from '../ui/Button';
 import { formatCurrency } from '../../utils/format';
 import { createFund } from '../../engine/goals';
@@ -78,6 +78,9 @@ const EventCard = ({ event, onChoice }) => {
 
   const weddingSelectedAmount = Math.max(0, Number(weddingContributionAmount) || 0);
   const expenseAmt = isWedding ? weddingSelectedAmount : (impact.outOfPocket || impact.amount || 0);
+  const projectedWaterfall = (expenseAmt > 0 && (isMedical || impact.type === 'loss'))
+    ? calculateExpenseWaterfall(expenseAmt, event.id, store)
+    : null;
 
   const handleChoiceClick = (choiceIdx) => {
     const extraData = { isAuto: false };
@@ -302,6 +305,79 @@ const EventCard = ({ event, onChoice }) => {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Payment Waterfall Breakdown for Medical / Losses */}
+              {projectedWaterfall && expenseAmt > 0 && (
+                <div className="mt-3 pt-2.5 border-t border-slate-200/80 space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-extrabold">
+                    <span className="text-slate-800">
+                      {isMedical ? '🏥 Payment Source Waterfall:' : '🛡️ Payment Breakdown:'}
+                    </span>
+                    <span className={projectedWaterfall.shortfall > 0 ? 'text-red-600' : 'text-emerald-700'}>
+                      {projectedWaterfall.shortfall > 0
+                        ? `Shortfall: ${formatCurrency(projectedWaterfall.shortfall)}`
+                        : '✓ 100% Absorbed'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 bg-white/90 p-2.5 rounded-xl border border-slate-200 text-[11px]">
+                    {/* Dedicated & Other Safety Funds */}
+                    {projectedWaterfall.fundDeltas.map(d => (
+                      <div key={d.fundId} className="flex justify-between items-center">
+                        <span className="text-slate-700 flex items-center gap-1 font-medium">
+                          <span>{d.icon}</span>
+                          <span>{d.fundName}:</span>
+                        </span>
+                        <span className="font-bold text-emerald-700">-{formatCurrency(d.absorbed)}</span>
+                      </div>
+                    ))}
+
+                    {/* Liquid Cash Savings */}
+                    {projectedWaterfall.absorbedFromSavings > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-700 flex items-center gap-1 font-medium">
+                          <span>🏦</span>
+                          <span>Liquid Savings Buffer:</span>
+                        </span>
+                        <span className="font-bold text-blue-700">-{formatCurrency(projectedWaterfall.absorbedFromSavings)}</span>
+                      </div>
+                    )}
+
+                    {/* Goals / Dedicated contributions */}
+                    {projectedWaterfall.goalDeltas.map((g, idx) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span className="text-slate-700 flex items-center gap-1 font-medium">
+                          <span>{g.icon}</span>
+                          <span>{g.goalName} (Goal Reserve):</span>
+                        </span>
+                        <span className="font-bold text-amber-700">-{formatCurrency(g.absorbed)}</span>
+                      </div>
+                    ))}
+
+                    {/* Shortfall if any */}
+                    {projectedWaterfall.shortfall > 0 && (
+                      <div className="flex justify-between items-center pt-1 border-t border-red-100 text-red-600 font-black">
+                        <span>⚠️ Emergency Shortfall:</span>
+                        <span>{formatCurrency(projectedWaterfall.shortfall)}</span>
+                      </div>
+                    )}
+
+                    {projectedWaterfall.fundDeltas.length === 0 && projectedWaterfall.absorbedFromSavings === 0 && projectedWaterfall.goalDeltas.length === 0 && (
+                      <span className="text-[10px] text-red-600 block">
+                        ⚠️ No safety reserves, cash, or goal funds available!
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] text-text-muted leading-tight">
+                    {projectedWaterfall.shortfall > 0
+                      ? '⚠️ Your funds, liquid savings, and goals cannot cover the total bill. Emergency credit will be required.'
+                      : isMedical
+                      ? '✓ Cascades automatically: Medical Fund → Other Funds → Liquid Savings → Goals.'
+                      : '✓ Cascades automatically from your safety reserves.'}
+                  </p>
                 </div>
               )}
 
@@ -646,9 +722,20 @@ const EventCard = ({ event, onChoice }) => {
                 className="!py-2.5 !px-3 text-left justify-start"
                 onClick={() => handleChoiceClick(0)}
               >
-                <span className="font-bold text-xs sm:text-sm text-text-primary">
-                  Acknowledge & Continue
-                </span>
+                <div className="flex flex-col text-left w-full">
+                  <span className="font-bold text-xs sm:text-sm text-text-primary">
+                    {isMedical
+                      ? projectedWaterfall && projectedWaterfall.shortfall > 0
+                        ? `Acknowledge Bill (Shortfall: ${formatCurrency(projectedWaterfall.shortfall)}) →`
+                        : `Pay Medical Bill (${formatCurrency(expenseAmt)}) via Reserves & Cash →`
+                      : 'Acknowledge & Continue'}
+                  </span>
+                  <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
+                    {isMedical
+                      ? 'Deductions cascade automatically: Medical Fund → Other Funds → Liquid Savings → Goals.'
+                      : 'Proceed to next simulation day.'}
+                  </span>
+                </div>
               </Button>
             )}
           </div>

@@ -105,6 +105,27 @@ const FinancialSetup = () => {
     });
   };
 
+  const handleSetZeroAllocations = () => {
+    const newBuckets = {};
+    activeGoals.forEach(g => { newBuckets[g.id] = 0; });
+    store.updateBucketAllocations(newBuckets);
+    const newFunds = {};
+    activeFunds.forEach(f => { newFunds[f.id] = 0; });
+    store.updateFundAllocations(newFunds);
+  };
+
+  const handleBalancedSetupPreset = () => {
+    const newBuckets = {};
+    const perGoal = activeGoals.length > 0 ? Math.floor(50 / activeGoals.length) : 0;
+    activeGoals.forEach(g => { newBuckets[g.id] = perGoal; });
+    store.updateBucketAllocations(newBuckets);
+
+    const newFunds = {};
+    const perFund = activeFunds.length > 0 ? Math.floor(25 / activeFunds.length) : 0;
+    activeFunds.forEach(f => { newFunds[f.id] = perFund; });
+    store.updateFundAllocations(newFunds);
+  };
+
   const totalAllocatedPct =
     Object.values(store.buckets || {}).reduce((s, v) => s + v, 0) +
     Object.values(store.fundAllocations || {}).reduce((s, v) => s + v, 0);
@@ -335,13 +356,37 @@ const FinancialSetup = () => {
                 </div>
               </Card>
 
+              {/* Quick Presets */}
+              <div className="flex justify-between items-center bg-stone-100/80 p-2 rounded-xl">
+                <span className="text-[10px] font-bold text-text-muted uppercase">Quick Presets:</span>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleSetZeroAllocations}
+                    className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200 transition"
+                    title="Leave 100% of surplus unassigned to flow into cash savings"
+                  >
+                    100% Cash (0% Assigned)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBalancedSetupPreset}
+                    className="text-[10px] bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded border border-indigo-200 transition"
+                  >
+                    50/25 Balanced
+                  </button>
+                </div>
+              </div>
+
               {/* Allocation Guidance */}
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-text-muted uppercase tracking-wider">
                   Distribute Monthly Surplus
                 </span>
-                <span className={`text-xs font-black ${totalAllocatedPct === 100 ? 'text-green-700' : 'text-amber-700'}`}>
-                  Allocated: {totalAllocatedPct}% / 100%
+                <span className={`text-xs font-black ${totalAllocatedPct > 100 ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {totalAllocatedPct > 100
+                    ? `⚠️ Over-allocated: ${totalAllocatedPct}% / 100%`
+                    : `Allocated: ${totalAllocatedPct}% (Unassigned: ${100 - totalAllocatedPct}%)`}
                 </span>
               </div>
 
@@ -357,11 +402,21 @@ const FinancialSetup = () => {
                     <div key={goal.id} className="p-3 bg-white rounded-xl border border-stone-200 shadow-xs">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs font-bold text-text-primary truncate">{goal.name}</span>
-                        <div className="text-right">
+                        <div className="flex items-center space-x-1.5">
                           <span className="text-xs font-black text-text-primary">{pct}%</span>
-                          <span className="text-[10px] text-emerald-700 font-bold ml-1.5">
+                          <span className="text-[10px] text-emerald-700 font-bold">
                             ({formatCurrency(rupees)}/mo)
                           </span>
+                          {pct > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateBucketPercent(goal.id, 0)}
+                              className="text-[10px] font-bold text-gray-400 hover:text-red-600 px-1 py-0.5 rounded hover:bg-gray-100 transition"
+                              title="Unassign this goal (set to 0%)"
+                            >
+                              0%
+                            </button>
+                          )}
                         </div>
                       </div>
                       <input
@@ -392,11 +447,21 @@ const FinancialSetup = () => {
                             <span className="text-xs font-bold text-emerald-950 truncate">
                               {fund.icon} {fund.name}
                             </span>
-                            <div className="text-right">
+                            <div className="flex items-center space-x-1.5">
                               <span className="text-xs font-black text-emerald-900">{pct}%</span>
-                              <span className="text-[10px] text-emerald-700 font-bold ml-1.5">
+                              <span className="text-[10px] text-emerald-700 font-bold">
                                 ({formatCurrency(rupees)}/mo)
                               </span>
+                              {pct > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateFundPercent(fund.id, 0)}
+                                  className="text-[10px] font-bold text-gray-400 hover:text-red-600 px-1 py-0.5 rounded hover:bg-gray-100 transition"
+                                  title="Unassign this fund (set to 0%)"
+                                >
+                                  0%
+                                </button>
+                              )}
                             </div>
                           </div>
                           <input
@@ -415,9 +480,9 @@ const FinancialSetup = () => {
                 )}
               </div>
 
-              {totalAllocatedPct < 100 && (
+              {totalAllocatedPct <= 100 && (
                 <div className="p-3 bg-blue-50 text-blue-900 rounded-xl text-xs border border-blue-100 leading-snug">
-                  💡 <strong>Unallocated {100 - totalAllocatedPct}%</strong> (+{formatCurrency(Math.round(((100 - totalAllocatedPct) / 100) * monthlySurplus))}/mo) will stay as unallocated liquid savings in your cash pool.
+                  💡 <strong>Unassigned {100 - totalAllocatedPct}%</strong> (+{formatCurrency(Math.round(((100 - totalAllocatedPct) / 100) * monthlySurplus))}/mo) stays as unallocated liquid savings buffer in your compounding cash pool. You do not need to assign 100%!
                 </div>
               )}
             </motion.div>
@@ -807,10 +872,13 @@ const FinancialSetup = () => {
           {currentStepIndex < STEPS.length - 1 ? (
             <Button
               size="lg"
+              disabled={currentStep.id === 'allocation' && totalAllocatedPct > 100}
               className="flex-1 text-xs font-black shadow-md"
               onClick={nextStep}
             >
-              Continue to {STEPS[currentStepIndex + 1].title.split(' ')[0]} →
+              {currentStep.id === 'allocation' && totalAllocatedPct > 100
+                ? `Reduce Allocations (Over by ${totalAllocatedPct - 100}%)`
+                : `Continue to ${STEPS[currentStepIndex + 1].title.split(' ')[0]} →`}
             </Button>
           ) : (
             <Button

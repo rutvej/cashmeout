@@ -36,30 +36,106 @@ export function normalizeInstruments(instruments) {
   return current;
 }
 
-export function absorbWithFunds(amount, eventId, funds = []) {
-  let remaining = amount;
-  let absorbedTotal = 0;
-  const fundDeltas = [];
-  const updatedFunds = (funds || []).map(f => ({ ...f }));
-
+export function calculateExpenseWaterfall(amount, eventId, state = {}) {
+  let remaining = Math.max(0, Math.round(amount));
   const isMedical = eventId === 'medical_emergency' || eventId === 'uninsured_illness';
   const targetTypes = isMedical
     ? ['medical', 'emergency', 'general']
     : ['emergency', 'general', 'medical'];
 
+  const updatedFunds = (state.funds || []).map(f => ({ ...f, currentAmount: f.currentAmount || 0 }));
+  const fundDeltas = [];
+
+  // 1. Primary matching safety funds (Medical fund first for medical bills, Emergency buffer for others)
   for (const t of targetTypes) {
     if (remaining <= 0) break;
-    const fund = updatedFunds.find(f => f.type === t && (f.currentAmount || 0) > 0);
-    if (fund) {
+    const matching = updatedFunds.filter(f => f.type === t && f.currentAmount > 0);
+    for (const fund of matching) {
+      if (remaining <= 0) break;
       const take = Math.min(remaining, fund.currentAmount);
       fund.currentAmount -= take;
       remaining -= take;
-      absorbedTotal += take;
-      fundDeltas.push({ fundId: fund.id, fundName: fund.name, absorbed: take });
+      fundDeltas.push({ fundId: fund.id, fundName: fund.name, icon: fund.icon || '🛡️', absorbed: take, type: fund.type });
     }
   }
 
-  return { remaining, absorbedTotal, fundDeltas, updatedFunds };
+  // 2. Secondary other funds (if not enough in primary fund, draw from other active funds)
+  if (remaining > 0) {
+    for (const fund of updatedFunds) {
+      if (remaining <= 0) break;
+      if (!targetTypes.includes(fund.type) && fund.currentAmount > 0) {
+        const take = Math.min(remaining, fund.currentAmount);
+        fund.currentAmount -= take;
+        remaining -= take;
+        fundDeltas.push({ fundId: fund.id, fundName: fund.name, icon: fund.icon || '🛡️', absorbed: take, type: fund.type });
+      }
+    }
+  }
+  const absorbedFromFunds = fundDeltas.reduce((s, d) => s + d.absorbed, 0);
+
+  // 3. Liquid savings buffer in cash pool
+  const pool = state.pool || 0;
+  const savingsPercent = state.instruments?.savings || 0;
+  const liquidSavings = Math.round((savingsPercent / 100) * pool);
+  let absorbedFromSavings = 0;
+  if (remaining > 0 && liquidSavings > 0) {
+    absorbedFromSavings = Math.min(remaining, liquidSavings);
+    remaining -= absorbedFromSavings;
+  }
+
+  // 4. Goals & Goal Reserves
+  const updatedGoals = (state.goals || []).map(g => ({ ...g }));
+  const goalDeltas = [];
+
+  // 4a. Dedicated goal contributions (lump sum windfalls stored in goals)
+  if (remaining > 0) {
+    for (const g of updatedGoals) {
+      if (remaining <= 0) break;
+      if (g.dedicatedContribution && g.dedicatedContribution > 0) {
+        const take = Math.min(remaining, g.dedicatedContribution);
+        g.dedicatedContribution -= take;
+        remaining -= take;
+        goalDeltas.push({ goalId: g.id, goalName: g.name, icon: g.icon || '🎯', absorbed: take, source: 'dedicated' });
+      }
+    }
+  }
+
+  // 4b. Investment capital backing goal buckets (MF, stocks, gold, fd)
+  const remainingInvestments = Math.max(0, pool - liquidSavings);
+  let absorbedFromInvestments = 0;
+  if (remaining > 0 && remainingInvestments > 0) {
+    absorbedFromInvestments = Math.min(remaining, remainingInvestments);
+    remaining -= absorbedFromInvestments;
+    goalDeltas.push({ goalId: 'goal_portfolio', goalName: 'Investment Portfolio', icon: '📈', absorbed: absorbedFromInvestments, source: 'portfolio' });
+  }
+  const absorbedFromGoals = goalDeltas.reduce((s, d) => s + d.absorbed, 0);
+
+  const shortfall = remaining;
+
+  return {
+    totalBill: amount,
+    absorbedFromFunds,
+    absorbedFromSavings,
+    absorbedFromGoals,
+    totalAbsorbed: amount - shortfall,
+    shortfall,
+    fundDeltas,
+    goalDeltas,
+    updatedFunds,
+    updatedGoals,
+    poolDeduction: absorbedFromSavings + absorbedFromInvestments,
+    absorbedFromInvestments,
+  };
+}
+
+export function absorbWithFunds(amount, eventId, funds = []) {
+  const res = calculateExpenseWaterfall(amount, eventId, { funds });
+  return {
+    remaining: amount - res.absorbedFromFunds,
+    absorbedTotal: res.absorbedFromFunds,
+    fundDeltas: res.fundDeltas,
+    updatedFunds: res.updatedFunds,
+  };
 }
 
 /**
@@ -245,17 +321,23 @@ const useGameStore = create((set, get) => ({
   setScreen: (screen) => set({ screen }),
 
   setGoals: (goals) => {
-    // Equal-split bucket allocation by default
-    const count = Math.max(1, goals.length);
-    const evenPercent = Math.floor(100 / count);
-    const remainder = 100 - (evenPercent * count);
-    const buckets = {};
-    goals.forEach((g, i) => {
-      const pct = i === 0 ? evenPercent + remainder : evenPercent;
-      g.bucketPercent = pct;
-      buckets[g.id] = pct;
+    set(s => {
+      const existingBuckets = s.buckets || {};
+      const buckets = {};
+      const count = Math.max(1, goals.length);
+      // Sensible initial allocation (e.g. 20% each, max 40-50% total) to leave room for funds and unallocated liquid cash
+      const defaultPerGoal = Math.min(25, Math.floor(40 / count));
+
+      goals.forEach(g => {
+        const pct = existingBuckets[g.id] !== undefined
+          ? existingBuckets[g.id]
+          : (g.bucketPercent !== undefined ? g.bucketPercent : defaultPerGoal);
+        g.bucketPercent = pct;
+        buckets[g.id] = pct;
+      });
+
+      return { goals, buckets, financialChanged: true };
     });
-    set({ goals, buckets, financialChanged: true });
   },
 
   addGoalMidGame: (goal, mode) => {
@@ -761,140 +843,182 @@ const useGameStore = create((set, get) => ({
     const eventWithData = { ...state.currentEvent, ...extraData };
     const changes = resolveEventFn(eventWithData, choiceIndex, state);
 
-    // Safety Fund expense absorption before touching pool / savings buffer!
+    // Safety Fund, Savings, and Goals Waterfall Absorption before shortfall!
     let rawDelta = changes.poolDelta || 0;
     let fundShieldMessage = '';
     let updatedFunds = state.funds ? state.funds.map(f => ({ ...f })) : [];
+    let updatedGoals = state.goals ? state.goals.map(g => ({ ...g })) : [];
 
-    if (rawDelta < 0 && updatedFunds.length > 0) {
-      const absorption = absorbWithFunds(Math.abs(rawDelta), eventWithData.id, updatedFunds);
-      if (absorption.absorbedTotal > 0) {
-        rawDelta = -absorption.remaining;
-        updatedFunds = absorption.updatedFunds;
-        const details = absorption.fundDeltas.map(d => `${d.fundName} covered ₹${d.absorbed.toLocaleString('en-IN')}`).join(', ');
-        fundShieldMessage = `🛡️ Safety Net Shield: ${details}. `;
+    if (rawDelta < 0) {
+      const waterfall = calculateExpenseWaterfall(Math.abs(rawDelta), eventWithData.id, state);
+      updatedFunds = waterfall.updatedFunds;
+      updatedGoals = waterfall.updatedGoals;
+
+      const parts = [];
+      if (waterfall.fundDeltas.length > 0) {
+        parts.push(...waterfall.fundDeltas.map(d => `${d.fundName} (₹${d.absorbed.toLocaleString('en-IN')})`));
       }
-    }
+      if (waterfall.absorbedFromSavings > 0) {
+        parts.push(`Liquid Cash (₹${waterfall.absorbedFromSavings.toLocaleString('en-IN')})`);
+      }
+      if (waterfall.goalDeltas.length > 0) {
+        parts.push(...waterfall.goalDeltas.map(d => `${d.goalName} (₹${d.absorbed.toLocaleString('en-IN')})`));
+      }
+      if (parts.length > 0) {
+        fundShieldMessage = `🛡️ Paid from: ${parts.join(', ')}. `;
+      }
 
-    // Expenses deduct strictly from savings buffer first!
-    const poolDelta = rawDelta;
-    const savingsPercent = state.instruments.savings || 0;
-    const savingsRupees = Math.round((savingsPercent / 100) * state.pool);
-    const expense = Math.abs(poolDelta);
+      if (waterfall.shortfall > 0) {
+        // True insolvency shortfall after funds, savings, and goals exhausted
+        const shortfall = waterfall.shortfall;
+        const finalLoans = [...state.loans];
+        if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
+        const finalDeductions = [...state.fixedDeductions];
+        if (changes.newDeductions && changes.newDeductions.length > 0) finalDeductions.push(...changes.newDeductions);
 
-    // If there is an expense and savings cannot cover it:
-    if (poolDelta < 0 && savingsRupees < expense) {
-      const shortfall = expense - savingsRupees;
-      const remainingPool = Math.max(0, state.pool - savingsRupees);
-      
-      let updatedInstruments;
-      if (remainingPool <= 0) {
-        updatedInstruments = { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 };
-      } else {
-        const nonSavingsSum = (state.instruments.stocks || 0) + (state.instruments.mf || 0) + (state.instruments.gold || 0) + (state.instruments.fd || 0);
-        if (nonSavingsSum > 0) {
-          const factor = 100 / nonSavingsSum;
-          updatedInstruments = {
-            savings: 0,
-            stocks: Math.round((state.instruments.stocks || 0) * factor),
-            mf: Math.round((state.instruments.mf || 0) * factor),
-            gold: Math.round((state.instruments.gold || 0) * factor),
-            fd: Math.round((state.instruments.fd || 0) * factor),
+        set(s => {
+          const shortfallState = {
+            pool: 0,
+            instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
+            currentEvent: null,
+            loans: finalLoans,
+            fixedDeductions: finalDeductions,
+            funds: updatedFunds,
+            goals: updatedGoals,
+            deficitInfo: {
+              shortfall,
+              reason: eventWithData.name || 'Expense',
+            },
+            eventHistory: [
+              {
+                day: s.currentDay,
+                eventName: eventWithData.name || 'Life Event',
+                icon: eventWithData.icon || '⚠️',
+                choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
+                choiceIndex,
+                poolDelta: -waterfall.totalAbsorbed,
+                outcome: `${fundShieldMessage}Remaining shortfall of ₹${shortfall.toLocaleString('en-IN')} pending emergency liquidation.`,
+                isAuto: !!extraData.isAuto,
+              },
+              ...s.eventHistory,
+            ],
+            decisionHistory: [
+              ...(s.decisionHistory || []),
+              { day: s.currentDay, type: 'event', eventId: eventWithData.id, choiceIndex, poolDelta: -waterfall.totalAbsorbed, isAuto: !!extraData.isAuto },
+            ],
           };
-          const totalSum = updatedInstruments.stocks + updatedInstruments.mf + updatedInstruments.gold + updatedInstruments.fd;
-          if (totalSum !== 100) updatedInstruments.stocks += (100 - totalSum);
-        } else {
-          updatedInstruments = { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 };
-        }
+
+          if (changes.married || eventWithData.id === 'marriage_event') {
+            shortfallState.married = true;
+            shortfallState.marriageEventFired = true;
+          }
+          if (changes.familyWeddingFired || eventWithData.id === 'family_wedding') {
+            shortfallState.familyWeddingFired = true;
+          }
+          if (changes.optInHealthInsurance) {
+            shortfallState.hasHealthInsurance = true;
+            shortfallState.healthInsuranceCost = 750;
+          }
+          if (changes.homeNeedsRenovation === false) {
+            shortfallState.homeNeedsRenovation = false;
+          }
+          if (changes.removedIncomes?.length > 0 || changes.newIncomes?.length > 0) {
+            shortfallState.incomes = (s.incomes || [])
+              .filter(i => !changes.removedIncomes?.includes(i.id))
+              .concat(changes.newIncomes || []);
+          }
+
+          shortfallState.instruments = normalizeInstruments(shortfallState.instruments);
+          return shortfallState;
+        });
+
+        get().pauseSimulation();
+        return;
       }
 
-      const finalLoans = [...state.loans];
-      if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
+      // Fully covered by funds, savings, and/or goals!
+      const newPool = Math.max(0, state.pool - waterfall.poolDeduction);
+      let newInstruments = { ...state.instruments };
+      if (waterfall.poolDeduction > 0 && newPool > 0) {
+        const remainingSavings = Math.max(0, (Math.round(((state.instruments?.savings || 0) / 100) * state.pool)) - waterfall.absorbedFromSavings);
+        const newSavingsPct = Math.round((remainingSavings / newPool) * 100);
+        const oldNonSavingsPct = Math.max(1, 100 - (state.instruments?.savings || 0));
+        const scale = (100 - newSavingsPct) / oldNonSavingsPct;
 
-      const finalDeductions = [...state.fixedDeductions];
-      if (changes.newDeductions && changes.newDeductions.length > 0) finalDeductions.push(...changes.newDeductions);
+        newInstruments = {
+          savings: newSavingsPct,
+          stocks: Math.round((state.instruments?.stocks || 0) * scale),
+          mf: Math.round((state.instruments?.mf || 0) * scale),
+          gold: Math.round((state.instruments?.gold || 0) * scale),
+          fd: Math.round((state.instruments?.fd || 0) * scale),
+        };
+        const totalSum = Object.values(newInstruments).reduce((a, b) => a + b, 0);
+        if (totalSum !== 100) newInstruments.savings += (100 - totalSum);
+      }
 
       set(s => {
-        const shortfallState = {
-          pool: remainingPool,
-          instruments: normalizeInstruments(updatedInstruments),
+        const currentEvt = s.currentEvent;
+        const choiceLabel = currentEvt?.options?.[choiceIndex]?.label || 'Acknowledged';
+        const allMessages = [...(changes.statusMessages || [])];
+
+        const finalLoans = [...s.loans];
+        if (changes.newLoans && changes.newLoans.length > 0) finalLoans.push(...changes.newLoans);
+
+        const newState = {
+          pool: newPool,
+          instruments: normalizeInstruments(newInstruments),
+          funds: updatedFunds,
+          goals: updatedGoals,
           currentEvent: null,
           loans: finalLoans,
-          fixedDeductions: finalDeductions,
-          funds: updatedFunds,
-          deficitInfo: {
-            shortfall,
-            reason: eventWithData.name || 'Expense',
-          },
           eventHistory: [
             {
               day: s.currentDay,
-              eventName: eventWithData.name || 'Life Event',
-              icon: eventWithData.icon || '⚠️',
-              choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
+              eventName: currentEvt?.name || 'Life Event',
+              icon: currentEvt?.icon || '📝',
+              choice: choiceLabel,
               choiceIndex,
-              poolDelta: -savingsRupees,
-              outcome: `${fundShieldMessage}Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
+              poolDelta: -waterfall.poolDeduction,
+              outcome: `${fundShieldMessage}${allMessages.join(' ')}`.trim(),
               isAuto: !!extraData.isAuto,
             },
             ...s.eventHistory,
           ],
           decisionHistory: [
             ...(s.decisionHistory || []),
-            { day: s.currentDay, type: 'event', eventId: eventWithData.id, choiceIndex, poolDelta, isAuto: !!extraData.isAuto },
+            { day: s.currentDay, type: 'event', eventId: currentEvt?.id, choiceIndex, poolDelta: -waterfall.poolDeduction, isAuto: !!extraData.isAuto },
           ],
         };
 
-        // Guarantee life milestones are preserved even during shortfall
         if (changes.married || eventWithData.id === 'marriage_event') {
-          shortfallState.married = true;
-          shortfallState.marriageEventFired = true;
+          newState.married = true;
+          newState.marriageEventFired = true;
         }
         if (changes.familyWeddingFired || eventWithData.id === 'family_wedding') {
-          shortfallState.familyWeddingFired = true;
+          newState.familyWeddingFired = true;
         }
         if (changes.optInHealthInsurance) {
-          shortfallState.hasHealthInsurance = true;
-          shortfallState.healthInsuranceCost = 750;
+          newState.hasHealthInsurance = true;
+          newState.healthInsuranceCost = 750;
         }
         if (changes.homeNeedsRenovation === false) {
-          shortfallState.homeNeedsRenovation = false;
+          newState.homeNeedsRenovation = false;
         }
         if (changes.removedIncomes?.length > 0 || changes.newIncomes?.length > 0) {
-          shortfallState.incomes = (s.incomes || [])
+          newState.incomes = (s.incomes || [])
             .filter(i => !changes.removedIncomes?.includes(i.id))
             .concat(changes.newIncomes || []);
         }
 
-        shortfallState.instruments = normalizeInstruments(shortfallState.instruments);
-
-        return shortfallState;
+        return newState;
       });
-
-      get().pauseSimulation();
       return;
     }
 
-    // Savings has enough cash: deduct strictly from savings buffer!
-    let newPool = state.pool + poolDelta;
-    let newInstruments = changes.newInstruments || { ...state.instruments };
-
-    if (poolDelta < 0 && newPool > 0) {
-      const newSavingsRupees = Math.max(0, savingsRupees - expense);
-      const newSavingsPct = Math.round((newSavingsRupees / newPool) * 100);
-      const oldNonSavingsPct = Math.max(1, 100 - state.instruments.savings);
-      const scale = (100 - newSavingsPct) / oldNonSavingsPct;
-
-      newInstruments = {
-        savings: newSavingsPct,
-        stocks: Math.round(state.instruments.stocks * scale),
-        mf: Math.round(state.instruments.mf * scale),
-        gold: Math.round(state.instruments.gold * scale),
-        fd: Math.round(state.instruments.fd * scale),
-      };
-      const totalSum = Object.values(newInstruments).reduce((a, b) => a + b, 0);
-      if (totalSum !== 100) newInstruments.savings += (100 - totalSum);
-    }
+    // Inflow or neutral event resolution
+    const poolDelta = rawDelta;
+    const newPool = Math.max(0, state.pool + poolDelta);
+    const newInstruments = changes.newInstruments || { ...state.instruments };
 
     set(s => {
       const currentEvt = s.currentEvent;
@@ -906,6 +1030,7 @@ const useGameStore = create((set, get) => ({
 
       const newState = {
         pool: newPool,
+        instruments: normalizeInstruments(newInstruments),
         funds: updatedFunds,
         currentEvent: null,
         loans: finalLoans,
