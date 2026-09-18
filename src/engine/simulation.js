@@ -41,7 +41,10 @@ export const getEligibleEvents = (state, eventDeck) => {
   const history = state.eventHistory || [];
 
   const daysSince = (name) => {
-    const last = [...history].reverse().find(e => e.eventName === name);
+    const last = [...history].reverse().find(e => 
+      e.eventName === name || 
+      (e.eventName && e.eventName.toLowerCase().includes(name.toLowerCase()))
+    );
     return last ? day - last.day : Infinity;
   };
 
@@ -69,14 +72,22 @@ export const getEligibleEvents = (state, eventDeck) => {
     }
 
     switch (ev.id) {
+      case 'medical_emergency':
+        return daysSince('Medical Emergency') > 450; // At least 15 months between major medical hospitalizations
+      case 'uninsured_illness':
+        return daysSince('Medical Bill') > 300;
+      case 'vehicle_accident':
+        return daysSince('Vehicle Collision') > 365;
+      case 'home_renovation':
+        return daysSince('Renovation') > 450;
       case 'inheritance_gift':
-        return daysSince('Family Windfall Gift') > 1000;
+        return daysSince('Windfall') > 1000;
       case 'work_bonus':
-        return daysSince('Annual Corporate Bonus') > 330;
+        return daysSince('Bonus') > 330;
       case 'salary_hike':
-        return daysSince('Merit Promotion & Raise') > 270;
+        return daysSince('Merit Promotion') > 270;
       case 'job_switch':
-        return daysSince('Senior Role Recruiter Offer') > 180 && state.experienceMonths >= 18;
+        return daysSince('Recruiter Offer') > 180 && state.experienceMonths >= 18;
       default:
         return true;
     }
@@ -360,7 +371,7 @@ export const simulateTick = (state) => {
     const currentPool = pool + (stateChanges.poolDelta || 0);
     for (const goal of goals) {
       if (!goal.achieved && !goal.sacrificed) {
-        const allocatedAmount = currentPool * (goal.bucketPercent / 100);
+        const allocatedAmount = (currentPool * (goal.bucketPercent / 100)) + (goal.dedicatedContribution || 0);
         if (checkMilestone(goal, allocatedAmount)) {
           milestoneTriggered = {
             goalId: goal.id,

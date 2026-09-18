@@ -4,7 +4,7 @@ export const EVENT_DECK = [
     name: 'Medical Emergency',
     type: 'bad',
     icon: '🏥',
-    weight: 13,
+    weight: 6,
     description: 'A sudden medical complication requires hospitalization and tests.',
     eligibilityCheck: (state) => true,
   },
@@ -112,7 +112,7 @@ export const EVENT_DECK = [
     name: 'Out-of-Pocket Medical Bill',
     type: 'bad',
     icon: '🤧',
-    weight: 11,
+    weight: 5,
     description: 'Unexpected treatment requiring diagnostic scans and specialist consultations.',
     eligibilityCheck: (state) => !state.hasHealthInsurance,
   },
@@ -224,7 +224,7 @@ export const EVENT_DECK = [
     name: 'Home Renovation Overrun',
     type: 'choice',
     icon: '🔨',
-    weight: 12,
+    weight: 6,
     description: 'Aging pipes burst and the walls need plastering. Contractor quoted an urgent renovation bill.',
     eligibilityCheck: (state) => {
       const last = state.eventHistory?.filter(e => e.eventName?.includes('Renovation')).pop();

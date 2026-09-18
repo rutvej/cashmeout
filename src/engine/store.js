@@ -367,12 +367,115 @@ const useGameStore = create((set, get) => ({
     }));
   },
 
-  updateFundAllocations: (allocations) => {
-    set(s => ({
-      fundAllocations: allocations,
-      funds: (s.funds || []).map(f => ({ ...f, allocationPercent: allocations[f.id] || 0 })),
+  depositToFund: (fundId, amount) => {
+    set(s => {
+      const actualAmount = Math.max(0, Math.min(s.pool, Math.round(Number(amount) || 0)));
+      if (actualAmount <= 0) return {};
+      const targetFund = (s.funds || []).find(f => f.id === fundId);
+      return {
+        pool: s.pool - actualAmount,
+        funds: (s.funds || []).map(f => f.id === fundId ? { ...f, currentAmount: (f.currentAmount || 0) + actualAmount } : f),
+        financialChanged: true,
+        eventHistory: [
+          {
+            day: s.currentDay,
+            eventName: 'Safety Fund Deposit',
+            icon: '🛡️',
+            choice: `Deposited ₹${actualAmount.toLocaleString('en-IN')}`,
+            poolDelta: -actualAmount,
+            outcome: `Transferred ₹${actualAmount.toLocaleString('en-IN')} from liquid cash into ${targetFund?.name || 'Safety Fund'}.`,
+          },
+          ...s.eventHistory,
+        ],
+      };
+    });
+  },
+
+  withdrawFromFund: (fundId, amount) => {
+    set(s => {
+      const fund = (s.funds || []).find(f => f.id === fundId);
+      if (!fund || !fund.currentAmount) return {};
+      const actualAmount = Math.max(0, Math.min(fund.currentAmount, Math.round(Number(amount) || 0)));
+      if (actualAmount <= 0) return {};
+      return {
+        pool: s.pool + actualAmount,
+        funds: (s.funds || []).map(f => f.id === fundId ? { ...f, currentAmount: f.currentAmount - actualAmount } : f),
+        financialChanged: true,
+        eventHistory: [
+          {
+            day: s.currentDay,
+            eventName: 'Safety Fund Withdrawal',
+            icon: '🛡️',
+            choice: `Withdrew ₹${actualAmount.toLocaleString('en-IN')}`,
+            poolDelta: actualAmount,
+            outcome: `Withdrew ₹${actualAmount.toLocaleString('en-IN')} from ${fund.name} into liquid cash buffer.`,
+          },
+          ...s.eventHistory,
+        ],
+      };
+    });
+  },
+
+  applyWindfallAllocation: ({
+    totalAmount,
+    fundDeposits = {},
+    goalDeposits = {},
+    newInstruments = null,
+    label = 'Windfall Bonus Distribution',
+  }) => {
+    const s = get();
+    const total = Math.max(0, Math.round(Number(totalAmount) || 0));
+    
+    let totalToFunds = 0;
+    const updatedFunds = (s.funds || []).map(f => {
+      const dep = Math.max(0, Math.round(Number(fundDeposits[f.id]) || 0));
+      if (dep > 0) {
+        totalToFunds += dep;
+        return { ...f, currentAmount: (f.currentAmount || 0) + dep };
+      }
+      return f;
+    });
+
+    let totalToGoals = 0;
+    const updatedGoals = (s.goals || []).map(g => {
+      const dep = Math.max(0, Math.round(Number(goalDeposits[g.id]) || 0));
+      if (dep > 0) {
+        totalToGoals += dep;
+        return { ...g, dedicatedContribution: (g.dedicatedContribution || 0) + dep };
+      }
+      return g;
+    });
+
+    const cashRemaining = Math.max(0, total - totalToFunds);
+    const newPool = s.pool + cashRemaining;
+    const finalInstruments = newInstruments ? normalizeInstruments(newInstruments) : s.instruments;
+
+    const summaryParts = [];
+    if (totalToFunds > 0) summaryParts.push(`₹${totalToFunds.toLocaleString('en-IN')} to Safety Funds`);
+    if (totalToGoals > 0) summaryParts.push(`₹${totalToGoals.toLocaleString('en-IN')} to Goals`);
+    if (cashRemaining > 0) summaryParts.push(`₹${cashRemaining.toLocaleString('en-IN')} to Liquid Portfolio`);
+
+    set({
+      pool: newPool,
+      funds: updatedFunds,
+      goals: updatedGoals,
+      instruments: finalInstruments,
+      currentEvent: null,
       financialChanged: true,
-    }));
+      eventHistory: [
+        {
+          day: s.currentDay,
+          eventName: label,
+          icon: '🎁',
+          choice: `Custom Allocated ₹${total.toLocaleString('en-IN')}`,
+          poolDelta: cashRemaining,
+          outcome: `Allocated windfall: ${summaryParts.join(', ') || 'Deposited to savings'}.`,
+        },
+        ...s.eventHistory,
+      ],
+    });
+
+    get().startSimulation();
   },
 
   // --- Simulation controls ---
@@ -643,6 +746,17 @@ const useGameStore = create((set, get) => ({
   resolveEvent: (choiceIndex, extraData = {}) => {
     const state = get();
     if (!state.currentEvent) return;
+
+    if (extraData && extraData.customWindfall) {
+      get().applyWindfallAllocation({
+        totalAmount: extraData.customWindfall.totalAmount,
+        fundDeposits: extraData.customWindfall.fundDeposits,
+        goalDeposits: extraData.customWindfall.goalDeposits,
+        newInstruments: extraData.customWindfall.newInstruments,
+        label: state.currentEvent.name || 'Windfall Inflow',
+      });
+      return;
+    }
 
     const eventWithData = { ...state.currentEvent, ...extraData };
     const changes = resolveEventFn(eventWithData, choiceIndex, state);
@@ -1946,12 +2060,43 @@ const useGameStore = create((set, get) => ({
 
   // --- Allocation ---
 
-  confirmAllocation: (bucketAllocations) => {
-    set(s => ({
-      buckets: bucketAllocations,
-      goals: s.goals.map(g => ({ ...g, bucketPercent: bucketAllocations[g.id] || 0 })),
-      showAllocation: false,
-    }));
+  confirmAllocation: (allocationData) => {
+    set(s => {
+      let goalAllocs = {};
+      let fundAllocs = {};
+
+      if (allocationData && (allocationData.goalAllocations || allocationData.fundAllocations)) {
+        goalAllocs = allocationData.goalAllocations || {};
+        fundAllocs = allocationData.fundAllocations || {};
+      } else if (allocationData && typeof allocationData === 'object') {
+        Object.entries(allocationData).forEach(([key, val]) => {
+          if ((s.funds || []).some(f => f.id === key)) {
+            fundAllocs[key] = val;
+          } else {
+            goalAllocs[key] = val;
+          }
+        });
+      }
+
+      const updatedGoals = s.goals.map(g => ({
+        ...g,
+        bucketPercent: goalAllocs[g.id] !== undefined ? goalAllocs[g.id] : (s.buckets?.[g.id] || 0),
+      }));
+
+      const updatedFunds = (s.funds || []).map(f => ({
+        ...f,
+        allocationPercent: fundAllocs[f.id] !== undefined ? fundAllocs[f.id] : (s.fundAllocations?.[f.id] || 0),
+      }));
+
+      return {
+        buckets: goalAllocs,
+        goals: updatedGoals,
+        fundAllocations: fundAllocs,
+        funds: updatedFunds,
+        showAllocation: false,
+        financialChanged: true,
+      };
+    });
     get().startSimulation();
   },
 

@@ -5,11 +5,14 @@ import Button from '../../ui/Button';
 import ProgressBar from '../../ui/ProgressBar';
 import BottomSheet from '../../ui/BottomSheet';
 import { formatCurrency } from '../../../utils/format';
-import { getSuggestedGoal } from '../../../engine/goals';
+import { getSuggestedGoal, FUND_PRESETS, createFund } from '../../../engine/goals';
 
 const GoalsTab = () => {
   const store = useGameStore();
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [showAddFundSheet, setShowAddFundSheet] = useState(false);
+  const [fundActionModal, setFundActionModal] = useState(null); // { type: 'deposit'|'withdraw', fund }
+  const [fundActionAmount, setFundActionAmount] = useState(10000);
   const [newGoal, setNewGoal] = useState({ name: '', target: '', type: 'custom', inflationRate: 0.06 });
   const [loanGoal, setLoanGoal] = useState(null);
   const [loanDownPayment, setLoanDownPayment] = useState(0);
@@ -96,10 +99,131 @@ const GoalsTab = () => {
         </div>
       )}
 
+      {/* Safety Funds & Liquidity Buffers */}
+      <div className="space-y-2.5">
+        <div className="flex justify-between items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <h3 className="font-extrabold text-sm text-text-primary flex items-center gap-1.5">
+              <span>🛡️</span>
+              <span>Safety Funds & Reserves</span>
+            </h3>
+            <p className="text-[11px] text-text-muted truncate">Absorbs sudden emergency & medical expenses before touching cash</p>
+          </div>
+          <Button size="sm" onClick={() => setShowAddFundSheet(true)} className="text-xs shrink-0">
+            + Add Fund
+          </Button>
+        </div>
+
+        {(!store.funds || store.funds.length === 0) ? (
+          <div className="p-3.5 bg-amber-50/70 rounded-2xl border border-amber-200 space-y-2">
+            <div className="flex items-start space-x-2">
+              <span className="text-base">⚠️</span>
+              <div className="text-xs text-amber-900 leading-snug">
+                <strong>No Active Safety Buffers!</strong> Medical emergencies and surprise repairs will directly deduct from your liquid cash. Create a buffer to stay secure.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              {FUND_PRESETS.slice(0, 3).map(preset => (
+                <button
+                  key={preset.type}
+                  type="button"
+                  onClick={() => {
+                    const target = preset.type === 'emergency' ? 200000 : (preset.suggestedAmount || 250000);
+                    store.createFund(createFund(preset.type, preset.name, target, preset.defaultInstruments));
+                  }}
+                  className="text-xs font-bold px-2.5 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl shadow-2xs transition"
+                >
+                  {preset.icon} Create {preset.name.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5">
+            {store.funds.map(fund => {
+              const current = fund.currentAmount || 0;
+              const target = fund.targetAmount || 1;
+              const progress = Math.min(100, Math.round((current / target) * 100));
+
+              return (
+                <Card key={fund.id} className="p-3.5 border border-slate-200 bg-white shadow-xs">
+                  <div className="flex justify-between items-start mb-1.5">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xl">{fund.icon || '🛡️'}</span>
+                      <div>
+                        <h4 className="font-bold text-xs text-text-primary">{fund.name}</h4>
+                        <span className="text-[10px] text-text-muted">
+                          {fund.allocationPercent || 0}% of monthly surplus
+                        </span>
+                      </div>
+                    </div>
+                    <span className="text-xs font-black text-slate-800">
+                      {progress}%
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs mb-1 mt-1.5">
+                    <span className="text-[11px] font-black text-blue-900">{formatCurrency(current)}</span>
+                    <span className="text-[10px] text-text-muted">Target: {formatCurrency(target)}</span>
+                  </div>
+                  <ProgressBar value={progress} />
+
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center gap-2">
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFundActionModal({ type: 'deposit', fund });
+                          setFundActionAmount(Math.min(store.pool, 25000));
+                        }}
+                        className="text-[10px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg"
+                      >
+                        + Deposit Cash
+                      </button>
+                      {current > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFundActionModal({ type: 'withdraw', fund });
+                            setFundActionAmount(Math.min(current, 25000));
+                          }}
+                          className="text-[10px] font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg"
+                        >
+                          - Withdraw
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Delete ${fund.name}? Any remaining ₹${current.toLocaleString('en-IN')} will return to cash.`)) {
+                          store.deleteFund(fund.id);
+                        }
+                      }}
+                      className="text-[10px] text-rose-500 hover:text-rose-700 font-bold"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Life Goals List Header */}
+      <div className="pt-2 border-t border-gray-100">
+        <h3 className="font-extrabold text-sm text-text-primary flex items-center gap-1.5 mb-2">
+          <span>🎯</span>
+          <span>Life Goals & Long-Term Milestones</span>
+        </h3>
+      </div>
+
       {/* Goals List */}
       <div className="space-y-3">
         {store.goals.map(goal => {
-          const bucketAmount = Math.round((store.buckets[goal.id] / 100) * store.pool || 0);
+          const bucketAmount = Math.round((store.buckets[goal.id] / 100) * store.pool || 0) + (goal.dedicatedContribution || 0);
           const progress = Math.min(100, Math.round((bucketAmount / goal.currentTarget) * 100));
           const canBuyFromTotalPool = store.pool >= goal.currentTarget;
 
@@ -472,6 +596,126 @@ const GoalsTab = () => {
               </div>
             );
           })()}
+        </BottomSheet>
+      )}
+
+      {/* Add Safety Fund Sheet */}
+      <BottomSheet isOpen={showAddFundSheet} onClose={() => setShowAddFundSheet(false)} title="Create Safety Buffer / Fund">
+        <div className="space-y-3 mb-6">
+          <p className="text-xs text-text-muted">
+            Choose a dedicated safety reserve. Reserves absorb medical and sudden life shocks before liquid savings are depleted.
+          </p>
+
+          <div className="space-y-2">
+            {FUND_PRESETS.map(preset => {
+              const alreadyHas = (store.funds || []).some(f => f.type === preset.type);
+              const target = preset.type === 'emergency' ? 200000 : (preset.suggestedAmount || 250000);
+
+              return (
+                <div
+                  key={preset.type}
+                  className={`p-3 rounded-xl border transition ${alreadyHas ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-slate-200 hover:border-blue-400'}`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xl">{preset.icon}</span>
+                      <div>
+                        <h4 className="font-bold text-xs text-text-primary">{preset.name}</h4>
+                        <span className="text-[10px] text-text-muted">Target: {formatCurrency(target)}</span>
+                      </div>
+                    </div>
+                    {alreadyHas ? (
+                      <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded">Active</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          store.createFund(createFund(preset.type, preset.name, target, preset.defaultInstruments));
+                          setShowAddFundSheet(false);
+                          useGameStore.setState({ showAllocation: true });
+                        }}
+                        className="text-xs font-bold text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg border border-blue-200"
+                      >
+                        + Create
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-text-muted mt-1 leading-snug">{preset.description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </BottomSheet>
+
+      {/* Fund Deposit / Withdraw Modal */}
+      {fundActionModal && (
+        <BottomSheet
+          isOpen={true}
+          onClose={() => setFundActionModal(null)}
+          title={`${fundActionModal.type === 'deposit' ? 'Deposit Cash into' : 'Withdraw Cash from'} ${fundActionModal.fund?.name}`}
+        >
+          <div className="space-y-3 mb-6">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs flex justify-between items-center">
+              <div>
+                <span className="text-[10px] text-text-muted block">Available Liquid Cash:</span>
+                <span className="font-extrabold text-text-primary">{formatCurrency(store.pool)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-text-muted block">Current Fund Balance:</span>
+                <span className="font-extrabold text-blue-900">{formatCurrency(fundActionModal.fund?.currentAmount || 0)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] font-bold text-text-muted block mb-1">
+                Amount to {fundActionModal.type === 'deposit' ? 'Deposit' : 'Withdraw'}:
+              </label>
+              <div className="flex items-center bg-white rounded-xl border border-slate-200 p-2">
+                <span className="text-slate-400 font-bold mr-1">₹</span>
+                <input
+                  type="number"
+                  min="1000"
+                  step="5000"
+                  value={fundActionAmount}
+                  onChange={e => setFundActionAmount(Math.max(0, Number(e.target.value)))}
+                  className="w-full text-sm font-extrabold outline-none"
+                />
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                {[10000, 25000, 50000].map(amt => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setFundActionAmount(amt)}
+                    className="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 px-2 py-1 rounded-md text-text-muted"
+                  >
+                    +₹{(amt / 1000)}k
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex space-x-2 pt-2">
+              <Button variant="secondary" className="flex-1 text-xs" onClick={() => setFundActionModal(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                className="flex-1 text-xs"
+                onClick={() => {
+                  if (fundActionModal.type === 'deposit') {
+                    store.depositToFund(fundActionModal.fund.id, fundActionAmount);
+                  } else {
+                    store.withdrawFromFund(fundActionModal.fund.id, fundActionAmount);
+                  }
+                  setFundActionModal(null);
+                }}
+              >
+                Confirm {fundActionModal.type === 'deposit' ? 'Deposit' : 'Withdrawal'}
+              </Button>
+            </div>
+          </div>
         </BottomSheet>
       )}
     </div>

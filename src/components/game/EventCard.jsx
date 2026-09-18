@@ -3,12 +3,16 @@ import { motion } from 'framer-motion';
 import useGameStore from '../../engine/store';
 import Button from '../ui/Button';
 import { formatCurrency } from '../../utils/format';
+import { createFund } from '../../engine/goals';
 
 const EventCard = ({ event, onChoice }) => {
   const store = useGameStore();
   const [optInInsurance, setOptInInsurance] = useState(true);
   const [weddingContributionAmount, setWeddingContributionAmount] = useState(25000);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showCustomWindfall, setShowCustomWindfall] = useState(false);
+  const [windfallFundAlloc, setWindfallFundAlloc] = useState({});
+  const [windfallGoalAlloc, setWindfallGoalAlloc] = useState({});
 
   // Typewriter effect state for suspenseful reveal
   const fullText = event?.description || '';
@@ -65,6 +69,13 @@ const EventCard = ({ event, onChoice }) => {
     badgeBg = 'bg-indigo-50 text-indigo-800 border-indigo-200';
   }
 
+  const isWindfall = event.id === 'work_bonus' || event.id === 'inheritance_gift' || (impact.type === 'gain' && (impact.amount || 0) >= 15000);
+  const windfallAmount = impact.amount || 50000;
+  const totalAllocatedToFunds = Object.values(windfallFundAlloc).reduce((s, v) => s + (Number(v) || 0), 0);
+  const totalAllocatedToGoals = Object.values(windfallGoalAlloc).reduce((s, v) => s + (Number(v) || 0), 0);
+  const totalAllocated = totalAllocatedToFunds + totalAllocatedToGoals;
+  const cashRemaining = Math.max(0, windfallAmount - totalAllocated);
+
   const weddingSelectedAmount = Math.max(0, Number(weddingContributionAmount) || 0);
   const expenseAmt = isWedding ? weddingSelectedAmount : (impact.outOfPocket || impact.amount || 0);
 
@@ -79,6 +90,16 @@ const EventCard = ({ event, onChoice }) => {
     } else {
       onChoice(choiceIdx, extraData);
     }
+  };
+
+  const handleConfirmCustomWindfall = () => {
+    onChoice(0, {
+      customWindfall: {
+        totalAmount: windfallAmount,
+        fundDeposits: windfallFundAlloc,
+        goalDeposits: windfallGoalAlloc,
+      }
+    });
   };
 
   if (isCollapsed) {
@@ -425,7 +446,7 @@ const EventCard = ({ event, onChoice }) => {
             </div>
           )}
 
-          {/* Choice Buttons */}
+          {/* Choice Buttons & Windfall Custom Distribution */}
           <div className="space-y-2">
             {isWedding ? (
               <Button
@@ -443,30 +464,182 @@ const EventCard = ({ event, onChoice }) => {
                   </span>
                 </div>
               </Button>
-            ) : (
-              event.options?.map((opt, i) => (
-                <Button
-                  key={i}
-                  fullWidth
-                  variant={i === 0 ? 'primary' : 'secondary'}
-                  className="!py-2.5 !px-3 text-left justify-start"
-                  onClick={() => handleChoiceClick(i)}
-                >
-                  <div className="flex flex-col text-left w-full">
-                    <span className="font-bold text-xs sm:text-sm text-text-primary">
-                      {opt.label}
+            ) : isWindfall && showCustomWindfall ? (
+              <div className="space-y-3 p-3 bg-indigo-50/70 rounded-2xl border border-indigo-200">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-black text-indigo-950 flex items-center gap-1">
+                    <span>✨</span>
+                    <span>Custom Windfall Allocation: {formatCurrency(windfallAmount)}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomWindfall(false)}
+                    className="text-[10px] text-indigo-700 underline font-bold"
+                  >
+                    Quick Presets
+                  </button>
+                </div>
+
+                {/* Safety Funds Allocation */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-bold text-slate-800">
+                    <span className="flex items-center gap-1">
+                      <span>🛡️</span>
+                      <span>Deposit into Safety Funds:</span>
                     </span>
-                    {opt.description && (
-                      <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
-                        {opt.description}
-                      </span>
-                    )}
+                    <span className="text-blue-900 font-black">{formatCurrency(totalAllocatedToFunds)}</span>
                   </div>
+                  {store.funds && store.funds.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {store.funds.map(f => (
+                        <div key={f.id} className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                          <div className="min-w-0 pr-2">
+                            <span className="font-bold truncate block">{f.name}</span>
+                            <span className="text-[10px] text-text-muted">Balance: {formatCurrency(f.currentAmount || 0)} / {formatCurrency(f.targetAmount)}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <span className="text-slate-400 font-bold">₹</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="5000"
+                              max={windfallAmount}
+                              placeholder="0"
+                              value={windfallFundAlloc[f.id] || ''}
+                              onChange={e => {
+                                const val = Math.max(0, Number(e.target.value) || 0);
+                                setWindfallFundAlloc(prev => ({ ...prev, [f.id]: val }));
+                              }}
+                              className="w-20 p-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-xs"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-white rounded-xl border border-slate-200 text-xs text-text-muted flex justify-between items-center">
+                      <span>No safety funds active yet.</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const f = createFund('emergency', 'Emergency Buffer Fund', 200000);
+                          store.createFund(f);
+                        }}
+                        className="text-[10px] font-bold text-blue-700 underline"
+                      >
+                        + Create Emergency Fund
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Life Goals Allocation */}
+                <div className="space-y-1.5 pt-1.5 border-t border-indigo-100">
+                  <div className="flex justify-between text-[11px] font-bold text-slate-800">
+                    <span className="flex items-center gap-1">
+                      <span>🎯</span>
+                      <span>Earmark into Life Goals:</span>
+                    </span>
+                    <span className="text-indigo-900 font-black">{formatCurrency(totalAllocatedToGoals)}</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {(store.goals || []).filter(g => !g.achieved && !g.sacrificed).map(g => (
+                      <div key={g.id} className="p-2 bg-white rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                        <div className="min-w-0 pr-2">
+                          <span className="font-bold truncate block">{g.name}</span>
+                          <span className="text-[10px] text-text-muted">Target: {formatCurrency(g.currentTarget)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <span className="text-slate-400 font-bold">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="5000"
+                            max={windfallAmount}
+                            placeholder="0"
+                            value={windfallGoalAlloc[g.id] || ''}
+                            onChange={e => {
+                              const val = Math.max(0, Number(e.target.value) || 0);
+                              setWindfallGoalAlloc(prev => ({ ...prev, [g.id]: val }));
+                            }}
+                            className="w-20 p-1 bg-slate-50 border border-slate-200 rounded-lg text-right font-bold text-xs"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cash Summary */}
+                <div className="p-2.5 bg-white rounded-xl border border-indigo-200 text-xs space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-text-muted">Total Windfall Amount:</span>
+                    <span className="font-extrabold text-indigo-950">{formatCurrency(windfallAmount)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-text-muted">Remainder into Liquid Cash / Savings:</span>
+                    <span className={`font-black ${cashRemaining >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {formatCurrency(cashRemaining)}
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  fullWidth
+                  variant="primary"
+                  disabled={totalAllocated > windfallAmount}
+                  onClick={handleConfirmCustomWindfall}
+                  className="!py-2 text-xs font-bold"
+                >
+                  {totalAllocated > windfallAmount
+                    ? `Over allocated by ${formatCurrency(totalAllocated - windfallAmount)}`
+                    : `Confirm Allocation (${formatCurrency(cashRemaining)} to Savings) →`}
                 </Button>
-              ))
+              </div>
+            ) : (
+              <>
+                {event.options?.map((opt, i) => (
+                  <Button
+                    key={i}
+                    fullWidth
+                    variant={i === 0 ? 'primary' : 'secondary'}
+                    className="!py-2.5 !px-3 text-left justify-start"
+                    onClick={() => handleChoiceClick(i)}
+                  >
+                    <div className="flex flex-col text-left w-full">
+                      <span className="font-bold text-xs sm:text-sm text-text-primary">
+                        {opt.label}
+                      </span>
+                      {opt.description && (
+                        <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
+                          {opt.description}
+                        </span>
+                      )}
+                    </div>
+                  </Button>
+                ))}
+
+                {/* Custom Windfall Allocation CTA button */}
+                {isWindfall && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomWindfall(true)}
+                    className="w-full py-2 px-3 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border border-indigo-200 rounded-xl text-left flex justify-between items-center transition shadow-2xs"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                        <span>✨</span>
+                        <span>Custom Allocation (Choose ₹ to Goals & Funds)</span>
+                      </span>
+                      <span className="text-[10px] text-indigo-700">Freely allocate into Emergency buffer, Medical reserve, Goals, or Savings.</span>
+                    </div>
+                    <span className="text-xs font-bold text-indigo-800 shrink-0">Customize →</span>
+                  </button>
+                )}
+              </>
             )}
 
-            {(!event.options || event.options.length === 0) && !isWedding && (
+            {(!event.options || event.options.length === 0) && !isWedding && !showCustomWindfall && (
               <Button
                 fullWidth
                 variant="primary"
