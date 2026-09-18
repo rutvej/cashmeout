@@ -6,6 +6,7 @@ import useGameStore from './engine/store';
 import Landing from './components/screens/Landing';
 import SpawnReveal from './components/screens/SpawnReveal';
 import GoalSetup from './components/screens/GoalSetup';
+import FinancialSetup from './components/screens/FinancialSetup';
 import MainGame from './components/screens/MainGame';
 import Scorecard from './components/screens/Scorecard';
 
@@ -65,8 +66,10 @@ function App() {
         return <Landing key="landing" />;
       case 'spawn':
         return <SpawnReveal key="spawn" />;
+      case 'setup':
+        return <FinancialSetup key="setup" />;
       case 'goals':
-        return <GoalSetup key="goals" />;
+        return <FinancialSetup key="setup" />;
       case 'game':
         return <MainGame key="game" />;
       case 'scorecard':

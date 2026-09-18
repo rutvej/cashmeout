@@ -1,23 +1,38 @@
 import { INSTRUMENTS } from './constants.js';
 import { randFloat } from '../utils/random.js';
 
-export const calculateMonthlyReturns = (instrumentAllocations, totalPool) => {
+export const calculateMonthlyReturns = (instrumentAllocations, totalPool, economicCycle = 'normal') => {
   if (totalPool <= 0) return totalPool;
   
   let newTotal = 0;
   Object.keys(instrumentAllocations).forEach(instKey => {
-    const allocPct = instrumentAllocations[instKey] / 100;
+    const allocPct = (instrumentAllocations[instKey] || 0) / 100;
     const amount = totalPool * allocPct;
     if (amount <= 0) return;
 
     const inst = INSTRUMENTS[instKey];
-    let monthlyReturnRate = inst.avgReturn / 12;
+    let monthlyReturnRate = (inst.avgReturn || 0) / 12;
 
     // Apply volatility if it's a volatile instrument
     if (inst.minSwing !== undefined && inst.maxSwing !== undefined) {
-      // Small random walk around the average
-      const variance = randFloat(-0.02, 0.02); // normal monthly variance
+      const variance = randFloat(-0.015, 0.015);
       monthlyReturnRate += variance;
+
+      // Economic cycle macroeconomic modifiers
+      if (economicCycle === 'recession') {
+        if (instKey === 'stocks' || instKey === 'mf') {
+          // Downturn drag on equities (-1.2% to -2.2% monthly drag)
+          monthlyReturnRate -= randFloat(0.012, 0.022);
+        } else if (instKey === 'gold') {
+          // Gold safe-haven flight demand
+          monthlyReturnRate += randFloat(0.006, 0.014);
+        }
+      } else if (economicCycle === 'bull') {
+        if (instKey === 'stocks' || instKey === 'mf') {
+          // Bull market expansion (+0.8% to +1.8% monthly boost)
+          monthlyReturnRate += randFloat(0.008, 0.018);
+        }
+      }
     }
 
     newTotal += amount * (1 + monthlyReturnRate);

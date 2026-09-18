@@ -7,7 +7,7 @@ import { createGoal, redistributeBuckets } from './goals.js';
 import { calculateResults, generateInsights } from './scoring.js';
 import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES, CITY_TIERS } from './constants.js';
 import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
-import { getCareerRole, generateJobMarketOffers } from './careers.js';
+import { getCareerRole, generateJobMarketOffers, CITY_TIER_SALARY_CAPS, getJobSwitchCooldown } from './careers.js';
 import { generateEventCalendar } from './calendarQueue.js';
 
 export function normalizeInstruments(instruments) {
@@ -36,6 +36,32 @@ export function normalizeInstruments(instruments) {
   return current;
 }
 
+export function absorbWithFunds(amount, eventId, funds = []) {
+  let remaining = amount;
+  let absorbedTotal = 0;
+  const fundDeltas = [];
+  const updatedFunds = (funds || []).map(f => ({ ...f }));
+
+  const isMedical = eventId === 'medical_emergency' || eventId === 'uninsured_illness';
+  const targetTypes = isMedical
+    ? ['medical', 'emergency', 'general']
+    : ['emergency', 'general', 'medical'];
+
+  for (const t of targetTypes) {
+    if (remaining <= 0) break;
+    const fund = updatedFunds.find(f => f.type === t && (f.currentAmount || 0) > 0);
+    if (fund) {
+      const take = Math.min(remaining, fund.currentAmount);
+      fund.currentAmount -= take;
+      remaining -= take;
+      absorbedTotal += take;
+      fundDeltas.push({ fundId: fund.id, fundName: fund.name, absorbed: take });
+    }
+  }
+
+  return { remaining, absorbedTotal, fundDeltas, updatedFunds };
+}
+
 /**
  * Central Zustand store — single source of truth for all game state.
  * All mutations flow through store actions. The simulation loop calls tick()
@@ -54,8 +80,10 @@ const useGameStore = create((set, get) => ({
   buckets: {},
   instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
 
-  // --- Goals ---
+  // --- Goals & Safety Funds ---
   goals: [],
+  funds: [],
+  fundAllocations: {},
 
   // --- Income & deductions ---
   incomes: [],
@@ -109,6 +137,8 @@ const useGameStore = create((set, get) => ({
   courseCompleted: false,
   courseRaiseUsed: false,
   salaryCeiling: 0,
+  economicCycle: 'normal',
+  cycleMonthsRemaining: 15,
 
   // --- Life events ---
   marriageEventFired: false,
@@ -160,7 +190,9 @@ const useGameStore = create((set, get) => ({
       carMaintenanceCost: p.carMaintenanceCost,
       homesOwned,
       carsOwned,
-      salaryCeiling: Math.round(p.startingSalary * 3),
+      salaryCeiling: CITY_TIER_SALARY_CAPS[p.cityTier || 2] || 110000,
+      economicCycle: 'normal',
+      cycleMonthsRemaining: 15,
       screen: 'spawn',
       isAusterityMode: false,
       annualIncomeAcc: 0,
@@ -179,7 +211,9 @@ const useGameStore = create((set, get) => ({
       decisionHistory: [],
       monthlySnapshots: [{ day: 0, pool: p.startingSavings, netWorth: p.startingSavings }],
       results: null,
-      goals: [],
+      goals: (p.seedGoals || []).map(g => createGoal(g.type, g.name, g.targetAmount, g.inflationRate, 0, false, true)),
+      funds: [],
+      fundAllocations: {},
       buckets: {},
       instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
       hasHealthInsurance: false,
@@ -212,15 +246,16 @@ const useGameStore = create((set, get) => ({
 
   setGoals: (goals) => {
     // Equal-split bucket allocation by default
-    const evenPercent = Math.floor(100 / goals.length);
-    const remainder = 100 - (evenPercent * goals.length);
+    const count = Math.max(1, goals.length);
+    const evenPercent = Math.floor(100 / count);
+    const remainder = 100 - (evenPercent * count);
     const buckets = {};
     goals.forEach((g, i) => {
       const pct = i === 0 ? evenPercent + remainder : evenPercent;
       g.bucketPercent = pct;
       buckets[g.id] = pct;
     });
-    set({ goals, buckets, showAllocation: true });
+    set({ goals, buckets, financialChanged: true });
   },
 
   addGoalMidGame: (goal, mode) => {
@@ -229,38 +264,41 @@ const useGameStore = create((set, get) => ({
       let newBuckets = { ...s.buckets };
 
       if (mode === 'retroactive') {
-        // Recompute all bucket %'s evenly as if this goal existed from day one
         const activeGoals = newGoals.filter(g => !g.achieved && !g.sacrificed);
-        const evenPct = Math.floor(100 / activeGoals.length);
-        const rem = 100 - (evenPct * activeGoals.length);
+        const count = Math.max(1, activeGoals.length);
+        const evenPct = Math.floor(100 / count);
+        const rem = 100 - (evenPct * count);
         newBuckets = {};
         activeGoals.forEach((g, i) => {
           const pct = i === 0 ? evenPct + rem : evenPct;
           newBuckets[g.id] = pct;
         });
       } else {
-        // Fresh start: new goal gets 0%, existing buckets untouched
         newBuckets[goal.id] = 0;
       }
 
-      // Update goals with new percentages
       const updatedGoals = newGoals.map(g => ({
         ...g,
         bucketPercent: newBuckets[g.id] || 0,
       }));
 
-      return { goals: updatedGoals, buckets: newBuckets };
+      return { goals: updatedGoals, buckets: newBuckets, financialChanged: true };
     });
   },
 
   removeGoal: (goalId) => {
+    const state = get();
+    const targetGoal = (state.goals || []).find(g => g.id === goalId);
+    if (targetGoal && targetGoal.locked) {
+      return false; // Character life commitment cannot be deleted!
+    }
+
     set(s => {
       const updatedGoals = s.goals.map(g =>
         g.id === goalId ? { ...g, sacrificed: true, bucketPercent: 0 } : g
       );
       const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
 
-      // Also include non-removed goals in the new buckets
       const finalGoals = updatedGoals.map(g => ({
         ...g,
         bucketPercent: g.sacrificed ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
@@ -269,22 +307,72 @@ const useGameStore = create((set, get) => ({
       return {
         goals: finalGoals,
         buckets: newBuckets,
+        financialChanged: true,
         decisionHistory: [...s.decisionHistory, { day: s.currentDay, type: 'sacrifice_goal', goalId }],
       };
     });
+    return true;
   },
 
   updateBucketAllocations: (newBuckets) => {
     set(s => ({
       buckets: newBuckets,
       goals: s.goals.map(g => ({ ...g, bucketPercent: newBuckets[g.id] || 0 })),
+      financialChanged: true,
     }));
   },
 
   updateInstrumentAllocations: (newInstruments) => {
     set({
       instruments: newInstruments,
+      financialChanged: true,
     });
+  },
+
+  // --- Safety Funds Actions ---
+  createFund: (fund) => {
+    set(s => ({
+      funds: [...(s.funds || []), fund],
+      financialChanged: true,
+    }));
+  },
+
+  deleteFund: (fundId) => {
+    set(s => {
+      const fund = (s.funds || []).find(f => f.id === fundId);
+      const freedCash = fund ? (fund.currentAmount || 0) : 0;
+      const newFunds = (s.funds || []).filter(f => f.id !== fundId);
+      const newAllocations = { ...(s.fundAllocations || {}) };
+      delete newAllocations[fundId];
+      return {
+        funds: newFunds,
+        fundAllocations: newAllocations,
+        pool: s.pool + freedCash,
+        financialChanged: true,
+      };
+    });
+  },
+
+  updateFundTarget: (fundId, newTarget) => {
+    set(s => ({
+      funds: (s.funds || []).map(f => f.id === fundId ? { ...f, targetAmount: Math.max(10000, Number(newTarget)) } : f),
+      financialChanged: true,
+    }));
+  },
+
+  updateFundInstruments: (fundId, newInstruments) => {
+    set(s => ({
+      funds: (s.funds || []).map(f => f.id === fundId ? { ...f, instruments: newInstruments } : f),
+      financialChanged: true,
+    }));
+  },
+
+  updateFundAllocations: (allocations) => {
+    set(s => ({
+      fundAllocations: allocations,
+      funds: (s.funds || []).map(f => ({ ...f, allocationPercent: allocations[f.id] || 0 })),
+      financialChanged: true,
+    }));
   },
 
   // --- Simulation controls ---
@@ -386,6 +474,7 @@ const useGameStore = create((set, get) => ({
         currentDay: changes.currentDay,
         pool: finalPool,
         loans: changes.loansUpdate || s.loans,
+        funds: changes.fundsUpdate || s.funds || [],
       };
 
       if (finalPool < 0) {
@@ -487,6 +576,13 @@ const useGameStore = create((set, get) => ({
         newState.annualIncomeAcc = changes.annualIncomeAcc;
       }
 
+      if (changes.economicCycleUpdate) {
+        newState.economicCycle = changes.economicCycleUpdate;
+      }
+      if (changes.cycleMonthsRemainingUpdate !== undefined) {
+        newState.cycleMonthsRemaining = changes.cycleMonthsRemainingUpdate;
+      }
+
       // Experience tracking
       if (changes.experienceIncrement) {
         newState.experienceMonths = s.experienceMonths + changes.experienceIncrement;
@@ -500,10 +596,11 @@ const useGameStore = create((set, get) => ({
       // Monthly snapshot (for net worth graph)
       if (changes.currentDay % 30 === 0) {
         const currentPool = finalPool;
+        const fundsVal = (newState.funds || s.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
         const assetValue = (s.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
         newState.monthlySnapshots = [
           ...s.monthlySnapshots,
-          { day: changes.currentDay, pool: currentPool, netWorth: currentPool + assetValue },
+          { day: changes.currentDay, pool: currentPool, netWorth: currentPool + fundsVal + assetValue },
         ];
       }
 
@@ -550,8 +647,23 @@ const useGameStore = create((set, get) => ({
     const eventWithData = { ...state.currentEvent, ...extraData };
     const changes = resolveEventFn(eventWithData, choiceIndex, state);
 
+    // Safety Fund expense absorption before touching pool / savings buffer!
+    let rawDelta = changes.poolDelta || 0;
+    let fundShieldMessage = '';
+    let updatedFunds = state.funds ? state.funds.map(f => ({ ...f })) : [];
+
+    if (rawDelta < 0 && updatedFunds.length > 0) {
+      const absorption = absorbWithFunds(Math.abs(rawDelta), eventWithData.id, updatedFunds);
+      if (absorption.absorbedTotal > 0) {
+        rawDelta = -absorption.remaining;
+        updatedFunds = absorption.updatedFunds;
+        const details = absorption.fundDeltas.map(d => `${d.fundName} covered ₹${d.absorbed.toLocaleString('en-IN')}`).join(', ');
+        fundShieldMessage = `🛡️ Safety Net Shield: ${details}. `;
+      }
+    }
+
     // Expenses deduct strictly from savings buffer first!
-    const poolDelta = changes.poolDelta || 0;
+    const poolDelta = rawDelta;
     const savingsPercent = state.instruments.savings || 0;
     const savingsRupees = Math.round((savingsPercent / 100) * state.pool);
     const expense = Math.abs(poolDelta);
@@ -595,6 +707,7 @@ const useGameStore = create((set, get) => ({
           currentEvent: null,
           loans: finalLoans,
           fixedDeductions: finalDeductions,
+          funds: updatedFunds,
           deficitInfo: {
             shortfall,
             reason: eventWithData.name || 'Expense',
@@ -607,7 +720,7 @@ const useGameStore = create((set, get) => ({
               choice: eventWithData.options?.[choiceIndex]?.label || 'Obligation',
               choiceIndex,
               poolDelta: -savingsRupees,
-              outcome: `Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
+              outcome: `${fundShieldMessage}Used remaining ₹${savingsRupees.toLocaleString('en-IN')} in savings buffer. Shortfall of ₹${shortfall.toLocaleString('en-IN')} pending liquidation decision.`,
               isAuto: !!extraData.isAuto,
             },
             ...s.eventHistory,
@@ -632,6 +745,11 @@ const useGameStore = create((set, get) => ({
         }
         if (changes.homeNeedsRenovation === false) {
           shortfallState.homeNeedsRenovation = false;
+        }
+        if (changes.removedIncomes?.length > 0 || changes.newIncomes?.length > 0) {
+          shortfallState.incomes = (s.incomes || [])
+            .filter(i => !changes.removedIncomes?.includes(i.id))
+            .concat(changes.newIncomes || []);
         }
 
         shortfallState.instruments = normalizeInstruments(shortfallState.instruments);
@@ -674,6 +792,7 @@ const useGameStore = create((set, get) => ({
 
       const newState = {
         pool: newPool,
+        funds: updatedFunds,
         currentEvent: null,
         loans: finalLoans,
         eventHistory: [
@@ -684,7 +803,7 @@ const useGameStore = create((set, get) => ({
             choice: choiceLabel,
             choiceIndex,
             poolDelta: poolDelta,
-            outcome: allMessages.join(' '),
+            outcome: `${fundShieldMessage}${allMessages.join(' ')}`.trim(),
             isAuto: !!extraData.isAuto,
           },
           ...s.eventHistory,
@@ -1189,18 +1308,64 @@ const useGameStore = create((set, get) => ({
     }));
   },
 
+  resignJob: () => {
+    const state = get();
+    const job = state.incomes.find(i => i.type === 'job');
+    if (!job) return false;
+
+    const rentalIncome = (state.homesOwned || [])
+      .filter(h => h.isRentedOut && h.rentalIncome)
+      .reduce((sum, h) => sum + h.rentalIncome, 0);
+    const nonJobIncome = (state.businessIncome || 0) +
+      rentalIncome +
+      state.incomes.filter(i => i.type !== 'job').reduce((s, i) => s + i.amount, 0);
+
+    const totalDeductions = state.fixedDeductions.reduce((s, d) => s + d.amount, 0)
+      + state.loans.reduce((s, l) => s + l.emi, 0)
+      + (state.hasHealthInsurance ? state.healthInsuranceCost : 0)
+      + (state.hasVehicleInsurance ? state.vehicleInsuranceCost : 0)
+      + (state.homeMaintenanceCost || 0)
+      + (state.carMaintenanceCost || 0);
+
+    if (nonJobIncome < totalDeductions * 0.80) {
+      return false;
+    }
+
+    set(s => ({
+      incomes: s.incomes.filter(i => i.type !== 'job'),
+      financialChanged: true,
+      eventHistory: [
+        ...s.eventHistory,
+        {
+          day: s.currentDay,
+          eventName: 'Resigned from Corporate Job',
+          icon: '🚪',
+          choice: 'Quit 9-to-5 Career',
+          poolDelta: 0,
+          outcome: `Voluntarily resigned from ${job.name} (₹${job.amount.toLocaleString('en-IN')}/mo). Now sustaining lifestyle independently through passive business and rental income!`,
+        }
+      ]
+    }));
+    return true;
+  },
+
   applyForNewJob: (offer) => {
     const state = get();
     if (!offer || !offer.salary) return false;
 
-    // Cooldown: at least 150 days between proactive job switches
-    if (state.lastJobSwitchDay && (state.currentDay - state.lastJobSwitchDay) < 150) {
+    const currentJob = state.incomes.find(i => i.type === 'job');
+    const oldSalary = currentJob ? currentJob.amount : 0;
+    const cooldown = getJobSwitchCooldown(oldSalary);
+
+    // Dynamic Cooldown: increases with seniority
+    if (state.lastJobSwitchDay && (state.currentDay - state.lastJobSwitchDay) < cooldown) {
       return false;
     }
 
-    const currentJob = state.incomes.find(i => i.type === 'job');
-    const oldSalary = currentJob ? currentJob.amount : 0;
-    const hike = offer.salary - oldSalary;
+    const cityTier = state.player?.cityTier || 2;
+    const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+    const targetSalary = Math.min(cap, offer.salary);
+    const hike = targetSalary - oldSalary;
     const hikePct = oldSalary > 0 ? Math.round((hike / oldSalary) * 100) : 100;
 
     const newIncomes = [
@@ -1208,7 +1373,7 @@ const useGameStore = create((set, get) => ({
       {
         id: `job_${Date.now()}`,
         type: 'job',
-        amount: offer.salary,
+        amount: targetSalary,
         name: offer.role || 'Corporate Specialist',
       }
     ];
@@ -1226,8 +1391,8 @@ const useGameStore = create((set, get) => ({
           choice: `Accepted offer at ${offer.company}`,
           poolDelta: 0,
           outcome: oldSalary > 0
-            ? `Switched to ${offer.role} at ${offer.company}! Salary grew from ₹${oldSalary.toLocaleString('en-IN')}/mo to ₹${offer.salary.toLocaleString('en-IN')}/mo (+₹${hike.toLocaleString('en-IN')}/mo, +${hikePct}% hike).`
-            : `Secured full-time employment as ${offer.role} at ${offer.company} earning ₹${offer.salary.toLocaleString('en-IN')}/mo!`,
+            ? `Switched to ${offer.role} at ${offer.company}! Salary grew from ₹${oldSalary.toLocaleString('en-IN')}/mo to ₹${targetSalary.toLocaleString('en-IN')}/mo (+₹${hike.toLocaleString('en-IN')}/mo, +${hikePct}% hike).`
+            : `Secured full-time employment as ${offer.role} at ${offer.company} earning ₹${targetSalary.toLocaleString('en-IN')}/mo!`,
         }
       ]
     }));
@@ -1245,9 +1410,17 @@ const useGameStore = create((set, get) => ({
       return false;
     }
 
+    const cityTier = state.player?.cityTier || 2;
+    const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
     const currentSalary = currentJob.amount;
-    const hikePercent = randFloat(0.12, 0.18);
-    const hikeAmount = Math.round(currentSalary * hikePercent);
+
+    if (currentSalary >= cap) {
+      return false; // already at or above ceiling
+    }
+
+    const maxAllowedHike = cap - currentSalary;
+    const hikePercent = currentSalary < 90000 ? randFloat(0.08, 0.12) : randFloat(0.04, 0.07);
+    const hikeAmount = Math.min(maxAllowedHike, Math.round(currentSalary * hikePercent));
     const newSalary = currentSalary + hikeAmount;
     const expMonths = (state.experienceMonths || 0) + 12;
     const newRole = getCareerRole(expMonths, newSalary);
@@ -1264,7 +1437,7 @@ const useGameStore = create((set, get) => ({
           icon: '📈',
           choice: 'Requested Performance Appraisal',
           poolDelta: 0,
-          outcome: `Management approved your merit appraisal! Promoted to ${newRole} with a +₹${hikeAmount.toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}%) raise to ₹${newSalary.toLocaleString('en-IN')}/mo.`,
+          outcome: `Management approved your merit appraisal! Promoted to ${newRole} with a +₹${hikeAmount.toLocaleString('en-IN')}/mo (+${Math.round((hikeAmount / currentSalary) * 100)}%) raise to ₹${newSalary.toLocaleString('en-IN')}/mo (Tier ${cityTier} cap: ₹${(cap / 100000).toFixed(1)}L).`,
         }
       ]
     }));
@@ -1837,6 +2010,8 @@ const useGameStore = create((set, get) => ({
       buckets: {},
       instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
       goals: [],
+      funds: [],
+      fundAllocations: {},
       incomes: [],
       fixedDeductions: [],
       loans: [],
@@ -1967,15 +2142,18 @@ function buildEventOptions(event, state) {
     }
 
     case 'job_loss': {
-      const currentSalary = state.incomes.find(i => i.type === 'job')?.amount || 0;
+      const activeJobs = state.incomes.filter(i => i.type === 'job');
+      const currentSalary = activeJobs.reduce((sum, j) => sum + j.amount, 0);
+      const severance = currentSalary * 2;
       financialImpact = {
         type: 'income_loss',
         monthlyLoss: currentSalary,
+        severance,
         duration: '2-6 months'
       };
       options.push({
-        label: 'Acknowledge & Hunt for Jobs',
-        description: `Income drops to ₹0. Fixed living expenses and EMIs will deduct from your cash pool.`
+        label: severance > 0 ? `Accept Severance (+₹${severance.toLocaleString('en-IN')}) & Hunt for Roles` : 'Acknowledge & Hunt for Roles',
+        description: `2 months severance package credited immediately to liquid savings. Monthly salary drops to strict ₹0.`
       });
       break;
     }
@@ -2029,22 +2207,27 @@ function buildEventOptions(event, state) {
     case 'salary_hike': {
       const primaryJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = primaryJob?.amount || 40000;
-      const hikePercent = randFloat(0.14, 0.22);
-      const hikeAmount = Math.round(currentSalary * hikePercent);
-      const newSalary = currentSalary + hikeAmount;
+      const cityTier = state.player?.cityTier || 2;
+      const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+      const hikePercent = currentSalary < 50000 ? randFloat(0.08, 0.12) : randFloat(0.05, 0.08);
+      const rawHike = Math.round(currentSalary * hikePercent);
+      const newSalary = Math.min(cap, currentSalary + rawHike);
+      const hikeAmount = newSalary - currentSalary;
       const expMonths = (state.experienceMonths || 0) + 12;
       const newRole = getCareerRole(expMonths, newSalary);
 
       financialImpact = {
         type: 'gain_recurring',
         hikeAmount,
-        hikePercent: Math.round(hikePercent * 100),
+        hikePercent: Math.round((hikeAmount / Math.max(1, currentSalary)) * 100),
         newSalary,
         newRole,
       };
       options.push({
-        label: `Accept Merit Promotion (+₹${hikeAmount.toLocaleString('en-IN')}/mo) 🎉`,
-        description: `Promoted to ${newRole}! Monthly salary rises from ₹${currentSalary.toLocaleString('en-IN')} to ₹${newSalary.toLocaleString('en-IN')}/mo (+${Math.round(hikePercent * 100)}% hike).`
+        label: hikeAmount > 0 ? `Accept Merit Promotion (+₹${hikeAmount.toLocaleString('en-IN')}/mo) 🎉` : 'Acknowledge Review (At Tier Ceiling)',
+        description: hikeAmount > 0
+          ? `Promoted to ${newRole}! Monthly salary rises from ₹${currentSalary.toLocaleString('en-IN')} to ₹${newSalary.toLocaleString('en-IN')}/mo (+${Math.round((hikeAmount / currentSalary) * 100)}% hike).`
+          : `You are at the Tier ${cityTier} corporate base salary cap (₹${(cap / 100000).toFixed(1)}L/mo).`
       });
       break;
     }
@@ -2053,50 +2236,52 @@ function buildEventOptions(event, state) {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = currentJob ? currentJob.amount : 40000;
       const expMonths = state.experienceMonths || 0;
+      const cityTier = state.player?.cityTier || 2;
+      const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
 
       // Realistic hike rates:
-      // Option 1: Fast-Growing Tech Scaleup (+36% to +46% hike)
-      const startupHikePct = randFloat(0.36, 0.46);
-      const startupSalary = Math.round(currentSalary * (1 + startupHikePct));
+      // Option 1: Fast-Growing Tech Scaleup (+16% to +22% hike)
+      const startupHikePct = randFloat(0.16, 0.22);
+      const startupSalary = Math.min(cap, Math.round(currentSalary * (1 + startupHikePct)));
       const startupDiff = startupSalary - currentSalary;
       const startupRole = getCareerRole(expMonths + 18, startupSalary);
 
-      // Option 2: Established Global MNC (+22% to +30% hike, solid stability)
-      const mncHikePct = randFloat(0.22, 0.30);
-      const mncSalary = Math.round(currentSalary * (1 + mncHikePct));
+      // Option 2: Established Global MNC (+10% to +15% hike, solid stability)
+      const mncHikePct = randFloat(0.10, 0.15);
+      const mncSalary = Math.min(cap, Math.round(currentSalary * (1 + mncHikePct)));
       const mncDiff = mncSalary - currentSalary;
       const mncRole = getCareerRole(expMonths + 12, mncSalary);
 
-      // Option 3: Counter-offer to stay (+14% to +18% retention raise)
-      const retentionPct = randFloat(0.14, 0.18);
-      const retentionHike = Math.round(currentSalary * retentionPct);
-      const retentionSalary = currentSalary + retentionHike;
+      // Option 3: Counter-offer to stay (+6% to +8% retention raise)
+      const retentionPct = randFloat(0.06, 0.08);
+      const retentionSalary = Math.min(cap, Math.round(currentSalary * (1 + retentionPct)));
+      const retentionHike = retentionSalary - currentSalary;
 
       financialImpact = {
         type: 'job_switch',
         currentSalary,
         startupSalary,
         startupRole,
-        startupHikePct: Math.round(startupHikePct * 100),
+        startupHikePct: Math.round((startupDiff / Math.max(1, currentSalary)) * 100),
         mncSalary,
         mncRole,
-        mncHikePct: Math.round(mncHikePct * 100),
+        mncHikePct: Math.round((mncDiff / Math.max(1, currentSalary)) * 100),
         retentionSalary,
         retentionHike,
-        retentionPct: Math.round(retentionPct * 100),
+        retentionPct: Math.round((retentionHike / Math.max(1, currentSalary)) * 100),
       };
 
       options.push({
-        label: `Join Tech Venture — ₹${startupSalary.toLocaleString('en-IN')}/mo (+${Math.round(startupHikePct * 100)}%) 🚀`,
-        description: `${startupRole} at high-growth scaleup (+₹${startupDiff.toLocaleString('en-IN')}/mo jump). High upside and equity.`
+        label: `Join Tech Venture — ₹${startupSalary.toLocaleString('en-IN')}/mo (+${Math.round((startupDiff / Math.max(1, currentSalary)) * 100)}%) 🚀`,
+        description: `${startupRole} at high-growth scaleup (+₹${startupDiff.toLocaleString('en-IN')}/mo jump). Higher pace and stock incentives.`
       });
       options.push({
-        label: `Join Global MNC — ₹${mncSalary.toLocaleString('en-IN')}/mo (+${Math.round(mncHikePct * 100)}%) 🏢`,
-        description: `${mncRole} at Tier-1 Enterprise (+₹${mncDiff.toLocaleString('en-IN')}/mo jump). High job security and bonus.`
+        label: `Join Global MNC — ₹${mncSalary.toLocaleString('en-IN')}/mo (+${Math.round((mncDiff / Math.max(1, currentSalary)) * 100)}%) 🏢`,
+        description: `${mncRole} at Tier-1 Enterprise (+₹${mncDiff.toLocaleString('en-IN')}/mo jump). High stability and standard benefits.`
       });
       options.push({
-        label: `Negotiate Counter-Offer (+15% Raise to Stay) 💼`,
-        description: `Current employer matches market pressure! Stay with +₹${retentionHike.toLocaleString('en-IN')}/mo raise (new pay: ₹${retentionSalary.toLocaleString('en-IN')}/mo).`
+        label: `Negotiate Counter-Offer (+${Math.round((retentionHike / Math.max(1, currentSalary)) * 100)}% Raise to Stay) 💼`,
+        description: `Current employer offers retention bump of +₹${retentionHike.toLocaleString('en-IN')}/mo (new pay: ₹${retentionSalary.toLocaleString('en-IN')}/mo).`
       });
       break;
     }
@@ -2104,8 +2289,10 @@ function buildEventOptions(event, state) {
     case 'new_job_offer': {
       const expMonths = state.experienceMonths || 0;
       const cityTier = state.player?.cityTier || 2;
+      const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
       const cityMult = cityTier === 1 ? 1.25 : cityTier === 2 ? 1.0 : 0.8;
-      const baseSalary = Math.round(Math.max(32000 * cityMult, (state.player?.startingSalary || 35000) * (1 + (expMonths / 60))));
+      const uncapped = Math.round(Math.max(32000 * cityMult, (state.player?.startingSalary || 35000) * (1 + (expMonths / 60))));
+      const baseSalary = Math.min(cap, uncapped);
       const roleName = getCareerRole(expMonths, baseSalary);
 
       financialImpact = {
@@ -2172,14 +2359,22 @@ function buildEventOptions(event, state) {
     }
 
     case 'inheritance_gift': {
-      const giftAmount = randInt(100000, 500000);
+      const giftAmount = randInt(100000, 400000);
       financialImpact = {
         type: 'gain',
         amount: giftAmount,
       };
       options.push({
-        label: `Receive Windfall (+₹${giftAmount.toLocaleString('en-IN')}) 🎁`,
-        description: 'Directly added to your liquid cash pool.'
+        label: `Deposit to Liquid Savings (+₹${giftAmount.toLocaleString('en-IN')}) 🏦`,
+        description: 'Keep the full windfall safe and liquid in your bank account.'
+      });
+      options.push({
+        label: `Invest in Growth Portfolio (Stocks & Mutual Funds) 📈`,
+        description: 'Deploy the full windfall into equities and index funds for long-term compounding.'
+      });
+      options.push({
+        label: `Vacation & Celebration (Save 50%, Spend 50%) ✈️`,
+        description: `Enjoy a ₹${Math.round(giftAmount * 0.5).toLocaleString('en-IN')} holiday trip and bank the remaining ₹${Math.round(giftAmount * 0.5).toLocaleString('en-IN')}.`
       });
       break;
     }
@@ -2290,14 +2485,22 @@ function buildEventOptions(event, state) {
     }
 
     case 'work_bonus': {
-      const bonusAmount = randInt(20000, 80000);
+      const bonusAmount = randInt(25000, 75000);
       financialImpact = {
         type: 'gain',
         amount: bonusAmount,
       };
       options.push({
-        label: `Collect Bonus (+₹${bonusAmount.toLocaleString('en-IN')}) 🎉`,
-        description: 'Performance incentive deposited into cash pool.'
+        label: `Bank Full Bonus (+₹${bonusAmount.toLocaleString('en-IN')}) 🎉`,
+        description: 'Deposit 100% of corporate bonus into liquid cash reserves.'
+      });
+      options.push({
+        label: `Auto-Invest into Mutual Funds (SIP Boost) 📊`,
+        description: 'Channel bonus directly into diversified equity mutual funds.'
+      });
+      options.push({
+        label: `Celebration & Dining (Splurge 40%, Save 60%) 🍽️`,
+        description: `Spend ₹${Math.round(bonusAmount * 0.4).toLocaleString('en-IN')} on celebration; deposit remaining ₹${Math.round(bonusAmount * 0.6).toLocaleString('en-IN')} to savings.`
       });
       break;
     }
@@ -2305,11 +2508,14 @@ function buildEventOptions(event, state) {
     case 'senior_job_offer': {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const base = currentJob ? currentJob.amount : (state.player?.startingSalary || 40000);
-      const hikePct = randFloat(0.42, 0.55);
-      const offeredSalary = Math.round(Math.max(base * (1 + hikePct), 85000));
+      const cityTier = state.player?.cityTier || 2;
+      const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+      const hikePct = randFloat(0.18, 0.26);
+      const offeredSalary = Math.min(cap, Math.round(base * (1 + hikePct)));
       const hike = offeredSalary - (currentJob ? currentJob.amount : 0);
       const hikePercent = Math.round((hike / Math.max(1, base)) * 100);
-      const role = 'Director / VP of Strategy';
+      const expMonths = (state.experienceMonths || 0) + 24;
+      const role = getCareerRole(expMonths, offeredSalary, true);
       financialImpact = {
         type: 'job_switch',
         currentSalary: currentJob ? currentJob.amount : 0,
@@ -2320,7 +2526,7 @@ function buildEventOptions(event, state) {
       };
       options.push({
         label: `Accept Leadership Role (₹${offeredSalary.toLocaleString('en-IN')}/mo) 🏆`,
-        description: `+₹${hike.toLocaleString('en-IN')}/mo (+${hikePercent}% hike) as ${role} with executive bonus and stock equity.`
+        description: `+₹${hike.toLocaleString('en-IN')}/mo (+${hikePercent}% hike) as ${role} with executive oversight.`
       });
       options.push({
         label: 'Decline Executive Role',

@@ -224,6 +224,48 @@ const LoansTab = () => {
           })}
         </div>
       )}
+
+      {/* Available & Future Loan Types (Micro-Learning) */}
+      <div className="pt-2">
+        <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+          Specialized Loan Products
+        </h3>
+        <div className="space-y-2">
+          <Card className="p-3 border border-dashed border-stone-200 bg-stone-50/70">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-2xl">🏡</span>
+                <div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-xs font-bold text-stone-700">Home Mortgage Loan (8.5% p.a.)</span>
+                    <span className="text-[9px] font-bold bg-stone-200 text-stone-600 px-1.5 py-0.2 rounded">🔒 In Goals Tab</span>
+                  </div>
+                  <span className="text-[10px] text-stone-500 block">
+                    Finances up to 80% of property cost with 15-year EMI tenure. Apply directly when achieving Home Goal.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="p-3 border border-dashed border-stone-200 bg-stone-50/70">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-2xl">🚗</span>
+                <div>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-xs font-bold text-stone-700">Auto Vehicle Loan (9.5% p.a.)</span>
+                    <span className="text-[9px] font-bold bg-stone-200 text-stone-600 px-1.5 py-0.2 rounded">🔒 In Goals Tab</span>
+                  </div>
+                  <span className="text-[10px] text-stone-500 block">
+                    Finances up to 85% of car cost over 5-year tenure. Apply directly when achieving Car Goal.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };

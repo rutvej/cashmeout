@@ -4,7 +4,7 @@ import Card from '../../ui/Card';
 import Button from '../../ui/Button';
 import { formatCurrency } from '../../../utils/format';
 import { CITY_TIERS } from '../../../engine/constants';
-import { getCareerRole, generateJobMarketOffers } from '../../../engine/careers';
+import { getCareerRole, generateJobMarketOffers, CITY_TIER_SALARY_CAPS, getJobSwitchCooldown } from '../../../engine/careers';
 
 const IncomeTab = () => {
   const store = useGameStore();
@@ -34,16 +34,21 @@ const IncomeTab = () => {
   const netMonthlySurplus = totalMonthlyIncome - totalDeductions;
   const hasJob = store.incomes.some(i => i.type === 'job');
   const primaryJob = store.incomes.find(i => i.type === 'job');
+  const familyBiz = store.incomes.find(i => i.type === 'family_business');
+  const passiveInc = store.incomes.find(i => i.type === 'passive_income');
   const cityTierMeta = CITY_TIERS[store.player?.cityTier || 1];
+  const cityTierCap = CITY_TIER_SALARY_CAPS[store.player?.cityTier || 2] || 180000;
+  const isAtCap = hasJob && (primaryJob?.amount || 0) >= cityTierCap;
 
   const careerRole = getCareerRole(store.experienceMonths, primaryJob?.amount, store.courseCompleted);
   const jobMarketOffers = generateJobMarketOffers(store);
   const expYears = Math.floor((store.experienceMonths || 0) / 12);
   const expRemainingMonths = (store.experienceMonths || 0) % 12;
   const daysSinceAppraisal = store.lastAppraisalDay ? (store.currentDay - store.lastAppraisalDay) : 999;
-  const canRequestAppraisal = daysSinceAppraisal >= 270;
+  const canRequestAppraisal = daysSinceAppraisal >= 270 && !isAtCap;
   const daysSinceSwitch = store.lastJobSwitchDay ? (store.currentDay - store.lastJobSwitchDay) : 999;
-  const canSwitchJob = daysSinceSwitch >= 150;
+  const switchCooldown = getJobSwitchCooldown(primaryJob?.amount || 35000);
+  const canSwitchJob = daysSinceSwitch >= switchCooldown;
 
   return (
     <div className="space-y-4 pb-24">
@@ -65,7 +70,7 @@ const IncomeTab = () => {
         </div>
       </Card>
 
-      {/* Career & Employment Hub (Proactive Job Market & Realistic Hikes) */}
+      {/* Career & Employment Hub */}
       <Card className="p-4 border border-blue-100 bg-gradient-to-br from-white via-sky-50/30 to-blue-50/40">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2">
           <div className="flex items-center space-x-2">
@@ -75,7 +80,7 @@ const IncomeTab = () => {
                 Career & Job Market Hub
               </h3>
               <span className="text-[10px] text-text-muted">
-                {expYears > 0 ? `${expYears}y ` : ''}{expRemainingMonths}m experience · {cityTierMeta.name}
+                {expYears > 0 ? `${expYears}y ` : ''}{expRemainingMonths}m experience · {cityTierMeta.name} (Cap: {formatCurrency(cityTierCap)}/mo)
               </span>
             </div>
           </div>
@@ -86,13 +91,37 @@ const IncomeTab = () => {
               className="text-[10px] px-2.5 py-1 font-bold self-start sm:self-auto shrink-0"
               disabled={!canRequestAppraisal}
               onClick={() => store.requestAppraisal()}
-              title={canRequestAppraisal ? 'Ask for a merit raise review' : `Appraisal available in ${270 - daysSinceAppraisal} days`}
+              title={
+                isAtCap
+                  ? 'Maximum salary ceiling reached for this city tier'
+                  : canRequestAppraisal
+                  ? 'Ask for a merit raise review'
+                  : `Appraisal available in ${270 - daysSinceAppraisal} days`
+              }
             >
-              {canRequestAppraisal ? '📈 Request Merit Review' : `Review in ${270 - daysSinceAppraisal}d`}
+              {isAtCap ? '👑 At Ceiling' : canRequestAppraisal ? '📈 Request Merit Review' : `Review in ${270 - daysSinceAppraisal}d`}
             </Button>
           )}
         </div>
 
+        {/* City Tier Cap Achievement Notice */}
+        {isAtCap && (
+          <div className="p-2.5 bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl border border-amber-200 mb-3 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-lg">👑</span>
+              <div>
+                <span className="text-[10px] font-black uppercase text-amber-900 block">
+                  Corporate Base Salary Ceiling Reached
+                </span>
+                <span className="text-[10px] text-amber-800 font-medium">
+                  At Tier {store.player?.cityTier || 2} cap ({formatCurrency(cityTierCap)}/mo). Grow wealth via capital investments or business ventures!
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Employment Status Display */}
         {hasJob ? (
           <div className="bg-white p-3 rounded-xl border border-sky-100 shadow-xs mb-3">
             <div className="flex justify-between items-start">
@@ -117,13 +146,40 @@ const IncomeTab = () => {
               </div>
             </div>
           </div>
+        ) : familyBiz ? (
+          <div className="bg-emerald-50/80 p-3 rounded-xl border border-emerald-200 mb-3 shadow-xs">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block">
+                  Family Business Venture
+                </span>
+                <p className="text-xs font-black text-text-primary mt-0.5">
+                  {familyBiz.name}
+                </p>
+                <span className="text-[10px] text-text-muted">
+                  Entrepreneurial Cashflow
+                </span>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-black text-emerald-700 block">
+                  +{formatCurrency(familyBiz.amount)}/mo
+                </span>
+                <span className="text-[9px] text-text-muted">
+                  Business Income
+                </span>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3">
-            <span className="text-xs font-bold text-amber-900 block">
-              ⚠️ Currently In Transition (Unemployed)
-            </span>
+            <div className="flex justify-between items-start mb-1">
+              <span className="text-xs font-bold text-amber-900 block">
+                ⚠️ Unemployed (In Transition)
+              </span>
+              <span className="text-xs font-black text-rose-700">₹0/mo Salary</span>
+            </div>
             <p className="text-[11px] text-amber-800 leading-snug mt-0.5">
-              Choose a full-time corporate re-entry role below with realistic compensation, or take a freelance bridge gig.
+              Fixed living costs and loan EMIs are depleting your savings buffer. Accept a re-entry position or take an interim contract gig.
             </p>
             <div className="mt-2.5">
               <Button
@@ -131,21 +187,21 @@ const IncomeTab = () => {
                 className="text-[11px] w-full bg-amber-700 text-white hover:bg-amber-800 font-semibold"
                 onClick={() => store.takeFreelanceGig()}
               >
-                + Take Interim Freelance Project (+₹20k/mo)
+                + Take Interim Freelance Gig (+₹20k/mo)
               </Button>
             </div>
           </div>
         )}
 
-        {/* Live Job Openings (Realistic Market Hikes on top of current job) */}
+        {/* Live Job Openings */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted">
-              {hasJob ? 'Recruiter Openings · Realistic Market Hikes' : 'Available Full-Time Salaried Positions'}
+              {hasJob ? 'Recruiter Openings · Bounded by City Cap' : 'Available Full-Time Salaried Positions'}
             </span>
             {!canSwitchJob && hasJob && (
               <span className="text-[9px] text-amber-700 font-semibold">
-                Switch cooldown: {150 - daysSinceSwitch} days
+                Switch cooldown: {switchCooldown - daysSinceSwitch} days
               </span>
             )}
           </div>
@@ -462,8 +518,40 @@ const IncomeTab = () => {
             </Button>
           </div>
 
+          {/* Resign from Corporate Career */}
+          {hasJob && (
+            <div className={`p-2.5 rounded-xl border flex justify-between items-center ${
+              (totalBusinessIncome + rentalIncome) >= totalDeductions * 0.8
+                ? 'bg-rose-50 border-rose-200'
+                : 'bg-stone-50 border-stone-200 opacity-80'
+            }`}>
+              <div>
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-xs font-bold text-text-primary">Resign from Corporate Job</span>
+                  {((totalBusinessIncome + rentalIncome) < totalDeductions * 0.8) && (
+                    <span className="text-[9px] font-bold text-stone-500 bg-stone-200 px-1.5 py-0.5 rounded">🔒 Locked</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-text-muted block">
+                  {(totalBusinessIncome + rentalIncome) >= totalDeductions * 0.8
+                    ? 'Passive cashflow covers ≥80% expenses! Free to leave the 9-to-5.'
+                    : `Requires passive income to cover ≥80% of monthly deductions (${formatCurrency(totalDeductions * 0.8)}/mo). Current: ${formatCurrency(totalBusinessIncome + rentalIncome)}/mo.`}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="text-xs text-rose-700 hover:bg-rose-100"
+                disabled={(totalBusinessIncome + rentalIncome) < totalDeductions * 0.8}
+                onClick={() => store.resignJob()}
+              >
+                Quit Job
+              </Button>
+            </div>
+          )}
+
           {/* Sell Car */}
-          {store.carsOwned && store.carsOwned.length > 0 && (
+          {store.carsOwned && store.carsOwned.length > 0 ? (
             <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
               <div>
                 <span className="text-xs font-bold text-text-primary block">Sell Car for Cash</span>
@@ -475,10 +563,23 @@ const IncomeTab = () => {
                 Sell Car
               </Button>
             </div>
+          ) : (
+            <div className="p-2.5 bg-stone-50/80 rounded-xl border border-dashed border-stone-200 flex justify-between items-center opacity-70">
+              <div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs font-bold text-stone-600">Sell Vehicle</span>
+                  <span className="text-[9px] font-bold text-stone-500 bg-stone-200 px-1.5 py-0.2 rounded">🔒</span>
+                </div>
+                <span className="text-[10px] text-stone-500">
+                  You do not own a vehicle. Buying a car adds mobility but introduces maintenance liability.
+                </span>
+              </div>
+              <span className="text-[10px] text-stone-400 font-bold">No Vehicle</span>
+            </div>
           )}
 
           {/* Sell Primary Home */}
-          {store.homesOwned && store.homesOwned.length > 0 && (
+          {store.homesOwned && store.homesOwned.length > 0 ? (
             <div className="p-2.5 bg-white rounded-xl border border-gray-200 flex justify-between items-center">
               <div>
                 <span className="text-xs font-bold text-text-primary block">Sell Primary Home</span>
@@ -490,10 +591,23 @@ const IncomeTab = () => {
                 Sell Home
               </Button>
             </div>
+          ) : (
+            <div className="p-2.5 bg-stone-50/80 rounded-xl border border-dashed border-stone-200 flex justify-between items-center opacity-70">
+              <div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs font-bold text-stone-600">Sell Real Estate Equity</span>
+                  <span className="text-[9px] font-bold text-stone-500 bg-stone-200 px-1.5 py-0.2 rounded">🔒</span>
+                </div>
+                <span className="text-[10px] text-stone-500">
+                  You are currently renting. Purchasing a home builds equity that can be liquidated or rented.
+                </span>
+              </div>
+              <span className="text-[10px] text-stone-400 font-bold">Renting</span>
+            </div>
           )}
 
           {/* Business Management: Reinvest or Exit */}
-          {store.hasActiveBusiness && (
+          {store.hasActiveBusiness ? (
             <div className="p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-200 space-y-2">
               <div className="flex justify-between items-center">
                 <div>
@@ -520,6 +634,19 @@ const IncomeTab = () => {
                   Exit / Sell Venture
                 </Button>
               </div>
+            </div>
+          ) : (
+            <div className="p-2.5 bg-stone-50/80 rounded-xl border border-dashed border-stone-200 flex justify-between items-center opacity-70">
+              <div>
+                <div className="flex items-center space-x-1">
+                  <span className="text-xs font-bold text-stone-600">Venture Operations / Equity Exit</span>
+                  <span className="text-[9px] font-bold text-stone-500 bg-stone-200 px-1.5 py-0.2 rounded">🔒</span>
+                </div>
+                <span className="text-[10px] text-stone-500">
+                  No active commercial business. Starting or investing in a venture unlocks equity liquidation.
+                </span>
+              </div>
+              <span className="text-[10px] text-stone-400 font-bold">No Venture</span>
             </div>
           )}
         </div>

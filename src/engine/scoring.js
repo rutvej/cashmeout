@@ -1,10 +1,11 @@
 export const computeNetWorth = (state) => {
   const pool = state.pool || 0;
+  const fundBalances = (state.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
   const homeValues = (state.homesOwned || []).reduce((sum, home) => sum + (home.value || 0), 0);
   const businessValue = state.hasActiveBusiness ? (state.businessIncome || 0) * 22 : 0;
   const loanDebt = (state.loans || []).reduce((sum, loan) => sum + (loan.principal || 0), 0);
   
-  return pool + homeValues + businessValue - loanDebt;
+  return pool + fundBalances + homeValues + businessValue - loanDebt;
 };
 
 export const calculateFinancialLiteracyScore = (state) => {
@@ -17,16 +18,29 @@ export const calculateFinancialLiteracyScore = (state) => {
                    (state.homeMaintenanceCost || 0) +
                    (state.carMaintenanceCost || 0);
   
+  const totalLiquidBuffer = (state.pool || 0) + (state.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
   const snapshots = state.monthlySnapshots || [];
   if (snapshots.length > 0) {
     let healthyMonths = 0;
     snapshots.forEach(s => {
-      if (s.pool > 6 * expenses) healthyMonths++;
+      if ((s.netWorth || s.pool || 0) > 6 * expenses) healthyMonths++;
     });
-    if (healthyMonths / snapshots.length > 0.5) score += 20;
+    if (healthyMonths / snapshots.length > 0.5) score += 15;
   }
 
-  if (state.hasHealthInsurance) score += 15;
+  // Safety Fund Creation & Quality Scoring
+  const emergencyFund = (state.funds || []).find(f => f.type === 'emergency');
+  if (emergencyFund) {
+    score += 10;
+    const liquidRatio = (emergencyFund.instruments?.savings || 0) + (emergencyFund.instruments?.fd || 0);
+    if (liquidRatio >= 75) {
+      score += 10; // Prudent liquidity
+    } else if (liquidRatio < 40) {
+      score -= 5;  // Imprudent: risky equity allocation in emergency fund
+    }
+  }
+
+  if (state.hasHealthInsurance) score += 10;
 
   let divCount = 0;
   if (state.instruments) {
@@ -132,6 +146,18 @@ export const generateInsights = (state) => {
   const insights = [];
 
   if (!state.hasHealthInsurance) insights.push("You lived dangerously without health insurance.");
+
+  const emgFund = (state.funds || []).find(f => f.type === 'emergency');
+  if (emgFund) {
+    const liquid = (emgFund.instruments?.savings || 0) + (emgFund.instruments?.fd || 0);
+    if (liquid >= 75) {
+      insights.push("Excellent prudence: You maintained an Emergency Fund in safe, liquid instruments.");
+    } else {
+      insights.push("Risk warning: Your Emergency Fund was heavily exposed to volatile equities (Stocks/MF).");
+    }
+  } else {
+    insights.push("Safety vulnerability: You operated without an Emergency Buffer Fund, leaving you vulnerable to sudden shocks.");
+  }
   
   if (state.instruments && state.instruments.savings > 70) insights.push("You kept too much in savings, losing out to inflation.");
   

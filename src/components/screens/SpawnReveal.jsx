@@ -86,21 +86,26 @@ const SpawnReveal = () => {
   return (
     <div className="min-h-screen bg-surface-bg p-4 flex flex-col pb-24">
       <div className="max-w-md w-full mx-auto mt-6">
-        <motion.h2
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-2xl font-bold mb-1 text-text-primary text-center"
-        >
-          Your Starting Hand
-        </motion.h2>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="text-text-muted text-sm text-center mb-6"
-        >
-          Life dealt you these cards. Make the most of them.
-        </motion.p>
+        <div className="text-center mb-5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-accent-action-dark bg-blue-50 px-3 py-1 rounded-full inline-block mb-1.5">
+            Character Profile · {player.characterName || 'Rahul Sharma'} (Age {player.characterAge || 22})
+          </span>
+          <motion.h2
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-2xl font-black text-text-primary"
+          >
+            Your Starting Hand
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="text-text-muted text-xs mt-1"
+          >
+            Review your financial cards before setting up your 20-year plan.
+          </motion.p>
+        </div>
 
         {stats.map((stat, i) => (
           <StatCard key={stat.label} {...stat} delay={0.2 + i * 0.18} />
@@ -108,15 +113,15 @@ const SpawnReveal = () => {
 
         {/* Difficulty rating */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 + stats.length * 0.18, duration: 0.5 }}
-          className="mt-5 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 + stats.length * 0.18 }}
+          className="text-center mt-4 mb-8"
         >
-          <p className="text-xs text-text-muted uppercase tracking-wider mb-2">Difficulty</p>
-          <div className="flex justify-center space-x-1.5 text-lg">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <span key={i} className={`transition-opacity ${i < player.difficultyRating ? 'opacity-100' : 'opacity-20'}`}>
+          <span className="text-xs text-text-muted block mb-1">Difficulty</span>
+          <div className="flex justify-center space-x-1">
+            {[...Array(5)].map((_, i) => (
+              <span key={i} className="text-lg">
                 {i < player.difficultyRating ? '🔥' : '⚪'}
               </span>
             ))}
@@ -135,8 +140,8 @@ const SpawnReveal = () => {
         className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-20"
       >
         <div className="max-w-md mx-auto">
-          <Button fullWidth onClick={() => setScreen('goals')}>
-            Set Your Goals →
+          <Button fullWidth onClick={() => setScreen('setup')}>
+            Step into Financial Planning (Setup Phase) →
           </Button>
         </div>
       </motion.div>

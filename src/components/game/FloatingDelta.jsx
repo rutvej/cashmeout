@@ -7,7 +7,7 @@ export default function FloatingDelta({ delta, keyId }) {
   const isPositive = delta > 0;
   const colorClass = isPositive ? 'text-emerald-700 bg-emerald-50' : 'text-rose-700 bg-rose-50';
   const prefix = isPositive ? '+' : '';
-  const formatted = `${prefix}₹${Math.abs(delta).toLocaleString('en-IN')}`;
+  const formatted = `${prefix}₹${Math.round(Math.abs(delta)).toLocaleString('en-IN')}`;
 
   return (
     <AnimatePresence>

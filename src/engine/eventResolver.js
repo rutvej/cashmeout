@@ -1,5 +1,6 @@
 import { applyEventToInstruments } from './instruments.js';
 import { randInt, randFloat } from '../utils/random.js';
+import { CITY_TIER_SALARY_CAPS } from './careers.js';
 
 export const resolveEvent = (event, playerChoice, state) => {
   const changes = {
@@ -65,10 +66,18 @@ export const resolveEvent = (event, playerChoice, state) => {
     }
 
     case 'job_loss': {
-      state.incomes.filter(i => i.type === 'job').forEach(job => {
+      const activeJobs = state.incomes.filter(i => i.type === 'job');
+      const monthlyPay = activeJobs.reduce((sum, j) => sum + j.amount, 0);
+      const severance = monthlyPay * 2; // 2 months upfront severance package
+      activeJobs.forEach(job => {
         changes.removedIncomes.push(job.id);
       });
-      changes.statusMessages.push(`Lost salaried position. Relying on savings & freelance gigs until new offer.`);
+      changes.poolDelta = severance;
+      changes.statusMessages.push(
+        severance > 0
+          ? `Corporate downsizing. Received 2-month severance package (+₹${severance.toLocaleString('en-IN')}) into savings buffer. Monthly job salary is now ₹0.`
+          : `Position eliminated. Monthly job salary drops to ₹0. Relying on liquid buffer until new job.`
+      );
       break;
     }
 
@@ -76,8 +85,8 @@ export const resolveEvent = (event, playerChoice, state) => {
       if (playerChoice === 0) {
         const gigPay = impact.gigPay || impact.amount || randInt(18000, 30000);
         changes.newIncomes.push({
-          id: `freelance_${Date.now()}`,
-          type: 'job',
+          id: `freelance_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          type: 'freelance',
           amount: gigPay,
           name: 'Consulting / Freelance Retainer',
         });
@@ -93,8 +102,14 @@ export const resolveEvent = (event, playerChoice, state) => {
       if (playerChoice === 0) {
         // Pay out of pocket
         changes.poolDelta = -35000;
-        changes.courseCompletedDelta = true;
-        changes.statusMessages.push(`Completed executive certification! Raised promotion probability and unlocked senior leadership offers.`);
+        const distinction = Math.random() < 0.65;
+        if (distinction) {
+          changes.courseCompletedDelta = true;
+          changes.statusMessages.push(`Graduated Executive Certification with Distinction! Raised promotion ceiling and unlocked senior leadership offers.`);
+        } else {
+          changes.courseCompletedDelta = false;
+          changes.statusMessages.push(`Completed coursework, but narrowly missed distinction honors. Credential earned without executive recruiter placement.`);
+        }
       } else {
         changes.statusMessages.push(`Skipped course for now to preserve cash.`);
       }
@@ -105,16 +120,20 @@ export const resolveEvent = (event, playerChoice, state) => {
       if (playerChoice === 0) {
         const currentJob = state.incomes.find(i => i.type === 'job');
         const base = currentJob ? currentJob.amount : 40000;
-        const newSalary = impact.newSalary || Math.round(base * 1.5);
-        const role = impact.roleName || 'Director / VP of Strategy';
+        const cityTier = state.player?.cityTier || 2;
+        const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+        const newSalary = Math.min(cap, impact.newSalary || Math.round(base * 1.22));
+        const role = impact.roleName || 'Director of Operations & Strategy';
+        // Cleanly remove any existing job(s)
+        const activeJobs = state.incomes.filter(i => i.type === 'job');
+        activeJobs.forEach(j => changes.removedIncomes.push(j.id));
         changes.newIncomes.push({
-          id: `job_${Date.now()}`,
+          id: `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
           type: 'job',
           amount: newSalary,
           name: role,
         });
-        if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Accepted Executive Mandate as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+        changes.statusMessages.push(`Accepted Executive Role as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
         changes.triggerAllocation = true;
       } else {
         changes.statusMessages.push(`Declined executive offer to maintain work-life balance.`);
@@ -124,10 +143,16 @@ export const resolveEvent = (event, playerChoice, state) => {
 
     case 'new_job_offer': {
       if (playerChoice === 0) {
-        const newSalary = impact.newSalary || 45000;
+        const cityTier = state.player?.cityTier || 2;
+        const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+        const rawSalary = impact.newSalary || 45000;
+        const newSalary = Math.min(cap, rawSalary);
         const role = impact.roleName || 'Full-Time Corporate Specialist';
+        // Cleanly remove any existing job(s)
+        const activeJobs = state.incomes.filter(i => i.type === 'job');
+        activeJobs.forEach(j => changes.removedIncomes.push(j.id));
         changes.newIncomes.push({
-          id: `job_${Date.now()}`,
+          id: `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
           type: 'job',
           amount: newSalary,
           name: role,
@@ -195,13 +220,24 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'salary_hike': {
       const primaryJob = state.incomes.find(i => i.type === 'job');
       if (primaryJob) {
-        const hike = impact.hikeAmount || Math.round(primaryJob.amount * 0.18);
-        const newSalary = impact.newSalary || (primaryJob.amount + hike);
-        const role = impact.newRole || primaryJob.name;
-        changes.newIncomes.push({ ...primaryJob, amount: newSalary, name: role, id: `job_${Date.now()}` });
-        changes.removedIncomes.push(primaryJob.id);
-        changes.statusMessages.push(`Promoted to ${role}! Salary increased by +₹${hike.toLocaleString('en-IN')}/mo (+${impact.hikePercent || 18}%)!`);
-        changes.triggerAllocation = true;
+        const cityTier = state.player?.cityTier || 2;
+        const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+        const currentSalary = primaryJob.amount;
+
+        if (currentSalary >= cap) {
+          const bonus = Math.round(currentSalary * 0.4);
+          changes.poolDelta = bonus;
+          changes.statusMessages.push(`At Tier ${cityTier} corporate salary ceiling (₹${(cap / 100000).toFixed(1)}L/mo). Management awarded you an annual performance bonus of +₹${bonus.toLocaleString('en-IN')}!`);
+        } else {
+          const rawHike = impact.hikeAmount || Math.round(currentSalary * 0.12);
+          const newSalary = Math.min(cap, impact.newSalary || (currentSalary + rawHike));
+          const actualHike = newSalary - currentSalary;
+          const role = impact.newRole || primaryJob.name;
+          changes.newIncomes.push({ ...primaryJob, amount: newSalary, name: role, id: `job_${Date.now()}_${Math.floor(Math.random() * 1000)}` });
+          changes.removedIncomes.push(primaryJob.id);
+          changes.statusMessages.push(`Promoted to ${role}! Salary increased by +₹${actualHike.toLocaleString('en-IN')}/mo to ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+          changes.triggerAllocation = true;
+        }
       }
       break;
     }
@@ -209,33 +245,35 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'job_switch': {
       const currentJob = state.incomes.find(i => i.type === 'job');
       const currentSalary = currentJob ? currentJob.amount : 40000;
+      const cityTier = state.player?.cityTier || 2;
+      const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
+
+      let newSalary = currentSalary;
+      let role = currentJob?.name || 'Corporate Specialist';
+      let tag = 'offer';
 
       if (playerChoice === 0) {
-        // High-Growth Tech Venture Offer
-        const newSalary = impact.startupSalary || impact.newSalary || Math.round(currentSalary * 1.38);
-        const role = impact.startupRole || 'Lead Specialist (High-Growth Tech)';
-        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
-        if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Accepted High-Growth Tech offer as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo (+${impact.startupHikePct || 38}% hike)!`);
-        changes.triggerAllocation = true;
+        newSalary = Math.min(cap, impact.startupSalary || impact.newSalary || Math.round(currentSalary * 1.18));
+        role = impact.startupRole || 'Lead Specialist (High-Growth Tech)';
+        tag = 'High-Growth Tech';
       } else if (playerChoice === 1) {
-        // Premier Global Enterprise MNC Offer
-        const newSalary = impact.mncSalary || Math.round(currentSalary * 1.26);
-        const role = impact.mncRole || 'Senior Manager (Global MNC)';
-        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
-        if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Accepted Enterprise MNC offer as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo (+${impact.mncHikePct || 26}% hike)!`);
-        changes.triggerAllocation = true;
+        newSalary = Math.min(cap, impact.mncSalary || Math.round(currentSalary * 1.12));
+        role = impact.mncRole || 'Senior Manager (Global MNC)';
+        tag = 'Enterprise MNC';
       } else {
-        // Current Employer Retention Counter-Offer
-        const retentionHike = impact.retentionHike || Math.round(currentSalary * 0.15);
-        const newSalary = impact.retentionSalary || (currentSalary + retentionHike);
-        const role = currentJob ? `${currentJob.name} (Retained)` : 'Senior Retained Role';
-        changes.newIncomes.push({ id: `job_${Date.now()}`, type: 'job', amount: newSalary, name: role });
-        if (currentJob) changes.removedIncomes.push(currentJob.id);
-        changes.statusMessages.push(`Leveraged offer for a counter-offer! Current employer gave you a +₹${retentionHike.toLocaleString('en-IN')}/mo (+15%) retention raise to stay.`);
-        changes.triggerAllocation = true;
+        const retentionHike = Math.round(currentSalary * 0.08);
+        newSalary = Math.min(cap, impact.retentionSalary || (currentSalary + retentionHike));
+        role = currentJob ? `${currentJob.name} (Retained)` : 'Senior Retained Role';
+        tag = 'Counter-Offer';
       }
+
+      // Cleanly remove any existing job(s)
+      const activeJobs = state.incomes.filter(i => i.type === 'job');
+      activeJobs.forEach(j => changes.removedIncomes.push(j.id));
+
+      changes.newIncomes.push({ id: `job_${Date.now()}_${Math.floor(Math.random() * 1000)}`, type: 'job', amount: newSalary, name: role });
+      changes.statusMessages.push(`Accepted ${tag} as ${role} at ₹${newSalary.toLocaleString('en-IN')}/mo!`);
+      changes.triggerAllocation = true;
       break;
     }
 
@@ -278,9 +316,27 @@ export const resolveEvent = (event, playerChoice, state) => {
     }
 
     case 'inheritance_gift': {
-      const gift = impact.giftAmount || randInt(100000, 400000);
-      changes.poolDelta = gift;
-      changes.statusMessages.push(`Received family windfall gift of +₹${gift.toLocaleString('en-IN')}!`);
+      const gift = impact.amount || randInt(100000, 400000);
+      if (playerChoice === 0) {
+        changes.poolDelta = gift;
+        changes.statusMessages.push(`Received windfall gift of +₹${gift.toLocaleString('en-IN')} into safe liquid savings.`);
+      } else if (playerChoice === 1) {
+        changes.poolDelta = gift;
+        const currentPool = (state.pool || 0) + gift;
+        const addPct = Math.min(30, Math.round((gift / Math.max(1, currentPool)) * 100));
+        const halfPct = Math.round(addPct / 2);
+        changes.newInstruments = {
+          ...state.instruments,
+          stocks: Math.min(60, (state.instruments.stocks || 0) + halfPct),
+          mf: Math.min(60, (state.instruments.mf || 0) + halfPct),
+          savings: Math.max(5, (state.instruments.savings || 100) - (halfPct * 2)),
+        };
+        changes.statusMessages.push(`Invested ₹${gift.toLocaleString('en-IN')} windfall directly into Stocks & Mutual Funds!`);
+      } else {
+        const savedPart = Math.round(gift * 0.5);
+        changes.poolDelta = savedPart;
+        changes.statusMessages.push(`Celebrated with a vacation trip (₹${(gift - savedPart).toLocaleString('en-IN')}) and deposited remaining ₹${savedPart.toLocaleString('en-IN')} to liquid savings.`);
+      }
       break;
     }
 
@@ -336,9 +392,25 @@ export const resolveEvent = (event, playerChoice, state) => {
     }
 
     case 'work_bonus': {
-      const bonus = impact.bonusAmount || randInt(20000, 60000);
-      changes.poolDelta = bonus;
-      changes.statusMessages.push(`Corporate performance bonus: +₹${bonus.toLocaleString('en-IN')} credited!`);
+      const bonus = impact.amount || impact.bonusAmount || randInt(25000, 75000);
+      if (playerChoice === 0) {
+        changes.poolDelta = bonus;
+        changes.statusMessages.push(`Corporate performance bonus: +₹${bonus.toLocaleString('en-IN')} banked to liquid cash reserves!`);
+      } else if (playerChoice === 1) {
+        changes.poolDelta = bonus;
+        const currentPool = (state.pool || 0) + bonus;
+        const addPct = Math.min(25, Math.round((bonus / Math.max(1, currentPool)) * 100));
+        changes.newInstruments = {
+          ...state.instruments,
+          mf: Math.min(75, (state.instruments.mf || 0) + addPct),
+          savings: Math.max(5, (state.instruments.savings || 100) - addPct),
+        };
+        changes.statusMessages.push(`Invested ₹${bonus.toLocaleString('en-IN')} performance bonus directly into Mutual Funds!`);
+      } else {
+        const savedPart = Math.round(bonus * 0.6);
+        changes.poolDelta = savedPart;
+        changes.statusMessages.push(`Treated yourself to dining & celebration (₹${(bonus - savedPart).toLocaleString('en-IN')}) and deposited ₹${savedPart.toLocaleString('en-IN')} to liquid savings.`);
+      }
       break;
     }
 

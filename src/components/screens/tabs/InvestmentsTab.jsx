@@ -115,6 +115,49 @@ const InvestmentsTab = () => {
         </div>
       </Card>
 
+      {/* Macro Economic Cycle & Market Sentiment */}
+      {(() => {
+        const cycle = store.economicCycle || 'normal';
+        return (
+          <div className={`p-3 rounded-2xl border flex items-center justify-between shadow-xs ${
+            cycle === 'bull'
+              ? 'bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200'
+              : cycle === 'recession'
+              ? 'bg-gradient-to-r from-rose-50 to-amber-50 border-rose-200'
+              : 'bg-slate-50/90 border-slate-200'
+          }`}>
+            <div className="flex items-center space-x-2.5">
+              <span className="text-xl">
+                {cycle === 'bull' ? '🐂' : cycle === 'recession' ? '🐻' : '⚖️'}
+              </span>
+              <div>
+                <div className="flex items-center space-x-1.5">
+                  <span className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
+                    cycle === 'bull'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : cycle === 'recession'
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {cycle === 'bull' ? 'Bull Market Surge' : cycle === 'recession' ? 'Economic Contraction' : 'Steady Growth Cycle'}
+                  </span>
+                  <span className="text-[10px] text-text-muted font-medium">
+                    ~{store.cycleMonthsRemaining || 12}m remaining
+                  </span>
+                </div>
+                <p className="text-[11px] text-text-muted mt-0.5 leading-tight">
+                  {cycle === 'bull'
+                    ? 'Equities outperforming benchmarks. High corporate hiring velocity & active recruiter offers.'
+                    : cycle === 'recession'
+                    ? 'Market drawdown active. Corporate hiring freeze & defensive flight to gold/liquid cash.'
+                    : 'Balanced macroeconomic conditions and steady baseline returns across all asset classes.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Asset Allocation Form with Smart Balancing */}
       <Card className="p-4 border border-gray-100">
         <div className="flex justify-between items-center mb-2">
