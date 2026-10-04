@@ -1,150 +1,219 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import useGameStore from '../../engine/store';
-import Button from '../ui/Button';
-import Card from '../ui/Card';
-import { formatCurrency, formatCurrencyFull } from '../../utils/format';
 
-const CITY_NAMES = { 1: 'Tier 1 (Mumbai / Delhi / Bangalore)', 2: 'Tier 2', 3: 'Tier 3' };
-const INCOME_LABELS = {
-  job: 'Salaried Job',
-  family_business: 'Family Business',
-  passive_income: 'Passive Income + Side Work',
-  fresh_start: 'Fresh Start — Just Got a Job',
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(amount || 0);
 };
 
-const StatCard = ({ icon, label, value, detail, delay }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay, duration: 0.5, ease: 'easeOut' }}
-  >
-    <Card className="flex items-center justify-between py-3 px-4 mb-3">
-      <div className="flex items-center min-w-0">
-        <span className="text-2xl mr-3 shrink-0">{icon}</span>
-        <span className="text-sm font-medium text-text-muted truncate">{label}</span>
-      </div>
-      <div className="text-right shrink-0 ml-3">
-        <span className="font-semibold text-text-primary">{value}</span>
-        {detail && <p className="text-xs text-text-muted">{detail}</p>}
-      </div>
-    </Card>
-  </motion.div>
-);
+const formatCurrencyFull = formatCurrency;
 
 const SpawnReveal = () => {
   const player = useGameStore(state => state.player);
-  const loans = useGameStore(state => state.loans);
   const setScreen = useGameStore(state => state.setScreen);
-  const [showButton, setShowButton] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setShowButton(true), 2200);
-    return () => clearTimeout(timer);
-  }, []);
+  // Example fallback data in case player isn't loaded properly
+  const p = player || {
+    characterName: 'Rahul Sharma',
+    characterAge: 22,
+    cityTier: 1,
+    incomeSource: 'job',
+    jobTitle: 'Junior Developer',
+    difficultyRating: 3,
+    startingSalary: 45000,
+    sideBusinessIncome: 0,
+    sideBusinessName: '',
+    rentalIncome: 0,
+    rentCost: 15000,
+    homeOwned: false,
+    homeMaintenanceCost: 0,
+    livingCost: 12000,
+    existingLoan: null,
+    existingDebt: null,
+    dependantCost: 0,
+    dependantReason: '',
+    dreams: ['🏠 Own a home', '🚗 Buy a car', '✈️ Travel abroad']
+  };
 
-  if (!player) return null;
+  const incomeSourcesLabels = {
+    job: 'Salaried Job',
+    family_business: 'Family Business',
+    passive_income: 'Passive Income',
+    fresh_start: 'Fresh Start'
+  };
 
-  const stats = [
-    { icon: '🏙️', label: 'City', value: CITY_NAMES[player.cityTier] || `Tier ${player.cityTier}` },
-    { icon: '💼', label: 'Income Source', value: INCOME_LABELS[player.incomeSource] || player.incomeSource },
-    { icon: '💵', label: 'Starting Salary', value: `${formatCurrency(player.startingSalary)}/mo` },
-    { icon: '🏦', label: 'Starting Savings', value: formatCurrency(player.startingSavings) },
-  ];
+  const cityNames = {
+    1: 'Tier 1 City (Metro)',
+    2: 'Tier 2 City (Growing)',
+    3: 'Tier 3 City (Small)'
+  };
 
-  // Conditionally add loan/debt cards
-  if (player.existingLoan) {
-    stats.push({
-      icon: '💳',
-      label: `${player.existingLoan.type === 'education' ? 'Education' : 'Personal'} Loan`,
-      value: `${formatCurrency(player.existingLoan.principal)}`,
-      detail: `EMI: ${formatCurrencyFull(player.existingLoan.emi)}/mo`,
-    });
-  }
-  if (player.existingDebt) {
-    stats.push({
-      icon: '📉',
-      label: 'Informal Debt',
-      value: formatCurrency(player.existingDebt.amount),
-      detail: player.existingDebt.description,
-    });
-  }
+  // Calculations
+  const totalIncome = (p.startingSalary || 0) + (p.sideBusinessIncome || 0) + (p.rentalIncome || 0);
+  
+  let housingCost = p.homeOwned ? (p.homeMaintenanceCost || 0) : (p.rentCost || 0);
+  let loanEmi = p.existingLoan?.emi || 0;
+  let debtEmi = p.existingDebt?.emi || 0; // fallback if needed
+  let dependantCost = p.dependantCost || 0;
+  
+  const totalExpenses = housingCost + (p.livingCost || 0) + loanEmi + debtEmi + dependantCost;
+  const netSurplus = totalIncome - totalExpenses;
 
-  stats.push(
-    {
-      icon: '🏠',
-      label: player.homeOwned ? 'Home Ownership' : 'Housing Status',
-      value: player.homeOwned ? 'Owned Primary Home' : `Renting (Tier ${player.cityTier})`,
-      detail: player.homeOwned
-        ? (player.homeCondition || `Maintenance liability: ${formatCurrencyFull(player.homeMaintenanceCost)}/mo`)
-        : `House Rent: ${formatCurrencyFull(player.rentCost)}/mo`,
-    },
-    { icon: '🚗', label: 'Car', value: player.carOwned ? 'Owned' : 'None', detail: player.carOwned ? `Maintenance: ${formatCurrencyFull(player.carMaintenanceCost)}/mo` : null },
-    { icon: '🏪', label: 'Food & Utilities', value: `${formatCurrency(player.livingCost)}/mo` },
-  );
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } }
+  };
+  
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 }
+  };
 
   return (
-    <div className="min-h-screen bg-surface-bg p-4 flex flex-col pb-24">
-      <div className="max-w-md w-full mx-auto mt-6">
-        <div className="text-center mb-5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-accent-action-dark bg-blue-50 px-3 py-1 rounded-full inline-block mb-1.5">
-            Character Profile · {player.characterName || 'Rahul Sharma'} (Age {player.characterAge || 22})
-          </span>
-          <motion.h2
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-2xl font-black text-text-primary"
-          >
-            Your Starting Hand
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="text-text-muted text-xs mt-1"
-          >
-            Review your financial cards before setting up your 20-year plan.
-          </motion.p>
-        </div>
+    <div className="min-h-screen bg-[#0a0e1a] text-gray-100 p-4 pb-32 font-sans selection:bg-emerald-500/30">
+      <motion.div 
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="max-w-md mx-auto mt-4 space-y-5"
+      >
+        {/* Section 1: Character Identity Card */}
+        <motion.div variants={itemVariants} className="relative bg-gradient-to-br from-white/10 to-white/5 border border-white/20 rounded-3xl p-6 overflow-hidden backdrop-blur-md shadow-2xl">
+          <div className="absolute top-0 right-0 p-4 opacity-20 text-6xl">👤</div>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <span className="text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-md border border-emerald-500/30">
+              Age {p.characterAge || 22}
+            </span>
+            <span className="text-[10px] font-bold uppercase bg-blue-500/20 text-blue-400 px-2 py-1 rounded-md border border-blue-500/30">
+              {incomeSourcesLabels[p.incomeSource] || 'Salaried'}
+            </span>
+          </div>
+          <h1 className="text-3xl font-black mb-1">{p.characterName || 'Player'}</h1>
+          <p className="text-sm text-gray-300 font-medium mb-4">
+            {p.jobTitle || 'Professional'} in {cityNames[p.cityTier] || 'City'}
+          </p>
+          
+          <div className="flex items-center gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
+            <span className="text-xs text-gray-400 font-bold uppercase">Difficulty</span>
+            <div className="flex gap-1 text-sm">
+              {[1,2,3,4,5].map(star => (
+                <span key={star} className={star <= (p.difficultyRating || 3) ? 'text-amber-400' : 'text-gray-700 opacity-50'}>
+                  ★
+                </span>
+              ))}
+            </div>
+          </div>
+        </motion.div>
 
-        {stats.map((stat, i) => (
-          <StatCard key={stat.label} {...stat} delay={0.2 + i * 0.18} />
-        ))}
+        {/* Section 2: Income Breakdown */}
+        <motion.div variants={itemVariants} className="bg-emerald-950/30 border border-emerald-500/30 rounded-3xl p-5 backdrop-blur-sm">
+          <h2 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span>💵</span> Income Sources
+          </h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-end">
+              <span className="text-sm text-gray-300">Base Salary</span>
+              <span className="text-lg font-bold text-white">{formatCurrency(p.startingSalary || 0)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+            </div>
+            {p.sideBusinessIncome > 0 && (
+              <div className="flex justify-between items-end">
+                <span className="text-sm text-gray-300">Side Income ({p.sideBusinessName})</span>
+                <span className="text-lg font-bold text-emerald-300">+{formatCurrency(p.sideBusinessIncome)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+              </div>
+            )}
+            {p.rentalIncome > 0 && (
+              <div className="flex justify-between items-end">
+                <span className="text-sm text-gray-300">Rental Income</span>
+                <span className="text-lg font-bold text-emerald-300">+{formatCurrency(p.rentalIncome)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+              </div>
+            )}
+            <div className="pt-3 border-t border-emerald-500/20 flex justify-between items-end">
+              <span className="text-sm font-bold text-emerald-500">Total Monthly Income</span>
+              <span className="text-xl font-black text-white">{formatCurrency(totalIncome)}</span>
+            </div>
+          </div>
+        </motion.div>
 
-        {/* Difficulty rating */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 + stats.length * 0.18 }}
-          className="text-center mt-4 mb-8"
-        >
-          <span className="text-xs text-text-muted block mb-1">Difficulty</span>
-          <div className="flex justify-center space-x-1">
-            {[...Array(5)].map((_, i) => (
-              <span key={i} className="text-lg">
-                {i < player.difficultyRating ? '🔥' : '⚪'}
+        {/* Section 3: Expenses & Liabilities */}
+        <motion.div variants={itemVariants} className="bg-amber-950/30 border border-amber-500/30 rounded-3xl p-5 backdrop-blur-sm">
+          <h2 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <span>📉</span> Fixed Expenses
+          </h2>
+          <div className="space-y-3">
+            <div className="flex justify-between items-end">
+              <span className="text-sm text-gray-300">{p.homeOwned ? 'Home Maintenance' : 'House Rent'}</span>
+              <span className="text-lg font-bold text-white">{formatCurrency(housingCost)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+            </div>
+            <div className="flex justify-between items-end">
+              <span className="text-sm text-gray-300">Living Expenses</span>
+              <span className="text-lg font-bold text-white">{formatCurrency(p.livingCost || 0)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+            </div>
+            {loanEmi > 0 && (
+              <div className="flex justify-between items-end">
+                <span className="text-sm text-gray-300">Loan EMI ({p.existingLoan?.type || 'Personal'})</span>
+                <span className="text-lg font-bold text-amber-300">{formatCurrency(loanEmi)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+              </div>
+            )}
+            {dependantCost > 0 && (
+              <div className="flex justify-between items-end">
+                <span className="text-sm text-gray-300">Dependant ({p.dependantReason || 'Family'})</span>
+                <span className="text-lg font-bold text-amber-300">{formatCurrency(dependantCost)}<span className="text-xs text-gray-500 font-normal">/mo</span></span>
+              </div>
+            )}
+            <div className="pt-3 border-t border-amber-500/20 flex justify-between items-end">
+              <span className="text-sm font-bold text-amber-500">Total Monthly Expenses</span>
+              <span className="text-xl font-black text-white">{formatCurrency(totalExpenses)}</span>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Section 4: Net Surplus */}
+        <motion.div variants={itemVariants} className={`border rounded-3xl p-6 backdrop-blur-sm text-center ${netSurplus >= 0 ? 'bg-emerald-500/10 border-emerald-500/50' : 'bg-red-500/10 border-red-500/50'}`}>
+          <p className="text-sm text-gray-300 mb-1">Monthly Surplus</p>
+          <div className={`text-4xl font-black mb-2 ${netSurplus >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {netSurplus >= 0 ? '+' : ''}{formatCurrency(netSurplus)}
+          </div>
+          <p className="text-xs text-gray-400 font-medium">This is what you have to work with each month.</p>
+        </motion.div>
+
+        {/* Section 5: Dreams */}
+        <motion.div variants={itemVariants} className="bg-indigo-950/30 border border-indigo-500/30 rounded-3xl p-5 backdrop-blur-sm">
+          <h2 className="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <span>✨</span> Character's Dreams
+          </h2>
+          <p className="text-sm text-gray-300 mb-4 leading-relaxed">
+            As their financial advisor, you'll guide them through the next decades of their life to achieve their goals.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(p.dreams || ['🏠 Own home', '💍 Wedding', '🚗 Car', '✈️ Travel', '👶 Kids']).map((dream, i) => (
+              <span key={i} className="text-xs font-medium bg-indigo-500/20 text-indigo-300 px-3 py-1.5 rounded-full border border-indigo-500/30">
+                {dream}
               </span>
             ))}
           </div>
-          <p className="text-xs text-text-muted mt-1">
-            {player.difficultyRating <= 2 ? 'Comfortable start' : player.difficultyRating <= 3 ? 'Average challenge' : 'Tough road ahead'}
-          </p>
         </motion.div>
-      </div>
 
-      {/* Sticky CTA */}
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: showButton ? 1 : 0, y: showButton ? 0 : 50 }}
-        transition={{ duration: 0.4 }}
-        className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-20"
-      >
-        <div className="max-w-md mx-auto">
-          <Button fullWidth onClick={() => setScreen('setup')}>
-            Step into Financial Planning (Setup Phase) →
-          </Button>
-        </div>
+        <motion.div variants={itemVariants} className="text-center">
+          <p className="text-xs text-gray-500">Playing till retirement at age {useGameStore.getState().retirementAge || 50}</p>
+          <p className="text-xs text-gray-500">Journey: {(useGameStore.getState().retirementAge || 50) - (p.characterAge || 22)} years</p>
+        </motion.div>
       </motion.div>
+
+      {/* Bottom CTA */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-[#0a0e1a]/90 backdrop-blur-md border-t border-white/10 z-50">
+        <div className="max-w-md mx-auto">
+          <button
+            onClick={() => setScreen('goalSetup')}
+            className="w-full py-4 rounded-2xl font-black text-lg bg-emerald-500 text-[#0a0e1a] hover:bg-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] transition-all duration-300"
+          >
+            Accept this Client →
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

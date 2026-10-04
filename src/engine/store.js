@@ -5,7 +5,7 @@ import { resolveEvent as resolveEventFn } from './eventResolver.js';
 import { EVENT_DECK } from './events.js';
 import { createGoal, redistributeBuckets } from './goals.js';
 import { calculateResults, generateInsights } from './scoring.js';
-import { SIMULATION_SPEED_MS, INSURANCE_COSTS, TOTAL_DAYS, RENT_RANGES, CITY_TIERS } from './constants.js';
+import { SIMULATION_SPEED_MS, INSURANCE_COSTS, RENT_RANGES, CITY_TIERS } from './constants.js';
 import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
 import { getCareerRole, generateJobMarketOffers, CITY_TIER_SALARY_CAPS, getJobSwitchCooldown } from './careers.js';
 import { generateEventCalendar } from './calendarQueue.js';
@@ -150,9 +150,14 @@ const useGameStore = create((set, get) => ({
 
   // --- Player profile (set at spawn) ---
   player: null,
+  retirementAge: 50,
+  cityName: '',
+  totalDays: 7300,
 
   // --- Financial state ---
   pool: 0,
+  goalInstruments: {},
+  goalMonthlyAllocations: {},
   buckets: {},
   instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
 
@@ -228,7 +233,7 @@ const useGameStore = create((set, get) => ({
   // ACTIONS
   // ═══════════════════════════════════════════
 
-  startGame: (customSeed = null) => {
+  startGame: (retirementAge = 50, customSeed = null) => {
     const seed = setSeed(customSeed);
     const p = generateStartingConditions();
     const incomes = [];
@@ -257,8 +262,13 @@ const useGameStore = create((set, get) => ({
 
     set({
       player: p,
+      retirementAge,
+      cityName: p.cityName || '',
+      totalDays: (retirementAge - (p.characterAge || 22)) * 365,
       gameSeed: seed,
       pool: p.startingSavings,
+      goalInstruments: {},
+      goalMonthlyAllocations: {},
       incomes,
       fixedDeductions,
       loans: p.existingLoan ? [{ ...p.existingLoan, name: `${p.existingLoan.type === 'education' ? 'Education' : 'Personal'} Loan` }] : [],
@@ -2338,6 +2348,17 @@ const useGameStore = create((set, get) => ({
     const surplus = totalIncome - totalDeductions;
     return surplus >= proposedEMI;
   },
+
+  setRetirementAge: (age) => set({ retirementAge: Math.min(60, Math.max(45, age)) }),
+  setCityName: (name) => set((state) => ({ player: state.player ? { ...state.player, cityName: name } : null })),
+
+  setGoalInstrument: (goalId, instrumentKey) => set((state) => ({
+    goalInstruments: { ...state.goalInstruments, [goalId]: instrumentKey }
+  })),
+
+  setGoalMonthlyAllocation: (goalId, amount) => set((state) => ({
+    goalMonthlyAllocations: { ...state.goalMonthlyAllocations, [goalId]: Math.max(0, amount) }
+  })),
 }));
 
 // ─── Helper: build marriage event ───

@@ -1,5 +1,5 @@
 import { rand, randInt, randFloat, randChoice, weightedRandom } from '../utils/random.js';
-import { CITY_TIERS, RENT_RANGES } from './constants.js';
+import { CITY_TIERS, RENT_RANGES, CITY_NAMES } from './constants.js';
 import { getSuggestedSeedGoals } from './goals.js';
 
 export const generateStartingConditions = () => {
@@ -109,4 +109,33 @@ export const generateStartingConditions = () => {
     married: false,
     seedGoals,
   };
+};
+
+export const generateNarrative = (player, field, cityName) => {
+  // Generate 2-3 sentence backstory based on player attributes
+  const fieldDesc = {
+    science: 'a software developer', arts: 'a creative professional', commerce: 'a finance analyst'
+  }[field] || 'a professional';
+  
+  const situationParts = [];
+  if (player.existingLoan) situationParts.push(`carrying a ${player.existingLoan.type} loan`);
+  if (player.isRenting) situationParts.push(`renting in ${cityName}`);
+  if (player.homeOwned) situationParts.push(`living in an inherited home`);
+  if (player.carOwned) situationParts.push(`owns a car`);
+  
+  const dreamParts = [];
+  dreamParts.push('buying their own home someday');
+  if (!player.carOwned) dreamParts.push('getting a car');
+  dreamParts.push('having a dream wedding');
+  dreamParts.push('retiring comfortably');
+  
+  const situation = situationParts.length > 0 ? `, currently ${situationParts.join(' and ')}` : '';
+  const dreams = dreamParts.slice(0, 2).join(' and ');
+  
+  return `Meet ${player.characterName}, a ${player.characterAge}-year-old ${fieldDesc} working in ${cityName}${situation}. They dream of ${dreams}, but have no idea how to make it happen financially. That's where you come in — as their financial advisor, every decision you make shapes their future.`;
+};
+
+export const generateCityName = (tier, rng) => {
+  const cities = CITY_NAMES[tier];
+  return cities[Math.floor(rng() * cities.length)];
 };

@@ -66,10 +66,14 @@ function App() {
         return <Landing key="landing" />;
       case 'spawn':
         return <SpawnReveal key="spawn" />;
+      case 'goalSetup':
+        return <GoalSetup key="goalSetup" />;
+      case 'financialSetup':
+        return <FinancialSetup key="financialSetup" />;
       case 'setup':
         return <FinancialSetup key="setup" />;
       case 'goals':
-        return <FinancialSetup key="setup" />;
+        return <GoalSetup key="goalSetup" />;
       case 'game':
         return <MainGame key="game" />;
       case 'scorecard':

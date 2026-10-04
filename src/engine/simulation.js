@@ -1,7 +1,6 @@
 import { calculateMonthlyReturns } from './instruments.js';
 import { checkMilestone, inflateGoalTarget } from './goals.js';
 import { randInt } from '../utils/random.js';
-import { TOTAL_DAYS } from './constants.js';
 import { CITY_TIER_SALARY_CAPS } from './careers.js';
 
 export const shouldTriggerEvent = (currentDay, lastEventDay) => {
@@ -414,7 +413,7 @@ export const simulateTick = (state) => {
     stateChanges.gameOverReason = 'broke';
   }
 
-  if (nextDay >= TOTAL_DAYS) {
+  if (nextDay >= state.totalDays) {
     stateChanges.gameOverReason = 'time_up';
   }
 

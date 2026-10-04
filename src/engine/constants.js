@@ -1,10 +1,11 @@
-export const STARTING_AGE = 22;
-export const ENDING_AGE = 42;
+export const STARTING_AGE_MIN = 20;
+export const STARTING_AGE_MAX = 25;
+export const MAX_RETIREMENT_AGE = 60;
 export const TOTAL_YEARS = 20;
-export const TOTAL_DAYS = 7300;
 export const DAYS_PER_MONTH = 30;
 export const MONTHS_PER_YEAR = 12;
 export const DAYS_PER_YEAR = 365;
+
 export const SIMULATION_SPEED_MS = 50;
 
 export const CITY_TIERS = {
@@ -47,6 +48,7 @@ export const INSTRUMENTS = {
   savings: { name: 'Savings Account', avgReturn: 0.035, volatility: 0, liquidity: 'instant' },
   fd: { name: 'Fixed Deposit', avgReturn: 0.07, volatility: 0, liquidity: 'locked', earlyPenalty: 0.01 },
   gold: { name: 'Gold', avgReturn: 0.08, minSwing: -0.05, maxSwing: 0.20, liquidity: 'high' },
+  silver: { label: 'Silver', avgReturn: 0.08, minReturn: -0.10, maxReturn: 0.25, risk: 'medium', liquidity: 'high', icon: '🥈', color: '#94a3b8' },
   mf: { name: 'Mutual Funds', avgReturn: 0.115, minSwing: -0.20, maxSwing: 0.30, liquidity: 'high' },
   stocks: { name: 'Stocks', avgReturn: 0.15, minSwing: -0.30, maxSwing: 0.40, liquidity: 'high' },
   homeEquity: { name: 'Home Equity', avgReturn: 0.07, volatility: 'low', liquidity: 'illiquid' },
@@ -54,6 +56,7 @@ export const INSTRUMENTS = {
 
 export const INSURANCE_COSTS = {
   health: [600, 1200],
+  healthCopay: 0.10,
   vehicle: [250, 450],
 };
 
@@ -61,4 +64,31 @@ export const RENOVATION_COSTS = {
   1: { min: 150000, max: 300000 },
   2: { min: 80000, max: 200000 },
   3: { min: 40000, max: 120000 },
+};
+
+export const CITY_NAMES = {
+  1: ['Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Pune'],
+  2: ['Ahmedabad', 'Jaipur', 'Lucknow', 'Surat', 'Kochi', 'Chandigarh', 'Indore', 'Nagpur'],
+  3: ['Vadodara', 'Nashik', 'Patna', 'Agra', 'Varanasi', 'Coimbatore', 'Madurai', 'Rajkot'],
+};
+
+export const FIELD_NAMES = { science: 'Science & Technology', arts: 'Arts & Humanities', commerce: 'Commerce & Business' };
+
+export const GOAL_TYPES = {
+  MARRIAGE: 'marriage',
+  HOME: 'home', 
+  CAR: 'car',
+  VACATION: 'vacation',
+  BUSINESS: 'business',
+  KIDS_FUTURE: 'kids_future',
+  EMERGENCY_FUND: 'emergency_fund',
+  RETIREMENT: 'retirement',
+};
+
+export const RETIREMENT_TARGET_MULTIPLIER = 25;
+
+export const VACATION_COSTS = {
+  1: { min: 150000, max: 400000 },
+  2: { min: 75000, max: 200000 },
+  3: { min: 30000, max: 100000 },
 };
