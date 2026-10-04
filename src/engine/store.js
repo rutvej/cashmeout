@@ -1035,6 +1035,11 @@ const useGameStore = create((set, get) => ({
 
         return newState;
       });
+
+      // Resume simulation automatically after resolving expense event!
+      if (!get().deficitInfo && !get().showAllocation && !get().gameOver) {
+        get().startSimulation();
+      }
       return;
     }
 
