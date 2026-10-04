@@ -5,9 +5,9 @@ import { CITY_TIER_SALARY_CAPS } from './careers.js';
 
 export const shouldTriggerEvent = (currentDay, lastEventDay) => {
   const daysSince = currentDay - lastEventDay;
-  if (daysSince < 35) return false;
+  if (daysSince < 180) return false;
   
-  const chance = Math.min(0.85, (daysSince - 35) * 0.025);
+  const chance = Math.min(0.3, (daysSince - 180) * 0.005);
   return Math.random() < chance;
 };
 
@@ -47,56 +47,33 @@ export const getEligibleEvents = (state, eventDeck) => {
     return last ? day - last.day : Infinity;
   };
 
-  // If player has no job income, prioritize job recovery/freelance cards
-  const isUnemployed = !state.incomes.some(i => i.type === 'job');
-  if (isUnemployed) {
-    const recoveryEvents = eventDeck.filter(ev => 
-      (ev.id === 'freelance_gig' || ev.id === 'senior_job_offer' || ev.id === 'course_upskill' || ev.id === 'new_job_offer') &&
-      ev.eligibilityCheck(state)
-    );
-    if (recoveryEvents.length > 0 && Math.random() < 0.75) {
-      return recoveryEvents;
-    }
-  }
-
-  const isRecession = state.economicCycle === 'recession';
-  const isBull = state.economicCycle === 'bull';
-
   return eventDeck.filter(ev => {
     if (!ev.eligibilityCheck(state)) return false;
 
-    // Suppress discretionary bonuses during recession
-    if (isRecession && (ev.id === 'work_bonus' || ev.id === 'salary_hike') && Math.random() < 0.6) {
-      return false;
-    }
-
     switch (ev.id) {
       case 'medical_emergency':
-        return daysSince('Medical Emergency') > 450; // At least 15 months between major medical hospitalizations
-      case 'uninsured_illness':
-        return daysSince('Medical Bill') > 300;
+        // Once every 3 years (~1095 days)
+        return daysSince('Medical') > 1000;
       case 'vehicle_accident':
-        return daysSince('Vehicle Collision') > 365;
+        return daysSince('Vehicle') > 1000 && (state.carsOwned || []).length > 0;
       case 'home_renovation':
-        return daysSince('Renovation') > 450;
+        // Once every 1 to 2 years (only if home owned)
+        return daysSince('Renovation') > 365 && (state.homesOwned || []).length > 0;
       case 'inheritance_gift':
-        return daysSince('Windfall') > 1000;
+        // Exactly ONCE in lifetime!
+        return daysSince('Windfall') === Infinity && daysSince('Property') === Infinity;
       case 'work_bonus':
-        return daysSince('Bonus') > 330;
-      case 'salary_hike':
-        return daysSince('Merit Promotion') > 270;
-      case 'job_switch':
-        return daysSince('Recruiter Offer') > 180 && state.experienceMonths >= 18;
+        // Once a year if employed
+        return daysSince('Bonus') > 330 && state.incomes.some(i => i.type === 'job');
       case 'job_loss':
-        // Cooldown: at least 900 days (~2.5-3 years) since any layoff / restructuring
-        // Must not happen in first 365 days of player's career
-        return daysSince('Layoff') > 900 && 
-               daysSince('Restructuring') > 900 && 
-               daysSince('downsizing') > 900 && 
+        // Cooldown: at least 5 years (1825 days) apart, max 5 times, never in year 1
+        return daysSince('Layoff') > 1825 && 
+               daysSince('Job Loss') > 1825 && 
+               daysSince('downsizing') > 1825 && 
                state.currentDay > 365 &&
-               (!isBull || Math.random() < 0.25);
+               state.incomes.some(i => i.type === 'job');
       default:
-        return true;
+        return false;
     }
   });
 };

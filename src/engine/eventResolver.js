@@ -48,13 +48,13 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'uninsured_illness': {
       const bill = impact.billAmount || randInt(50000, 250000);
       if (state.hasHealthInsurance && event.id !== 'uninsured_illness') {
-        const covered = Math.round(bill * 0.8);
+        const covered = Math.round(bill * 0.9);
         const outOfPocket = bill - covered;
         changes.poolDelta = -outOfPocket;
-        changes.statusMessages.push(`Insurance covered 80% (₹${covered.toLocaleString('en-IN')}). You paid ₹${outOfPocket.toLocaleString('en-IN')}.`);
+        changes.statusMessages.push(`Mediclaim covered 90% (₹${covered.toLocaleString('en-IN')}). You paid 10% copay (₹${outOfPocket.toLocaleString('en-IN')}).`);
       } else {
         changes.poolDelta = -bill;
-        changes.statusMessages.push(`Paid full medical bill of ₹${bill.toLocaleString('en-IN')}.`);
+        changes.statusMessages.push(`No Mediclaim: paid full medical bill of ₹${bill.toLocaleString('en-IN')}.`);
       }
 
       // Check if player chose to opt-in to health insurance simultaneously

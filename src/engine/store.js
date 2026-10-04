@@ -2428,7 +2428,7 @@ function buildEventOptions(event, state) {
     case 'uninsured_illness': {
       const billAmount = randInt(60000, 250000);
       const insured = state.hasHealthInsurance && event.id !== 'uninsured_illness';
-      const outOfPocket = insured ? Math.round(billAmount * 0.2) : billAmount;
+      const outOfPocket = insured ? Math.round(billAmount * 0.1) : billAmount;
       financialImpact = {
         type: 'loss',
         billAmount,
@@ -2437,10 +2437,10 @@ function buildEventOptions(event, state) {
         coveredAmount: insured ? billAmount - outOfPocket : 0,
       };
       options.push({
-        label: insured ? `Pay Copay (₹${outOfPocket.toLocaleString('en-IN')})` : `Pay Full Bill (₹${billAmount.toLocaleString('en-IN')})`,
+        label: insured ? `Pay 10% Copay (₹${outOfPocket.toLocaleString('en-IN')})` : `Pay Full Bill (₹${billAmount.toLocaleString('en-IN')})`,
         description: insured
-          ? `Health Insurance covers 80% (₹${(billAmount - outOfPocket).toLocaleString('en-IN')}). You pay 20%.`
-          : `No active health insurance! Full medical cost comes out of pocket.`
+          ? `Mediclaim covers 90% (₹${(billAmount - outOfPocket).toLocaleString('en-IN')}). You pay 10% copay.`
+          : `No active health insurance / Mediclaim! Full medical cost comes out of pocket.`
       });
       break;
     }
