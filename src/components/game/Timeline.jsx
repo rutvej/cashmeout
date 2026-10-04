@@ -1,9 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 
-const Timeline = ({ currentDay, totalDays = 7300, financialHealth = 'stable', calendarQueue = null }) => {
+const Timeline = ({ currentDay, totalDays = 7300, financialHealth = 'stable', calendarQueue = null, startAge = 22, retirementAge = 50 }) => {
   const progress = Math.min((currentDay / totalDays) * 100, 100);
-  const currentAge = Math.floor(22 + (currentDay / 365));
+  const currentAge = Math.floor(startAge + (currentDay / 365));
   const currentYear = Math.floor(currentDay / 365) + 1;
   const monthOfYear = Math.min(12, Math.floor((currentDay % 365) / 30) + 1);
   const dayOfMonth = (currentDay % 30) + 1;
@@ -28,7 +28,7 @@ const Timeline = ({ currentDay, totalDays = 7300, financialHealth = 'stable', ca
           <span className="text-[11px] sm:text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200 whitespace-nowrap">
             Age {currentAge}
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold">/ 42</span>
+          <span className="text-[10px] text-slate-400 font-semibold">/ {retirementAge}</span>
         </div>
       </div>
 

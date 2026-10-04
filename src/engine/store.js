@@ -233,9 +233,22 @@ const useGameStore = create((set, get) => ({
   // ACTIONS
   // ═══════════════════════════════════════════
 
-  startGame: (retirementAge = 50, customSeed = null) => {
-    const seed = setSeed(customSeed);
-    const p = generateStartingConditions();
+  startGame: (seedInput = null, tier = null, field = null, retirementAge = 50) => {
+    let finalSeed = seedInput;
+    let finalTier = tier;
+    let finalField = field;
+    let finalRetirementAge = retirementAge;
+
+    // Handle legacy signature where retirementAge was passed first: startGame(retirementAge, seed)
+    if (typeof seedInput === 'number' && seedInput >= 40 && seedInput <= 70) {
+      finalRetirementAge = seedInput;
+      finalSeed = tier;
+      finalTier = null;
+      finalField = null;
+    }
+
+    const seed = setSeed(finalSeed);
+    const p = generateStartingConditions(finalTier, finalField);
     const incomes = [];
     if (p.incomeSource === 'job' || p.incomeSource === 'fresh_start') {
       incomes.push({ id: 'salary_1', type: 'job', amount: p.startingSalary, name: 'Salary' });
@@ -262,9 +275,9 @@ const useGameStore = create((set, get) => ({
 
     set({
       player: p,
-      retirementAge,
+      retirementAge: finalRetirementAge,
       cityName: p.cityName || '',
-      totalDays: (retirementAge - (p.characterAge || 22)) * 365,
+      totalDays: (finalRetirementAge - (p.characterAge || 22)) * 365,
       gameSeed: seed,
       pool: p.startingSavings,
       goalInstruments: {},

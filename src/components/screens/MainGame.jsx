@@ -2,6 +2,14 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, Legend } from 'recharts';
 import useGameStore from '../../engine/store';
 import TabBar from '../ui/TabBar';
+import Timeline from '../game/Timeline';
+import SimControls from '../game/SimControls';
+import PoolDisplay from '../game/PoolDisplay';
+import FloatingDelta from '../game/FloatingDelta';
+import IncomeDeductions from '../game/IncomeDeductions';
+import InstrumentBar from '../game/InstrumentBar';
+import BucketBar from '../game/BucketBar';
+import LiveFinancialLedger from '../game/LiveFinancialLedger';
 import EventCard from '../game/EventCard';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
@@ -28,8 +36,19 @@ const GOAL_COLORS = {
 
 const MainGame = () => {
   const store = useGameStore();
+  const [prevPool, setPrevPool] = useState(store.pool);
+  const [poolDelta, setPoolDelta] = useState(0);
   const [showIncomeOptions, setShowIncomeOptions] = useState(false);
+  const [viewMode, setViewMode] = useState('chart'); // 'chart' | 'ledger' | 'both'
 
+  useEffect(() => {
+    if (store.pool !== prevPool) {
+      setPoolDelta(store.pool - prevPool);
+      setPrevPool(store.pool);
+    }
+  }, [store.pool, prevPool]);
+
+  // Start sim on mount, cleanup on unmount
   useEffect(() => {
     store.startSimulation();
     return () => store.pauseSimulation();
@@ -70,10 +89,18 @@ const MainGame = () => {
 
   const surplus = totalIncome - totalDeductions;
 
+  // Chart calculation for goal trajectories
   const chartData = useMemo(() => {
     const snaps = store.monthlySnapshots || [];
     const goals = store.goals || [];
-    return snaps.map((snap, idx) => {
+    
+    // Always provide at least month 0 baseline so chart renders cleanly
+    const points = [];
+    const initialPoint = { month: 0 };
+    goals.forEach(g => { initialPoint[g.id] = 0; });
+    points.push(initialPoint);
+
+    snaps.forEach((snap, idx) => {
       const month = idx + 1;
       const dataPoint = { month };
       goals.forEach(goal => {
@@ -87,14 +114,17 @@ const MainGame = () => {
         const rate = rateMap[instKey] || 0.08 / 12;
         let fv = monthlyAmt * month;
         if (rate > 0 && monthlyAmt > 0) {
-            fv = monthlyAmt * ((Math.pow(1+rate, month)-1)/rate);
+          fv = monthlyAmt * ((Math.pow(1 + rate, month) - 1) / rate);
         }
         dataPoint[goal.id] = Math.round(fv);
       });
-      return dataPoint;
+      points.push(dataPoint);
     });
+
+    return points;
   }, [store.monthlySnapshots, store.goals, store.buckets, store.goalMonthlyAllocations, store.goalInstruments, surplus]);
 
+  // Strict modal priority
   const activeModal = (() => {
     if (store.deficitInfo) return 'liquidation';
     if (store.showMilestone) return 'milestone';
@@ -102,10 +132,10 @@ const MainGame = () => {
     return null;
   })();
 
+  const hasPendingEvent = !!store.currentEvent;
   const startAge = store.player?.characterAge || 22;
-  const age = startAge + Math.floor(store.currentDay / 365);
-  const totalDays = store.totalDays || ((store.retirementAge || 50) - startAge) * 365;
-  const progressPercent = Math.min(100, (store.currentDay / totalDays) * 100);
+  const retirementAge = store.retirementAge || 50;
+  const totalDays = store.totalDays || ((retirementAge - startAge) * 365);
 
   const formatCompact = (val) => {
     if (val >= 10000000) return `${(val / 10000000).toFixed(1)}Cr`;
@@ -116,99 +146,154 @@ const MainGame = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col pb-24 relative overflow-x-hidden w-full max-w-full font-sans">
-      
-      {/* Top Bar */}
-      <div className="bg-slate-800/80 backdrop-blur-md rounded-b-3xl shadow-lg z-20 sticky top-0 border-b border-slate-700 max-w-md w-full mx-auto px-4 py-3">
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center space-x-3">
-            <span className="bg-indigo-600/20 text-indigo-400 font-bold px-2.5 py-1 rounded-lg text-sm border border-indigo-500/30">
-              Age {age}
-            </span>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Net Worth</span>
-              <span className="text-sm font-black text-emerald-400">{formatCurrency(store.pool)}</span>
+      {/* Floating Cashflow Delta Pill */}
+      {poolDelta !== 0 && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <FloatingDelta delta={poolDelta} keyId={store.currentDay} />
+        </div>
+      )}
+
+      {/* Top Header - Timeline & Sim Controls */}
+      <div className="bg-slate-800/90 backdrop-blur-md rounded-b-3xl shadow-lg z-20 sticky top-0 border-b border-slate-700 max-w-md w-full mx-auto">
+        <Timeline 
+          currentDay={store.currentDay}
+          totalDays={totalDays}
+          financialHealth={store.pool > 0 ? 'stable' : 'distress'}
+          calendarQueue={store.calendarQueue}
+          startAge={startAge}
+          retirementAge={retirementAge}
+        />
+        <SimControls 
+          isRunning={store.simRunning} 
+          speed={store.simSpeed} 
+          onToggle={() => store.simRunning ? store.pauseSimulation() : store.startSimulation()} 
+          onSpeedChange={store.setSimSpeed} 
+        />
+
+        {/* Pending Event Alert Banner when in tabs */}
+        {hasPendingEvent && store.activeTab && (
+          <div
+            onClick={() => handleTabChange(null)}
+            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 text-xs font-bold flex items-center justify-between cursor-pointer transition shadow-sm"
+          >
+            <div className="flex items-center space-x-2 truncate">
+              <span className="text-base animate-pulse">⚡</span>
+              <span className="truncate">Decision Pending: {store.currentEvent.name}</span>
             </div>
+            <span className="bg-white/20 hover:bg-white/30 text-white px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap ml-2">
+              Decide on Home →
+            </span>
           </div>
-          
-          <div className="flex space-x-1.5 bg-slate-900/50 p-1 rounded-xl border border-slate-700">
-            <button onClick={() => store.simRunning ? store.pauseSimulation() : store.startSimulation()} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs font-bold transition-colors">
-              {store.simRunning ? '⏸' : '▶️'}
-            </button>
-            <button onClick={() => store.setSimSpeed(1)} className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${store.simSpeed === 1 ? 'bg-indigo-600 text-white' : 'bg-transparent text-slate-400 hover:text-slate-200'}`}>1x</button>
-            <button onClick={() => store.setSimSpeed(2)} className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${store.simSpeed === 2 ? 'bg-indigo-600 text-white' : 'bg-transparent text-slate-400 hover:text-slate-200'}`}>2x</button>
-            <button onClick={() => store.setSimSpeed(5)} className={`px-2 py-1 rounded-lg text-xs font-bold transition-colors ${store.simSpeed === 5 ? 'bg-indigo-600 text-white' : 'bg-transparent text-slate-400 hover:text-slate-200'}`}>5x</button>
-          </div>
-        </div>
-        
-        <div className="h-1.5 w-full bg-slate-700 rounded-full overflow-hidden">
-          <div className="h-full bg-indigo-500 rounded-full transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-        </div>
+        )}
       </div>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
         {!store.activeTab ? (
-          <div className="py-4 px-3 max-w-md w-full mx-auto space-y-4">
+          <div className="py-3 px-3 max-w-md w-full mx-auto space-y-3">
             
-            {/* Goal Progress Chart */}
-            <div className="bg-slate-800 rounded-2xl p-4 shadow-lg border border-slate-700">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Goal Progress</h3>
-              <div className="h-56 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={(v) => `${Math.floor(v/12)}y`} />
-                    <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={formatCompact} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                      formatter={(val) => formatCurrency(val)}
-                      labelFormatter={(val) => `Month ${val}`}
-                    />
-                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} iconType="circle" />
-                    
-                    {(store.goals || []).map((goal, i) => {
-                      const color = GOAL_COLORS[goal.name.split(' ')[0]] || Object.values(GOAL_COLORS)[i % 7];
-                      return (
-                        <React.Fragment key={goal.id}>
-                          <Line type="monotone" dataKey={goal.id} name={goal.name} stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                          <ReferenceLine y={goal.currentTarget} stroke={color} strokeDasharray="3 3" opacity={0.5} />
-                        </React.Fragment>
-                      );
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* Income Ticker */}
-            <div className="bg-slate-800 rounded-2xl p-3 shadow-lg border border-slate-700 flex justify-between items-center text-xs">
-              <div className="flex flex-col">
-                <span className="text-slate-400">Income</span>
-                <span className="font-bold text-emerald-400">+{formatCompact(totalIncome)}</span>
-              </div>
-              <div className="h-6 w-px bg-slate-700"></div>
-              <div className="flex flex-col">
-                <span className="text-slate-400">Expenses</span>
-                <span className="font-bold text-rose-400">-{formatCompact(totalDeductions)}</span>
-              </div>
-              <div className="h-6 w-px bg-slate-700"></div>
-              <div className="flex flex-col">
-                <span className="text-slate-400">Surplus</span>
-                <span className="font-bold text-indigo-400">{formatCompact(surplus)}</span>
-              </div>
-            </div>
-
-            {/* Event Area */}
+            {/* Active Life Event Card (Slide-In) */}
             {hasPendingEvent && (
-              <div className="animate-in slide-in-from-bottom-4 fade-in duration-300">
-                <EventCard event={store.currentEvent} onChoice={store.resolveEvent} />
+              <div className="animate-in slide-in-from-bottom-4 fade-in duration-300 mb-2">
+                <EventCard
+                  event={store.currentEvent}
+                  onChoice={store.resolveEvent}
+                />
               </div>
             )}
-            
+
+            {/* Core Financial Dashboard Metrics */}
+            <PoolDisplay pool={store.pool} prevPool={prevPool} />
+            <IncomeDeductions totalIncome={totalIncome} totalDeductions={totalDeductions} />
+
+            {/* Dashboard View Switcher */}
+            <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs font-bold">
+              <button
+                onClick={() => setViewMode('chart')}
+                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${viewMode === 'chart' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+              >
+                <span>📈</span>
+                <span>Growth Chart</span>
+              </button>
+              <button
+                onClick={() => setViewMode('ledger')}
+                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${viewMode === 'ledger' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+              >
+                <span>📜</span>
+                <span>Live Ledger</span>
+              </button>
+              <button
+                onClick={() => setViewMode('both')}
+                className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${viewMode === 'both' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+              >
+                <span>📊</span>
+                <span>All Views</span>
+              </button>
+            </div>
+
+            {/* Goal Progress Chart */}
+            {(viewMode === 'chart' || viewMode === 'both') && (
+              <div className="bg-slate-800 rounded-2xl p-4 shadow-lg border border-slate-700">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                    <span>🎯</span>
+                    <span>Goal Trajectories vs Targets</span>
+                  </h3>
+                  <span className="text-[10px] text-slate-400 bg-slate-700/60 px-2 py-0.5 rounded-md font-semibold">
+                    Dashed = Target
+                  </span>
+                </div>
+                <div className="h-56 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={(v) => `${Math.floor(v/12)}y`} />
+                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={formatCompact} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
+                        formatter={(val) => formatCurrency(val)}
+                        labelFormatter={(val) => `Month ${val}`}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} iconType="circle" />
+                      
+                      {(store.goals || []).map((goal, i) => {
+                        const nameKey = (goal.name || '').replace(/^[^\w\s]+/, '').trim().split(' ')[0];
+                        const color = GOAL_COLORS[nameKey] || Object.values(GOAL_COLORS)[i % 7];
+                        return (
+                          <React.Fragment key={goal.id}>
+                            <Line type="monotone" dataKey={goal.id} name={goal.name} stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                            <ReferenceLine y={goal.currentTarget} stroke={color} strokeDasharray="3 3" opacity={0.4} />
+                          </React.Fragment>
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Asset Allocation Bars */}
+            <div className="space-y-2">
+              <InstrumentBar instruments={store.instruments} pool={store.pool} />
+              <BucketBar buckets={store.buckets} goals={store.goals} pool={store.pool} />
+            </div>
+
+            {/* Live Financial Statement & Activity Ledger */}
+            {(viewMode === 'ledger' || viewMode === 'both') && (
+              <LiveFinancialLedger
+                eventHistory={store.eventHistory}
+                simRunning={store.simRunning}
+                onPause={store.pauseSimulation}
+                recentAutoToast={store.recentAutoToast}
+                onDismissToast={store.clearAutoToast}
+              />
+            )}
+
           </div>
         ) : (
           <div className="p-3 sm:p-4 bg-slate-900 min-h-full max-w-md w-full mx-auto overflow-x-hidden pb-24 text-slate-100">
-            <div className="flex justify-between items-center mb-4">
+            {/* Tab Header with Close Button */}
+            <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-black capitalize text-slate-100">
                 {store.activeTab} Overview
               </h2>
@@ -216,7 +301,7 @@ const MainGame = () => {
                 onClick={() => handleTabChange(null)}
                 className="text-xs text-slate-300 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-full px-3 py-1 font-semibold transition"
               >
-                ✕ Close
+                ✕ Close Tab
               </button>
             </div>
             {renderTabContent()}
@@ -224,57 +309,58 @@ const MainGame = () => {
         )}
       </div>
 
-      {/* Quick Actions / Bottom Tabs */}
-      <TabBar 
-        activeTab={store.activeTab} 
-        onTabChange={handleTabChange} 
-        hasPendingEvent={hasPendingEvent}
-      />
-
       {/* Floating Action Button for Income Options */}
       {!store.activeTab && (
         <button 
           onClick={() => { store.pauseSimulation(); setShowIncomeOptions(true); }}
-          className="fixed bottom-24 right-4 z-40 bg-indigo-600 hover:bg-indigo-500 text-white w-12 h-12 rounded-full shadow-lg shadow-indigo-600/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          className="fixed bottom-24 right-4 z-40 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white w-12 h-12 rounded-full shadow-lg shadow-indigo-600/40 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          title="Career & Income Options"
         >
           <span className="text-xl">⚡</span>
         </button>
       )}
 
-      {/* Quick Actions Sheet */}
+      {/* Income Options Bottom Sheet */}
       {showIncomeOptions && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowIncomeOptions(false)}>
           <div className="bg-slate-800 w-full max-w-md rounded-t-3xl p-5 border-t border-slate-700 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-slate-100">Income Options</h3>
+              <h3 className="font-bold text-slate-100">Career & Income Accelerators</h3>
               <button onClick={() => setShowIncomeOptions(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
             <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
               <span className="text-2xl">📚</span>
               <div>
-                <div className="font-bold text-slate-200">Take a Course</div>
-                <div className="text-xs text-slate-400">Improve skills for better pay</div>
+                <div className="font-bold text-slate-200">Upskill via Course</div>
+                <div className="text-xs text-slate-400">Invest in certification to unlock leadership roles</div>
               </div>
             </button>
             <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
               <span className="text-2xl">💼</span>
               <div>
-                <div className="font-bold text-slate-200">Switch Job</div>
-                <div className="text-xs text-slate-400">Look for new opportunities</div>
+                <div className="font-bold text-slate-200">Switch Company / Apply</div>
+                <div className="text-xs text-slate-400">Explore market job offers for immediate salary hike</div>
               </div>
             </button>
             <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
               <span className="text-2xl">🏢</span>
               <div>
-                <div className="font-bold text-slate-200">Start Business</div>
-                <div className="text-xs text-slate-400">Launch your own venture</div>
+                <div className="font-bold text-slate-200">Launch Side Business</div>
+                <div className="text-xs text-slate-400">Create recurring commercial cashflow</div>
               </div>
             </button>
           </div>
         </div>
       )}
 
-      {/* Modals */}
+      {/* Persistent Bottom Tab Bar */}
+      <TabBar 
+        activeTab={store.activeTab} 
+        onTabChange={handleTabChange} 
+        hasPendingEvent={hasPendingEvent}
+      />
+
+      {/* Modals with Strict Priority Hierarchy */}
       {activeModal === 'liquidation' && (
         <LiquidationModal deficitInfo={store.deficitInfo} onResolve={store.resolveLiquidation} />
       )}

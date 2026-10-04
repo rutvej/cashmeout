@@ -2,8 +2,10 @@ import { rand, randInt, randFloat, randChoice, weightedRandom } from '../utils/r
 import { CITY_TIERS, RENT_RANGES, CITY_NAMES } from './constants.js';
 import { getSuggestedSeedGoals } from './goals.js';
 
-export const generateStartingConditions = () => {
-  const cityTier = randChoice([1, 2, 3]);
+export const generateStartingConditions = (selectedTier = null, selectedField = null) => {
+  const cityTier = selectedTier || randChoice([1, 2, 3]);
+  const cityName = CITY_NAMES[cityTier] ? randChoice(CITY_NAMES[cityTier]) : 'Metro City';
+  const characterAge = randInt(20, 25);
   const incomeSource = weightedRandom([
     { value: 'job', weight: 60 },
     { value: 'family_business', weight: 15 },
@@ -11,7 +13,7 @@ export const generateStartingConditions = () => {
     { value: 'fresh_start', weight: 20 },
   ]);
   
-  const tierInfo = CITY_TIERS[cityTier];
+  const tierInfo = CITY_TIERS[cityTier] || CITY_TIERS[2];
   const startingSalary = randInt(tierInfo.salary[0], tierInfo.salary[1]);
   
   // Weighted towards lower savings
@@ -89,8 +91,10 @@ export const generateStartingConditions = () => {
 
   return {
     characterName,
-    characterAge: 22,
+    characterAge,
     cityTier,
+    cityName,
+    selectedField: selectedField || 'science',
     incomeSource,
     startingSalary,
     startingSavings,
