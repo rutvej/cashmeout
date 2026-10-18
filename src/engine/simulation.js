@@ -5,9 +5,9 @@ import { CITY_TIER_SALARY_CAPS } from './careers.js';
 
 export const shouldTriggerEvent = (currentDay, lastEventDay) => {
   const daysSince = currentDay - lastEventDay;
-  if (daysSince < 180) return false;
+  if (daysSince < 360) return false;
   
-  const chance = Math.min(0.3, (daysSince - 180) * 0.005);
+  const chance = Math.min(0.12, (daysSince - 360) * 0.002);
   return Math.random() < chance;
 };
 

@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer, Legend } from 'recharts';
+import { 
+  LineChart, Line, BarChart, Bar, Cell, 
+  XAxis, YAxis, CartesianGrid, Tooltip, 
+  ReferenceLine, ResponsiveContainer, Legend 
+} from 'recharts';
 import useGameStore from '../../engine/store';
 import TabBar from '../ui/TabBar';
 import Timeline from '../game/Timeline';
@@ -40,6 +44,7 @@ const MainGame = () => {
   const [poolDelta, setPoolDelta] = useState(0);
   const [showIncomeOptions, setShowIncomeOptions] = useState(false);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' | 'ledger' | 'both'
+  const [chartType, setChartType] = useState('bar'); // 'bar' | 'trend'
 
   useEffect(() => {
     if (store.pool !== prevPool) {
@@ -124,6 +129,73 @@ const MainGame = () => {
     return points;
   }, [store.monthlySnapshots, store.goals, store.buckets, store.goalMonthlyAllocations, store.goalInstruments, surplus]);
 
+  const goalBarData = useMemo(() => {
+    const goals = store.goals || [];
+    const currentDay = store.currentDay;
+    const monthsElapsed = Math.max(0, Math.floor(currentDay / 30));
+    const rateMap = { equity: 0.15/12, mf: 0.12/12, fd: 0.07/12, gold: 0.08/12, silver: 0.08/12, savings: 0.04/12 };
+
+    return goals.map(goal => {
+      const cleanName = (goal.name || '').replace(/^[^\w\s]+/, '').trim();
+      const firstWord = cleanName.split(' ')[0];
+      const shortName = firstWord.length > 7 ? firstWord.slice(0, 6) + '…' : firstWord;
+
+      if (goal.type === 'medical') {
+        const isCovered = store.hasHealthInsurance;
+        const cov = store.healthInsuranceCoverage || (isCovered ? 1000000 : 0);
+        return {
+          id: goal.id,
+          name: 'Medical',
+          fullName: 'Medical Insurance',
+          icon: '🏥',
+          saved: isCovered ? cov : 0,
+          target: 1000000,
+          percent: isCovered ? 100 : 0,
+          color: '#f43f5e',
+          achieved: isCovered,
+          type: 'medical',
+        };
+      }
+
+      const target = goal.currentTarget || goal.targetAmount || 100000;
+      let saved = 0;
+      if (goal.achieved) {
+        saved = target;
+      } else {
+        let monthlyAmt = store.goalMonthlyAllocations?.[goal.id];
+        if (monthlyAmt === undefined || monthlyAmt === null) {
+          const allocPct = store.buckets?.[goal.id] || 0;
+          monthlyAmt = Math.max(0, Math.round((allocPct / 100) * surplus));
+        }
+        const instKey = store.goalInstruments?.[goal.id] || 'mf';
+        const rate = rateMap[instKey] || 0.08 / 12;
+        let fv = monthlyAmt * monthsElapsed;
+        if (rate > 0 && monthlyAmt > 0) {
+          fv = monthlyAmt * ((Math.pow(1 + rate, monthsElapsed) - 1) / rate);
+        }
+        const dedicated = goal.dedicatedContribution || 0;
+        const bucketShare = (store.pool || 0) * ((store.buckets?.[goal.id] || 0) / 100);
+        saved = Math.min(target, Math.round(fv + dedicated + bucketShare));
+      }
+
+      const percent = Math.min(100, Math.round((saved / Math.max(1, target)) * 100));
+      const color = GOAL_COLORS[firstWord] || '#10b981';
+
+      return {
+        id: goal.id,
+        name: shortName,
+        fullName: goal.name,
+        icon: goal.icon || '🎯',
+        saved,
+        target,
+        percent,
+        color,
+        achieved: !!goal.achieved,
+        type: goal.type,
+      };
+    });
+  }, [store.goals, store.currentDay, store.goalMonthlyAllocations, store.goalInstruments, store.buckets, store.pool, store.hasHealthInsurance, store.healthInsuranceCoverage, surplus]);
+
   // Strict modal priority
   const activeModal = (() => {
     if (store.deficitInfo) return 'liquidation';
@@ -206,14 +278,35 @@ const MainGame = () => {
             <PoolDisplay pool={store.pool} prevPool={prevPool} />
             <IncomeDeductions totalIncome={totalIncome} totalDeductions={totalDeductions} />
 
+            {/* Month-on-Month Growth Indicator */}
+            <div className="bg-slate-800/90 rounded-2xl p-3 border border-slate-700/80 flex items-center justify-between text-xs shadow-md">
+              <div className="flex items-center space-x-2.5">
+                <span className="text-xl">🌱</span>
+                <div>
+                  <span className="font-bold text-slate-200 block text-xs">Month-on-Month Flow</span>
+                  <span className="text-[10px] text-slate-400">
+                    Earned: +{formatCurrency(totalIncome)} · Spent: -{formatCurrency(totalDeductions)}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className={`font-black block text-sm ${surplus >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {surplus >= 0 ? '+' : ''}{formatCurrency(surplus)}/mo
+                </span>
+                <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">
+                  Compounding Growth
+                </span>
+              </div>
+            </div>
+
             {/* Dashboard View Switcher */}
             <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs font-bold">
               <button
                 onClick={() => setViewMode('chart')}
                 className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${viewMode === 'chart' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                <span>📈</span>
-                <span>Growth Chart</span>
+                <span>📊</span>
+                <span>Goal Charts</span>
               </button>
               <button
                 onClick={() => setViewMode('ledger')}
@@ -226,7 +319,7 @@ const MainGame = () => {
                 onClick={() => setViewMode('both')}
                 className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center space-x-1.5 ${viewMode === 'both' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
               >
-                <span>📊</span>
+                <span>📑</span>
                 <span>All Views</span>
               </button>
             </div>
@@ -235,40 +328,143 @@ const MainGame = () => {
             {(viewMode === 'chart' || viewMode === 'both') && (
               <div className="bg-slate-800 rounded-2xl p-4 shadow-lg border border-slate-700">
                 <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                    <span>🎯</span>
-                    <span>Goal Trajectories vs Targets</span>
-                  </h3>
-                  <span className="text-[10px] text-slate-400 bg-slate-700/60 px-2 py-0.5 rounded-md font-semibold">
-                    Dashed = Target
-                  </span>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                      <span>🎯</span>
+                      <span>Individual Goal Progress</span>
+                    </h3>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {chartType === 'bar' ? 'Comparing saved vs target per goal' : 'Trajectories over lifetime'}
+                    </p>
+                  </div>
+                  <div className="flex bg-slate-900/80 p-0.5 rounded-lg border border-slate-700 text-[10px] font-bold">
+                    <button
+                      onClick={() => setChartType('bar')}
+                      className={`px-2 py-1 rounded-md transition-all ${chartType === 'bar' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      📊 Bar
+                    </button>
+                    <button
+                      onClick={() => setChartType('trend')}
+                      className={`px-2 py-1 rounded-md transition-all ${chartType === 'trend' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      📈 Trend
+                    </button>
+                  </div>
                 </div>
-                <div className="h-56 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={(v) => `${Math.floor(v/12)}y`} />
-                      <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={formatCompact} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                        formatter={(val) => formatCurrency(val)}
-                        labelFormatter={(val) => `Month ${val}`}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} iconType="circle" />
-                      
-                      {(store.goals || []).map((goal, i) => {
-                        const nameKey = (goal.name || '').replace(/^[^\w\s]+/, '').trim().split(' ')[0];
-                        const color = GOAL_COLORS[nameKey] || Object.values(GOAL_COLORS)[i % 7];
-                        return (
-                          <React.Fragment key={goal.id}>
-                            <Line type="monotone" dataKey={goal.id} name={goal.name} stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                            <ReferenceLine y={goal.currentTarget} stroke={color} strokeDasharray="3 3" opacity={0.4} />
-                          </React.Fragment>
-                        );
-                      })}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+
+                {chartType === 'bar' ? (
+                  /* Recharts Individual Goals Bar Chart */
+                  <div>
+                    <div className="h-60 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={goalBarData} margin={{ top: 10, right: 10, left: -20, bottom: 15 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                          <XAxis 
+                            dataKey="name" 
+                            tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                            stroke="#475569" 
+                            interval={0}
+                          />
+                          <YAxis 
+                            tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                            stroke="#475569" 
+                            tickFormatter={formatCompact} 
+                          />
+                          <Tooltip 
+                            content={({ active, payload }) => {
+                              if (!active || !payload || !payload.length) return null;
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-slate-900 border border-slate-700 p-2.5 rounded-xl shadow-xl text-xs space-y-1 z-50">
+                                  <p className="font-bold text-white flex items-center gap-1.5">
+                                    <span>{data.icon || '🎯'}</span>
+                                    <span>{data.fullName}</span>
+                                  </p>
+                                  <div className="flex justify-between gap-4 text-slate-300">
+                                    <span>Saved:</span>
+                                    <span className="font-black text-emerald-400">{formatCurrency(data.saved)}</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4 text-slate-400">
+                                    <span>Target:</span>
+                                    <span className="font-bold">{formatCurrency(data.target)}</span>
+                                  </div>
+                                  <div className="pt-1 border-t border-slate-800 flex justify-between font-bold">
+                                    <span className="text-slate-400">Progress:</span>
+                                    <span className={data.percent >= 100 ? 'text-emerald-400' : 'text-amber-400'}>
+                                      {data.percent}% {data.achieved ? '✅' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '6px' }} iconType="circle" />
+                          <Bar dataKey="saved" name="Saved / Accumulated" radius={[4, 4, 0, 0]}>
+                            {goalBarData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Bar>
+                          <Bar dataKey="target" name="Target Goal" fill="#334155" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Compact Goal Status Grid */}
+                    <div className="mt-3 pt-3 border-t border-slate-700/60 grid grid-cols-2 gap-2">
+                      {goalBarData.map(g => (
+                        <div key={g.id} className="bg-slate-900/60 p-2 rounded-xl border border-slate-800 flex flex-col justify-between">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-slate-300 truncate pr-1">
+                              {g.icon} {g.name}
+                            </span>
+                            <span className={`text-[10px] font-black ${g.achieved ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {g.percent}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                            <div 
+                              className="h-full rounded-full transition-all duration-300"
+                              style={{ width: `${Math.min(100, g.percent)}%`, backgroundColor: g.color }}
+                            />
+                          </div>
+                          <div className="flex justify-between items-center text-[9px] text-slate-400 mt-1">
+                            <span>{formatCompact(g.saved)}</span>
+                            <span>{formatCompact(g.target)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  /* Recharts Growth Trajectory Line Chart */
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={(v) => `${Math.floor(v/12)}y`} />
+                        <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#475569" tickFormatter={formatCompact} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
+                          formatter={(val) => formatCurrency(val)}
+                          labelFormatter={(val) => `Month ${val}`}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }} iconType="circle" />
+                        
+                        {(store.goals || []).map((goal, i) => {
+                          const nameKey = (goal.name || '').replace(/^[^\w\s]+/, '').trim().split(' ')[0];
+                          const color = GOAL_COLORS[nameKey] || Object.values(GOAL_COLORS)[i % 7];
+                          return (
+                            <React.Fragment key={goal.id}>
+                              <Line type="monotone" dataKey={goal.id} name={goal.name} stroke={color} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
+                              <ReferenceLine y={goal.currentTarget} stroke={color} strokeDasharray="3 3" opacity={0.4} />
+                            </React.Fragment>
+                          );
+                        })}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )}
 

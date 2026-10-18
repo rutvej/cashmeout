@@ -41,6 +41,19 @@ const GoalSetup = () => {
       status: 'Needs Planning'
     },
     {
+      id: 'g_medical',
+      type: 'medical',
+      name: 'Medical Insurance',
+      icon: '🏥',
+      tag: 'Protection Goal',
+      tagColor: 'text-rose-600 bg-rose-100',
+      amount: 1000000,
+      displayAmount: '₹10 Lakh Cover',
+      targetAge: currentAge,
+      desc: 'Health protection against hospital emergencies (Mediclaim covers 90%, you pay 10%).',
+      status: 'Needs Planning'
+    },
+    {
       id: 'g2',
       type: 'marriage',
       name: 'Marriage',
@@ -135,6 +148,7 @@ const GoalSetup = () => {
         tag: g.tag, 
         tagColor: g.tagColor, 
         desc: g.desc, 
+        displayAmount: g.displayAmount,
         recurring: g.tag === 'Recurring' 
       };
     });
@@ -180,10 +194,10 @@ const GoalSetup = () => {
                 </div>
                 <div className="text-right">
                   <span className="block text-sm font-black text-white">
-                    {formatCurrency(goal.amount)}
+                    {goal.displayAmount || formatCurrency(goal.amount)}
                   </span>
                   <span className="text-[10px] font-medium text-slate-400 block mt-0.5">
-                    By age {goal.targetAge} (~{goal.targetAge > currentAge ? goal.targetAge - currentAge : 1} yrs)
+                    {goal.type === 'medical' ? 'Active Protection' : `By age ${goal.targetAge} (~${goal.targetAge > currentAge ? goal.targetAge - currentAge : 1} yrs)`}
                   </span>
                 </div>
               </div>

@@ -6,7 +6,14 @@ export const DAYS_PER_MONTH = 30;
 export const MONTHS_PER_YEAR = 12;
 export const DAYS_PER_YEAR = 365;
 
-export const SIMULATION_SPEED_MS = 50;
+export const SIMULATION_SPEED_MS = 140;
+
+export const HEALTH_INSURANCE_PLANS = [
+  { id: 'cover_5l', name: '₹5 Lakh Basic Cover', coverage: 500000, monthlyPremium: 500, copay: 0.10, desc: 'Essential protection for unexpected hospitalizations (10% copay).' },
+  { id: 'cover_10l', name: '₹10 Lakh Family Cover', coverage: 1000000, monthlyPremium: 800, copay: 0.10, desc: 'Recommended standard cover for modern treatments (10% copay).' },
+  { id: 'cover_25l', name: '₹25 Lakh Super Cover', coverage: 2500000, monthlyPremium: 1400, copay: 0.10, desc: 'Top-tier coverage against critical illness and surgery (10% copay).' },
+  { id: 'none', name: 'No Cover (Skip)', coverage: 0, monthlyPremium: 0, copay: 1.0, desc: 'Pay 100% out of pocket on all medical emergencies.' },
+];
 
 export const CITY_TIERS = {
   1: { name: 'Tier 1 (Mumbai / Delhi / Bangalore)', salary: [30000, 80000], livingCost: [12000, 18000], minRent: 8000 },

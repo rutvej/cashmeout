@@ -5,6 +5,7 @@ import useGameStore from '../../engine/store';
 import Button from '../ui/Button';
 import ProgressBar from '../ui/ProgressBar';
 import { formatCurrency } from '../../utils/format';
+import { HEALTH_INSURANCE_PLANS } from '../../engine/constants';
 
 const INSTRUMENTS = [
   { key: 'equity', label: 'Equity', risk: 'High Risk', returnStr: '~15%/yr', r: 0.15/12 },
@@ -61,7 +62,11 @@ const FinancialSetup = () => {
   };
 
   const handleSkip = () => {
-    setGoalMonthlyAllocation(currentGoal.id, 0);
+    if (currentGoal.type === 'medical') {
+      store.setHealthInsurancePlan('none');
+    } else {
+      setGoalMonthlyAllocation(currentGoal.id, 0);
+    }
     setSkippedGoals(new Set([...skippedGoals, currentGoal.id]));
     handleNext();
   };
@@ -202,105 +207,181 @@ const FinancialSetup = () => {
                   </span>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-slate-400 font-bold block mb-0.5">Target Amount</span>
-                  <span className="text-lg font-black text-white">{formatCurrency(currentGoal.currentTarget)}</span>
+                  <span className="text-xs text-slate-400 font-bold block mb-0.5">
+                    {currentGoal.type === 'medical' ? 'Coverage Target' : 'Target Amount'}
+                  </span>
+                  <span className="text-lg font-black text-white">
+                    {currentGoal.type === 'medical' 
+                      ? (store.hasHealthInsurance ? formatCurrency(store.healthInsuranceCoverage) : '₹0 Cover')
+                      : formatCurrency(currentGoal.currentTarget)}
+                  </span>
                   <span className="text-[10px] text-slate-500 font-semibold block mt-1">
-                    By age {targetAge} ({monthsAway} months)
+                    {currentGoal.type === 'medical' ? 'Protection Plan' : `By age ${targetAge} (${monthsAway} months)`}
                   </span>
                 </div>
               </div>
 
-              {/* Monthly Allocation Input */}
-              <div className="mb-6">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Monthly Allocation</label>
-                <div className="relative mb-3">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">₹</span>
-                  <input 
-                    type="number"
-                    value={currentAlloc || ''}
-                    onChange={(e) => setAllocation(Number(e.target.value) || 0)}
-                    placeholder="0"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-xl font-black text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {[500, 1000, 2000, 5000].map(amt => (
-                    <button
-                      key={amt}
-                      onClick={() => handlePreset(amt)}
-                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors"
-                    >
-                      +₹{amt}
-                    </button>
-                  ))}
-                </div>
-                {remainingSurplus < 0 && (
-                  <p className="text-[10px] font-bold text-red-400 mt-2">
-                    ⚠️ Allocation exceeds monthly surplus! Decrease amount.
-                  </p>
-                )}
-              </div>
+              {currentGoal.type === 'medical' ? (
+                /* Medical Protection Plan Selector */
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <span>🛡️</span>
+                        <span>Select Protection Level</span>
+                      </label>
+                      <span className="text-[10px] text-rose-400 font-bold bg-rose-950/60 px-2 py-0.5 rounded-full border border-rose-800">
+                        10% Copay (90% Covered)
+                      </span>
+                    </div>
 
-              {/* Instrument Selector */}
-              <div className="mb-6">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Investment Instrument</label>
-                <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide -mx-1 px-1">
-                  {INSTRUMENTS.map(inst => (
-                    <button
-                      key={inst.key}
-                      onClick={() => setGoalInstrument(currentGoal.id, inst.key)}
-                      className={`flex-shrink-0 flex flex-col items-start p-3 rounded-xl border transition-all min-w-[120px] ${
-                        currentInstKey === inst.key 
-                          ? 'bg-blue-500/10 border-blue-500 shadow-inner' 
-                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <span className={`text-sm font-bold ${currentInstKey === inst.key ? 'text-blue-400' : 'text-slate-300'}`}>
-                        {inst.label}
-                      </span>
-                      <span className={`text-[10px] font-medium mt-1 ${currentInstKey === inst.key ? 'text-blue-300' : 'text-slate-500'}`}>
-                        {inst.returnStr}
-                      </span>
-                      <span className="text-[9px] uppercase tracking-wider text-slate-600 font-bold mt-2">
-                        {inst.risk}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {HEALTH_INSURANCE_PLANS.map(plan => {
+                        const activePlanId = store.healthInsurancePlan || (store.hasHealthInsurance ? 'cover_10l' : 'none');
+                        const isSelected = activePlanId === plan.id;
+                        return (
+                          <button
+                            key={plan.id}
+                            type="button"
+                            onClick={() => store.setHealthInsurancePlan(plan.id)}
+                            className={`p-3.5 rounded-2xl border text-left transition-all ${
+                              isSelected 
+                                ? 'bg-rose-500/15 border-rose-500 shadow-md ring-1 ring-rose-500' 
+                                : 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="pr-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-sm text-white">{plan.name}</span>
+                                  {plan.id === 'cover_10l' && (
+                                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-black border border-amber-500/40">
+                                      ⭐ RECOMMENDED
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-400 mt-1 leading-snug">{plan.desc}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                <span className={`text-sm font-black block ${isSelected ? 'text-rose-400' : 'text-slate-300'}`}>
+                                  {plan.monthlyPremium > 0 ? `₹${plan.monthlyPremium}/mo` : '₹0/mo'}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-semibold block mt-0.5">
+                                  {plan.coverage > 0 ? `${(plan.coverage / 100000).toFixed(0)}L Cover` : 'No Cover'}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-              {/* Projection Chart */}
-              <div className="mb-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Projection</h4>
-                <div className="h-32 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={chartColor} stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="month" hide />
-                      <YAxis hide domain={[0, Math.max(currentGoal.currentTarget * 1.2, fv)]} />
-                      <ReferenceLine y={currentGoal.currentTarget} stroke="#64748b" strokeDasharray="3 3" />
-                      <Area 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke={chartColor} 
-                        fillOpacity={1} 
-                        fill="url(#colorValue)" 
-                        strokeWidth={3}
+                  {/* Medical Protection Signal */}
+                  <div className={`p-3.5 rounded-xl border ${store.hasHealthInsurance ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'} transition-colors`}>
+                    <span className="text-xs font-bold block">
+                      {store.hasHealthInsurance
+                        ? `🟢 Protected — ${formatCurrency(store.healthInsuranceCoverage)} sum insured with only 10% copay on hospital bills!`
+                        : '🔴 Unprotected — High risk! Full 100% out of pocket expense if hospitalized'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                /* Regular Investment Allocation Form */
+                <>
+                  {/* Monthly Allocation Input */}
+                  <div className="mb-6">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Monthly Allocation</label>
+                    <div className="relative mb-3">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-bold">₹</span>
+                      <input 
+                        type="number"
+                        value={currentAlloc || ''}
+                        onChange={(e) => setAllocation(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-xl font-black text-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                       />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {[500, 1000, 2000, 5000].map(amt => (
+                        <button
+                          key={amt}
+                          onClick={() => handlePreset(amt)}
+                          className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors"
+                        >
+                          +₹{amt}
+                        </button>
+                      ))}
+                    </div>
+                    {remainingSurplus < 0 && (
+                      <p className="text-[10px] font-bold text-red-400 mt-2">
+                        ⚠️ Allocation exceeds monthly surplus! Decrease amount.
+                      </p>
+                    )}
+                  </div>
 
-              {/* Feasibility Signal */}
-              <div className={`p-3 rounded-xl border ${signalColor} transition-colors`}>
-                <span className="text-xs font-bold block">{signalText}</span>
-              </div>
+                  {/* Instrument Selector */}
+                  <div className="mb-6">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Investment Instrument</label>
+                    <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide -mx-1 px-1">
+                      {INSTRUMENTS.map(inst => (
+                        <button
+                          key={inst.key}
+                          onClick={() => setGoalInstrument(currentGoal.id, inst.key)}
+                          className={`flex-shrink-0 flex flex-col items-start p-3 rounded-xl border transition-all min-w-[120px] ${
+                            currentInstKey === inst.key 
+                              ? 'bg-blue-500/10 border-blue-500 shadow-inner' 
+                              : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <span className={`text-sm font-bold ${currentInstKey === inst.key ? 'text-blue-400' : 'text-slate-300'}`}>
+                            {inst.label}
+                          </span>
+                          <span className={`text-[10px] font-medium mt-1 ${currentInstKey === inst.key ? 'text-blue-300' : 'text-slate-500'}`}>
+                            {inst.returnStr}
+                          </span>
+                          <span className="text-[9px] uppercase tracking-wider text-slate-600 font-bold mt-2">
+                            {inst.risk}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Projection Chart */}
+                  <div className="mb-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4">Projection</h4>
+                    <div className="h-32 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData}>
+                          <defs>
+                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={chartColor} stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor={chartColor} stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <XAxis dataKey="month" hide />
+                          <YAxis hide domain={[0, Math.max(currentGoal.currentTarget * 1.2, fv)]} />
+                          <ReferenceLine y={currentGoal.currentTarget} stroke="#64748b" strokeDasharray="3 3" />
+                          <Area 
+                            type="monotone" 
+                            dataKey="value" 
+                            stroke={chartColor} 
+                            fillOpacity={1} 
+                            fill="url(#colorValue)" 
+                            strokeWidth={3}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Feasibility Signal */}
+                  <div className={`p-3 rounded-xl border ${signalColor} transition-colors`}>
+                    <span className="text-xs font-bold block">{signalText}</span>
+                  </div>
+                </>
+              )}
 
             </motion.div>
           </AnimatePresence>

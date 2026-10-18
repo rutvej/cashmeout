@@ -5,10 +5,23 @@ import { resolveEvent as resolveEventFn } from './eventResolver.js';
 import { EVENT_DECK } from './events.js';
 import { createGoal, redistributeBuckets } from './goals.js';
 import { calculateResults, generateInsights } from './scoring.js';
-import { SIMULATION_SPEED_MS, INSURANCE_COSTS, RENT_RANGES, CITY_TIERS } from './constants.js';
+import { SIMULATION_SPEED_MS, INSURANCE_COSTS, RENT_RANGES, CITY_TIERS, HEALTH_INSURANCE_PLANS } from './constants.js';
 import { randInt, randFloat, setSeed, getSeed } from '../utils/random.js';
 import { getCareerRole, generateJobMarketOffers, CITY_TIER_SALARY_CAPS, getJobSwitchCooldown } from './careers.js';
 import { generateEventCalendar } from './calendarQueue.js';
+
+export const ALLOWED_EVENT_IDS = new Set([
+  'medical_emergency',
+  'job_loss',
+  'home_renovation',
+  'vehicle_accident',
+  'work_bonus',
+  'inheritance_gift',
+  'marriage_event',
+  'marriage',
+  'annual_tax',
+  'annual_inflation',
+]);
 
 export function normalizeInstruments(instruments) {
   const current = {
@@ -172,9 +185,11 @@ const useGameStore = create((set, get) => ({
   loans: [],
 
   // --- Insurance ---
-  hasHealthInsurance: false,
+  healthInsurancePlan: 'cover_10l',
+  hasHealthInsurance: true,
+  healthInsuranceCost: 800,
+  healthInsuranceCoverage: 1000000,
   hasVehicleInsurance: false,
-  healthInsuranceCost: 0,
   vehicleInsuranceCost: 0,
   homeMaintenanceCost: 0,
   carMaintenanceCost: 0,
@@ -315,9 +330,11 @@ const useGameStore = create((set, get) => ({
       fundAllocations: {},
       buckets: {},
       instruments: { savings: 100, stocks: 0, gold: 0, mf: 0, fd: 0 },
-      hasHealthInsurance: false,
+      healthInsurancePlan: 'cover_10l',
+      hasHealthInsurance: true,
+      healthInsuranceCost: 800,
+      healthInsuranceCoverage: 1000000,
       hasVehicleInsurance: false,
-      healthInsuranceCost: 0,
       vehicleInsuranceCost: 0,
       hasActiveBusiness: false,
       businessIncome: 0,
@@ -617,6 +634,11 @@ const useGameStore = create((set, get) => ({
 
   tick: () => {
     const state = get();
+    // Drop any unwanted/unapproved residual event from old save files
+    if (state.currentEvent && !ALLOWED_EVENT_IDS.has(state.currentEvent.id)) {
+      set({ currentEvent: null });
+    }
+
     if (state.gameOver || state.currentEvent || state.showMilestone || state.showAllocation || state.deficitInfo || state.showMonthlyLedger) {
       // Auto-pause when something needs player attention
       get().pauseSimulation();
@@ -632,6 +654,9 @@ const useGameStore = create((set, get) => ({
       const scheduledEvents = state.calendarQueue.popEventsForDay(changes.currentDay);
       if (scheduledEvents && scheduledEvents.length > 0) {
         for (const se of scheduledEvents) {
+          // Strictly drop any unapproved event (e.g. legacy utility_hike, job offers, side ventures)
+          if (!ALLOWED_EVENT_IDS.has(se.id)) continue;
+
           if (se.id === 'marriage_event' || se.id === 'marriage') {
             if (!state.married && !state.marriageEventFired) {
               nextEvent = buildMarriageEvent(state);
@@ -660,18 +685,25 @@ const useGameStore = create((set, get) => ({
           r -= (ev.weight || 10);
           if (r <= 0) { picked = ev; break; }
         }
-        nextEvent = buildEventOptions(picked, state);
+        if (picked && ALLOWED_EVENT_IDS.has(picked.id)) {
+          nextEvent = buildEventOptions(picked, state);
+        }
       }
     }
 
     // Check for scheduled annual events (Tax, Inflation) or random events
-    if (tickResult.eventTriggered) {
+    if (tickResult.eventTriggered && ALLOWED_EVENT_IDS.has(tickResult.eventTriggered.id)) {
       nextEvent = tickResult.eventTriggered;
     }
 
     // Marriage age trigger fallback
     if (changes.shouldTriggerMarriage && !state.married && !state.marriageEventFired && !nextEvent) {
       nextEvent = buildMarriageEvent(state);
+    }
+
+    // Double check whitelist
+    if (nextEvent && !ALLOWED_EVENT_IDS.has(nextEvent.id)) {
+      nextEvent = null;
     }
 
     set(s => {
@@ -2377,6 +2409,17 @@ const useGameStore = create((set, get) => ({
   setGoalMonthlyAllocation: (goalId, amount) => set((state) => ({
     goalMonthlyAllocations: { ...state.goalMonthlyAllocations, [goalId]: Math.max(0, amount) }
   })),
+
+  setHealthInsurancePlan: (planId) => {
+    const plan = (HEALTH_INSURANCE_PLANS || []).find(p => p.id === planId) || HEALTH_INSURANCE_PLANS[1];
+    set({
+      healthInsurancePlan: plan.id,
+      hasHealthInsurance: plan.coverage > 0,
+      healthInsuranceCost: plan.monthlyPremium,
+      healthInsuranceCoverage: plan.coverage,
+      financialChanged: true,
+    });
+  },
 }));
 
 // ─── Helper: build marriage event ───
