@@ -89,6 +89,29 @@ const GoalsTab = () => {
         </Button>
       </div>
 
+      {/* Redesign Goals Action Banner */}
+      <div className="p-3.5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-center justify-between shadow-2xs">
+        <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+          <span className="text-2xl shrink-0">🎯</span>
+          <div>
+            <h4 className="text-xs font-black text-blue-950">Redesign Goal Investments</h4>
+            <p className="text-[10px] text-blue-700 leading-tight">
+              Distribute monthly surplus across goals same as starting setup
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shrink-0 rounded-xl"
+          onClick={() => {
+            store.pauseSimulation();
+            useGameStore.setState({ screen: 'financialSetup' });
+          }}
+        >
+          Redesign →
+        </Button>
+      </div>
+
       {allGoalsAchieved && (
         <div className="p-3.5 bg-green-50 rounded-2xl border border-green-200 text-center">
           <span className="text-2xl block mb-1">🏆</span>
@@ -169,7 +192,7 @@ const GoalsTab = () => {
                   <ProgressBar value={progress} />
 
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex justify-between items-center gap-2">
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-1.5 flex-wrap">
                       <button
                         type="button"
                         onClick={() => {
@@ -190,6 +213,18 @@ const GoalsTab = () => {
                           className="text-[10px] font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg"
                         >
                           - Withdraw
+                        </button>
+                      )}
+                      {current >= target && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            store.pauseSimulation();
+                            useGameStore.setState({ screen: 'financialSetup' });
+                          }}
+                          className="text-[10px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-2 py-1 rounded-lg"
+                        >
+                          ✓ Full (Redirect Surplus →)
                         </button>
                       )}
                     </div>
@@ -287,6 +322,18 @@ const GoalsTab = () => {
                       Claim: {store.buckets[goal.id] || 0}% of Cash Pool
                     </span>
                     <div className="flex flex-wrap gap-1.5">
+                      {progress >= 100 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            store.pauseSimulation();
+                            useGameStore.setState({ screen: 'financialSetup' });
+                          }}
+                          className="text-[10px] text-emerald-800 hover:text-emerald-950 font-bold bg-emerald-50 px-2 py-1 rounded border border-emerald-300"
+                        >
+                          ✓ Full (Redirect Surplus →)
+                        </button>
+                      )}
                       {canBuyFromTotalPool && (
                         <button
                           type="button"

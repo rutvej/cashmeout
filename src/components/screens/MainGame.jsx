@@ -299,6 +299,25 @@ const MainGame = () => {
               </div>
             </div>
 
+            {/* Quick Rebalance Goals Action */}
+            <button
+              type="button"
+              onClick={() => {
+                store.pauseSimulation();
+                useGameStore.setState({ screen: 'financialSetup' });
+              }}
+              className="w-full py-2 px-3 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 rounded-2xl text-left flex justify-between items-center transition text-xs shadow-sm"
+            >
+              <div className="flex items-center space-x-2">
+                <span className="text-base">🎯</span>
+                <div>
+                  <span className="font-bold text-slate-200 block text-xs">Redesign Goal Investments</span>
+                  <span className="text-[10px] text-slate-400">Distribute surplus {formatCurrency(surplus)}/mo across goals (same as starting setup)</span>
+                </div>
+              </div>
+              <span className="text-[11px] font-bold text-blue-400 shrink-0">Redesign →</span>
+            </button>
+
             {/* Dashboard View Switcher */}
             <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs font-bold">
               <button

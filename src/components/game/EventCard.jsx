@@ -100,13 +100,20 @@ const EventCard = ({ event, onChoice }) => {
     ? calculateExpenseWaterfall(expenseAmt, event.id, store)
     : null;
 
-  const handleChoiceClick = (choiceIdx) => {
-    const extraData = { isAuto: false };
+  const isIncomeIncrease = event.id === 'annual_inflation' || event.id === 'salary_hike' || event.id === 'senior_job_offer' || event.id === 'new_job_offer' || event.id === 'job_switch' || event.id === 'freelance_gig' || impact.type === 'gain_recurring';
+  const isEmergencyOrSpending = isMedical || isHouseRepair || event.id === 'vehicle_accident' || event.id === 'family_wedding' || (impact.type === 'loss' && expenseAmt > 0);
+  const canRedesignGoals = isIncomeIncrease || isWindfall || isEmergencyOrSpending;
+
+  const handleChoiceClick = (choiceIdx, customData = {}) => {
+    const extraData = { isAuto: false, ...customData };
     if (isMedical && optInInsurance) {
       extraData.optInHealthInsurance = true;
     }
     if (isBonus && choiceIdx === 1) {
       extraData.targetGoalId = selectedBonusGoalId || (activeGoals[0]?.id || '');
+    }
+    if (event.options?.[choiceIdx]?.action === 'redesign_goals' || customData.redesignGoals) {
+      extraData.redesignGoals = true;
     }
     if (isWedding) {
       extraData.contributionAmount = weddingSelectedAmount;
@@ -755,6 +762,32 @@ const EventCard = ({ event, onChoice }) => {
                   </Button>
                 ))}
 
+                {/* Redesign Goals CTA button */}
+                {canRedesignGoals && !showCustomWindfall && (
+                  <button
+                    type="button"
+                    onClick={() => handleChoiceClick(0, { redesignGoals: true })}
+                    className="w-full py-2.5 px-3 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 border border-blue-200 rounded-xl text-left flex justify-between items-center transition shadow-2xs mt-1"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                        <span>⚙️</span>
+                        <span>
+                          {isIncomeIncrease 
+                            ? 'Accept & Redesign Goal Investments' 
+                            : isEmergencyOrSpending 
+                            ? 'Pay & Redesign Investments to Replenish Emergency Fund' 
+                            : 'Redesign Goal Allocations with Windfall'}
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-blue-700">
+                        Opens goal setup to redistribute surplus money, same as starting setup.
+                      </span>
+                    </div>
+                    <span className="text-xs font-bold text-blue-800 shrink-0">Redesign →</span>
+                  </button>
+                )}
+
                 {/* Custom Windfall Allocation CTA button */}
                 {isWindfall && (
                   <button
@@ -776,29 +809,44 @@ const EventCard = ({ event, onChoice }) => {
             )}
 
             {(!event.options || event.options.length === 0) && !isWedding && !showCustomWindfall && (
-              <Button
-                fullWidth
-                variant="primary"
-                className="!py-2.5 !px-3 text-left justify-start"
-                onClick={() => handleChoiceClick(0)}
-              >
-                <div className="flex flex-col text-left w-full">
-                  <span className="font-bold text-xs sm:text-sm text-text-primary">
-                    {isMedical
-                      ? projectedWaterfall && projectedWaterfall.shortfall > 0
-                        ? `Acknowledge Bill (Shortfall: ${formatCurrency(projectedWaterfall.shortfall)}) →`
-                        : `Pay Medical Bill (${formatCurrency(expenseAmt)}) via Emergency Fund & Reserves →`
-                      : isHouseRepair
-                      ? `Pay House Repair (${formatCurrency(expenseAmt)}) via Emergency Fund →`
-                      : 'Acknowledge & Continue'}
-                  </span>
-                  <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
-                    {isMedical || isHouseRepair
-                      ? 'Deductions cascade automatically: Emergency Fund → Other Reserves → Liquid Savings → Goals.'
-                      : 'Proceed to next simulation day.'}
-                  </span>
-                </div>
-              </Button>
+              <div className="space-y-2">
+                <Button
+                  fullWidth
+                  variant="primary"
+                  className="!py-2.5 !px-3 text-left justify-start"
+                  onClick={() => handleChoiceClick(0)}
+                >
+                  <div className="flex flex-col text-left w-full">
+                    <span className="font-bold text-xs sm:text-sm text-text-primary">
+                      {isMedical
+                        ? projectedWaterfall && projectedWaterfall.shortfall > 0
+                          ? `Acknowledge Bill (Shortfall: ${formatCurrency(projectedWaterfall.shortfall)}) →`
+                          : `Pay Medical Bill (${formatCurrency(expenseAmt)}) via Emergency Fund & Reserves →`
+                        : isHouseRepair
+                        ? `Pay House Repair (${formatCurrency(expenseAmt)}) via Emergency Fund →`
+                        : 'Acknowledge & Continue'}
+                    </span>
+                    <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
+                      {isMedical || isHouseRepair
+                        ? 'Deductions cascade automatically: Emergency Fund → Other Reserves → Liquid Savings → Goals.'
+                        : 'Proceed to next simulation day.'}
+                    </span>
+                  </div>
+                </Button>
+                {(isMedical || isHouseRepair) && (
+                  <button
+                    type="button"
+                    onClick={() => handleChoiceClick(0, { redesignGoals: true })}
+                    className="w-full py-2 px-3 bg-blue-50/90 hover:bg-blue-100 border border-blue-200 rounded-xl text-left flex justify-between items-center transition text-xs font-bold text-blue-950"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span>🛡️</span>
+                      <span>Pay & Redesign Goal Investments (Replenish Buffer)</span>
+                    </span>
+                    <span className="text-xs font-bold text-blue-800 shrink-0">Redesign →</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

@@ -6,6 +6,7 @@ import Button from '../ui/Button';
 import ProgressBar from '../ui/ProgressBar';
 import { formatCurrency } from '../../utils/format';
 import { HEALTH_INSURANCE_PLANS } from '../../engine/constants';
+import { calculateRequiredEmergencyFund } from '../../engine/goals';
 
 const INSTRUMENTS = [
   { key: 'equity', label: 'Equity', risk: 'High Risk', returnStr: '~15%/yr', r: 0.15/12 },
@@ -72,7 +73,25 @@ const FinancialSetup = () => {
   };
 
   const handleStartGame = () => {
-    setScreen('game');
+    // Synchronize store buckets with monthly allocations
+    const newBuckets = {};
+    goals.forEach(g => {
+      const alloc = store.goalMonthlyAllocations[g.id] || 0;
+      newBuckets[g.id] = monthlySurplus > 0 ? Math.round((alloc / monthlySurplus) * 100) : 0;
+    });
+    store.updateBucketAllocations(newBuckets);
+
+    // If emergency fund target was dynamically updated due to inflation, persist it
+    if (isEmergency && effectiveTarget !== currentGoal.currentTarget) {
+      store.setGoals(goals.map(g => g.id === currentGoal.id ? { ...g, currentTarget: effectiveTarget } : g));
+    }
+
+    if (store.currentDay > 0) {
+      setScreen('game');
+      store.startSimulation();
+    } else {
+      setScreen('game');
+    }
   };
 
   const setAllocation = (amount) => {
@@ -95,10 +114,22 @@ const FinancialSetup = () => {
 
   if (!currentGoal) return null;
 
-  const targetAge = currentGoal.targetAge || 30;
-  const currentAge = player?.characterAge || 22;
+  const currentAge = player?.characterAge
+    ? player.characterAge + Math.floor(store.currentDay / 365)
+    : 22;
+  const targetAge = currentGoal.targetAge || (currentAge + 5);
   const yearsAway = Math.max(1, targetAge - currentAge);
   const monthsAway = yearsAway * 12;
+
+  const isEmergency = currentGoal.type === 'emergency' || (currentGoal.name && currentGoal.name.toLowerCase().includes('emergency'));
+  const evaluatedEmergencyTarget = isEmergency ? calculateRequiredEmergencyFund(store) : currentGoal.currentTarget;
+  const effectiveTarget = isEmergency ? Math.max(currentGoal.currentTarget, evaluatedEmergencyTarget) : currentGoal.currentTarget;
+
+  const pool = store.pool || 0;
+  const dedicated = currentGoal.dedicatedContribution || 0;
+  const bucketShare = Math.round((pool * ((store.buckets?.[currentGoal.id] || currentGoal.bucketPercent || 0) / 100)));
+  const alreadySaved = currentGoal.achieved ? effectiveTarget : Math.min(effectiveTarget, dedicated + bucketShare);
+  const isGoalFull = alreadySaved >= effectiveTarget;
 
   const currentAlloc = store.goalMonthlyAllocations[currentGoal.id] || 0;
   const currentInstKey = store.goalInstruments[currentGoal.id] || 'mf';
@@ -114,7 +145,7 @@ const FinancialSetup = () => {
       data.push({
         month: m,
         value: Math.round(projectFutureValue(currentAlloc, currentInst.r, m)),
-        target: currentGoal.currentTarget
+        target: effectiveTarget
       });
     }
     // ensure last point
@@ -122,23 +153,23 @@ const FinancialSetup = () => {
       data.push({
         month: monthsAway,
         value: Math.round(projectFutureValue(currentAlloc, currentInst.r, monthsAway)),
-        target: currentGoal.currentTarget
+        target: effectiveTarget
       });
     }
     return data;
-  }, [monthsAway, currentAlloc, currentInst.r, currentGoal.currentTarget]);
+  }, [monthsAway, currentAlloc, currentInst.r, effectiveTarget]);
 
-  const isSuccess = fv >= currentGoal.currentTarget;
-  const isBorderline = fv >= currentGoal.currentTarget * 0.8 && !isSuccess;
+  const isSuccess = fv >= effectiveTarget;
+  const isBorderline = fv >= effectiveTarget * 0.8 && !isSuccess;
   const chartColor = isSuccess ? '#10b981' : isBorderline ? '#f59e0b' : '#ef4444';
 
   let signalColor, signalText;
   if (isSuccess) {
     signalColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    signalText = `🟢 On Track — projected ${formatCurrency(fv)} vs target ${formatCurrency(currentGoal.currentTarget)}`;
+    signalText = `🟢 On Track — projected ${formatCurrency(fv)} vs target ${formatCurrency(effectiveTarget)}`;
   } else if (isBorderline) {
     signalColor = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-    signalText = `🟡 Borderline — ${formatCurrency(currentGoal.currentTarget - fv)} short of target`;
+    signalText = `🟡 Borderline — ${formatCurrency(effectiveTarget - fv)} short of target`;
   } else {
     signalColor = 'bg-red-500/20 text-red-400 border-red-500/30';
     signalText = `🔴 Behind — increase allocation or change instrument`;
@@ -148,8 +179,26 @@ const FinancialSetup = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       
       {/* Persistent Top Bar */}
-      <div className="fixed top-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-b border-slate-800 z-50 p-4 pt-6 shadow-xl">
+      <div className="fixed top-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-b border-slate-800 z-50 p-4 pt-4 shadow-xl">
         <div className="max-w-md mx-auto">
+          {store.currentDay > 0 && (
+            <div className="flex justify-between items-center mb-2 pb-1 border-b border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => {
+                  setScreen('game');
+                  store.startSimulation();
+                }}
+                className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"
+              >
+                <span>←</span>
+                <span>Back to Dashboard</span>
+              </button>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
+                Redesigning Goals (Day {store.currentDay})
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-end mb-2">
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Monthly Surplus</span>
@@ -208,18 +257,63 @@ const FinancialSetup = () => {
                 </div>
                 <div className="text-right">
                   <span className="text-xs text-slate-400 font-bold block mb-0.5">
-                    {currentGoal.type === 'medical' ? 'Coverage Target' : 'Target Amount'}
+                    {currentGoal.type === 'medical' ? 'Coverage Target' : isEmergency ? 'Dynamic 6-Mo Target' : 'Target Amount'}
                   </span>
                   <span className="text-lg font-black text-white">
                     {currentGoal.type === 'medical' 
                       ? (store.hasHealthInsurance ? formatCurrency(store.healthInsuranceCoverage) : '₹0 Cover')
-                      : formatCurrency(currentGoal.currentTarget)}
+                      : formatCurrency(effectiveTarget)}
                   </span>
                   <span className="text-[10px] text-slate-500 font-semibold block mt-1">
                     {currentGoal.type === 'medical' ? 'Protection Plan' : `By age ${targetAge} (${monthsAway} months)`}
                   </span>
                 </div>
               </div>
+
+              {/* Full Fund Redirect Banner */}
+              {isGoalFull && currentGoal.type !== 'medical' && (
+                <div className="mb-4 p-3 bg-emerald-500/15 border border-emerald-500/40 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <span>✓</span>
+                      <span>{isEmergency ? 'Emergency Fund 100% Buffered!' : 'Target Fully Reached (100%)!'}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-300 mt-0.5 block">
+                      Saved: {formatCurrency(alreadySaved)}. Stop monthly allocation and redirect surplus to other goals!
+                    </span>
+                  </div>
+                  {currentAlloc > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAllocation(0)}
+                      className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-sm transition ml-2 flex-shrink-0"
+                    >
+                      Set ₹0 (Redirect)
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Emergency Fund Dynamic Re-evaluation Note */}
+              {isEmergency && (
+                <div className="mb-4 p-3 bg-blue-500/15 border border-blue-500/30 rounded-2xl text-xs space-y-1">
+                  <div className="flex justify-between items-center text-blue-300 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <span>🛡️</span>
+                      <span>Cost-of-Living Buffer (6 Months)</span>
+                    </span>
+                    <span>{formatCurrency(effectiveTarget)}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-snug">
+                    Evaluated against current living expenses & EMIs ({formatCurrency(totalDeductions)}/mo × 6). Automatically re-evaluated as living costs rise.
+                  </p>
+                  {alreadySaved < effectiveTarget && (
+                    <p className="text-[10px] text-amber-400 font-bold">
+                      ⚠️ Current buffer: {formatCurrency(alreadySaved)} ({Math.round((alreadySaved / effectiveTarget) * 100)}%). Needs {formatCurrency(effectiveTarget - alreadySaved)} to restore full safety shield.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {currentGoal.type === 'medical' ? (
                 /* Medical Protection Plan Selector */
@@ -431,7 +525,7 @@ const FinancialSetup = () => {
             className="rounded-xl shadow-lg bg-blue-600 hover:bg-blue-500 text-white font-black text-lg py-4 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 transition-all"
             onClick={handleStartGame}
           >
-            Start Life Simulation 🚀
+            {store.currentDay > 0 ? 'Save Allocations & Resume Simulation ▶' : 'Start Life Simulation 🚀'}
           </Button>
         </div>
       </div>

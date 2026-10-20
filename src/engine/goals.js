@@ -119,7 +119,9 @@ export const getSuggestedSeedGoals = (cityTier) => {
 };
 
 export const inflateGoalTarget = (goal, elapsedYears) => {
-  return goal.originalTarget * Math.pow(1 + goal.inflationRate, elapsedYears);
+  const rate = goal.inflationRate !== undefined && goal.inflationRate !== null ? goal.inflationRate : 0.06;
+  const base = goal.originalTarget || goal.currentTarget || 100000;
+  return Math.round(base * Math.pow(1 + rate, elapsedYears));
 };
 
 export const getSuggestedGoal = (type, cityTier) => {
@@ -173,4 +175,17 @@ export const redistributeBuckets = (goals, removedGoalId, mode) => {
   }
 
   return newBuckets;
+};
+
+export const calculateRequiredEmergencyFund = (state = {}) => {
+  const deductions = (state.fixedDeductions || []).reduce((sum, d) => sum + (d.amount || 0), 0);
+  const loans = (state.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
+  const healthInsurance = state.hasHealthInsurance ? (state.healthInsuranceCost || 0) : 0;
+  const vehicleInsurance = state.hasVehicleInsurance ? (state.vehicleInsuranceCost || 0) : 0;
+  const homeMaintenance = state.homeMaintenanceCost || 0;
+  const carMaintenance = state.carMaintenanceCost || 0;
+
+  const totalMonthlyExpenses = deductions + loans + healthInsurance + vehicleInsurance + homeMaintenance + carMaintenance;
+  const baseMonthly = totalMonthlyExpenses > 0 ? totalMonthlyExpenses : (state.player?.startingSalary ? state.player.startingSalary * 0.5 : 20000);
+  return Math.round(baseMonthly * 6);
 };

@@ -18,13 +18,34 @@ const MilestoneModal = ({ milestone, onAction }) => {
         </p>
         
         <div className="w-full space-y-3">
-          <Button 
-            fullWidth 
-            variant="primary" 
-            onClick={() => onAction('spend')}
-          >
-            Spend in full (Achieve it)
-          </Button>
+          {milestone.isEmergency ? (
+            <Button 
+              fullWidth 
+              variant="primary" 
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+              onClick={() => onAction('redirect')}
+            >
+              Stop Investing & Redirect Surplus to Other Goals 🎯
+            </Button>
+          ) : (
+            <>
+              <Button 
+                fullWidth 
+                variant="primary" 
+                onClick={() => onAction('spend')}
+              >
+                Spend in full (Achieve it)
+              </Button>
+              <Button 
+                fullWidth 
+                variant="primary" 
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                onClick={() => onAction('redirect')}
+              >
+                Stop Investing & Redirect Monthly Surplus 🎯
+              </Button>
+            </>
+          )}
           <Button 
             fullWidth 
             variant="secondary" 

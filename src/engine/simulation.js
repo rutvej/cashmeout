@@ -1,5 +1,5 @@
 import { calculateMonthlyReturns } from './instruments.js';
-import { checkMilestone, inflateGoalTarget } from './goals.js';
+import { checkMilestone, inflateGoalTarget, calculateRequiredEmergencyFund } from './goals.js';
 import { randInt } from '../utils/random.js';
 import { CITY_TIER_SALARY_CAPS } from './careers.js';
 
@@ -211,12 +211,6 @@ export const simulateTick = (state) => {
     const cityTier = state.player?.cityTier || 2;
     const cap = CITY_TIER_SALARY_CAPS[cityTier] || 110000;
 
-    // 1. Inflate goals
-    stateChanges.goalsUpdate = goals.map(g => ({
-      ...g,
-      currentTarget: inflateGoalTarget(g, elapsedYears),
-    }));
-
     // 2. Inflate living expenses & rent by 5.5%
     const updatedDeductions = fixedDeductions.map(d => {
       if (d.type === 'living' || d.type === 'rent') {
@@ -226,6 +220,39 @@ export const simulateTick = (state) => {
       return d;
     });
     stateChanges.fixedDeductionsUpdate = updatedDeductions;
+
+    // Re-evaluate Emergency Fund target (6 months of updated total living outflows)
+    const newEmergencyTarget = calculateRequiredEmergencyFund({
+      ...state,
+      fixedDeductions: updatedDeductions,
+    });
+
+    // 1. Inflate goals & dynamically re-evaluate Emergency Fund
+    stateChanges.goalsUpdate = goals.map(g => {
+      if (g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))) {
+        return {
+          ...g,
+          currentTarget: Math.max(g.currentTarget, newEmergencyTarget),
+          originalTarget: Math.max(g.originalTarget || 0, newEmergencyTarget),
+        };
+      }
+      return {
+        ...g,
+        currentTarget: inflateGoalTarget(g, elapsedYears),
+      };
+    });
+
+    if (state.funds && state.funds.length > 0) {
+      stateChanges.fundsUpdate = (stateChanges.fundsUpdate || state.funds).map(f => {
+        if (f.type === 'emergency' || (f.name && f.name.toLowerCase().includes('emergency'))) {
+          return {
+            ...f,
+            targetAmount: Math.max(f.targetAmount, newEmergencyTarget),
+          };
+        }
+        return f;
+      });
+    }
 
     // 3. Yearly Performance Appraisal / Salary Raise (diminishing returns, capped at City Tier ceiling)!
     const activeJobs = incomes.filter(i => i.type === 'job');
@@ -287,8 +314,17 @@ export const simulateTick = (state) => {
       },
       options: [
         {
-          label: totalHike > 0 ? `Accept Review (Net: +₹${(totalHike - livingIncrease).toLocaleString('en-IN')}/mo)` : `Adjust Budget (+₹${livingIncrease.toLocaleString('en-IN')}/mo cost)`,
-          description: 'Updated automatically in your monthly income and expenses columns.'
+          label: totalHike > 0
+            ? `Accept & Redistribute Surplus to Goals (+₹${(totalHike - livingIncrease).toLocaleString('en-IN')}/mo) 🎯`
+            : `Redesign Goal Investments 🎯`,
+          description: 'Re-distribute your monthly surplus across life goals same as starting setup.',
+          action: 'redesign_goals'
+        },
+        {
+          label: totalHike > 0
+            ? `Accept Review (Keep Current Allocations)`
+            : `Adjust Budget (+₹${livingIncrease.toLocaleString('en-IN')}/mo cost)`,
+          description: 'Apply salary raise and cost adjustment to monthly cashflow without changing goal distributions.'
         }
       ]
     };
@@ -357,11 +393,14 @@ export const simulateTick = (state) => {
       if (!goal.achieved && !goal.sacrificed) {
         const allocatedAmount = (currentPool * (goal.bucketPercent / 100)) + (goal.dedicatedContribution || 0);
         if (checkMilestone(goal, allocatedAmount)) {
+          const isEmergency = goal.type === 'emergency' || (goal.name && goal.name.toLowerCase().includes('emergency'));
           milestoneTriggered = {
             goalId: goal.id,
             goalName: goal.name,
+            goalType: goal.type,
             currentValue: Math.round(allocatedAmount),
             targetValue: Math.round(goal.currentTarget),
+            isEmergency,
           };
           break;
         }

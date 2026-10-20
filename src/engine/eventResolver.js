@@ -40,6 +40,9 @@ export const resolveEvent = (event, playerChoice, state) => {
     }
 
     case 'annual_inflation': {
+      if (playerChoice === 0 || event.options?.[playerChoice]?.action === 'redesign_goals') {
+        changes.triggerRedesign = true;
+      }
       changes.statusMessages.push(`Living costs and rent adjusted upwards to match annual consumer inflation.`);
       break;
     }

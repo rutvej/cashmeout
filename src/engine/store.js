@@ -1119,11 +1119,15 @@ const useGameStore = create((set, get) => ({
             .concat(changes.newIncomes || []);
         }
 
+        if (extraData.redesignGoals || currentEvt?.options?.[choiceIndex]?.action === 'redesign_goals' || changes.triggerRedesign) {
+          newState.screen = 'financialSetup';
+        }
+
         return newState;
       });
 
-      // Resume simulation automatically after resolving expense event!
-      if (!get().deficitInfo && !get().showAllocation && !get().gameOver) {
+      // Resume simulation automatically after resolving expense event (unless navigating to financialSetup)!
+      if (!get().deficitInfo && !get().showAllocation && !get().gameOver && get().screen === 'game') {
         get().startSimulation();
       }
       return;
@@ -1290,6 +1294,10 @@ const useGameStore = create((set, get) => ({
         }
       }
 
+      if (changes.triggerRedesign || extraData.redesignGoals || currentEvt?.options?.[choiceIndex]?.action === 'redesign_goals') {
+        newState.screen = 'financialSetup';
+      }
+
       // Trigger allocation screen only if there are active goals remaining
       const hasActiveGoals = s.goals.some(g => !g.achieved && !g.sacrificed);
       if (changes.triggerAllocation && hasActiveGoals) {
@@ -1299,8 +1307,8 @@ const useGameStore = create((set, get) => ({
       return newState;
     });
 
-    // Resume sim if no allocation needed
-    if (!get().showAllocation) {
+    // Resume sim if no allocation or setup screen needed
+    if (!get().showAllocation && get().screen === 'game') {
       get().startSimulation();
     }
   },
@@ -2121,6 +2129,29 @@ const useGameStore = create((set, get) => ({
       if (!goal) return {};
 
       const newState = { showMilestone: null };
+
+      if (action === 'redirect') {
+        // Goal reached full capacity! Stop future monthly allocations and redirect to other goals
+        newState.goals = s.goals.map(g =>
+          g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0 } : g
+        );
+        newState.goalMonthlyAllocations = {
+          ...(s.goalMonthlyAllocations || {}),
+          [goalId]: 0,
+        };
+        const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
+        newState.buckets = newBuckets;
+        newState.goals = newState.goals.map(g => ({
+          ...g,
+          bucketPercent: g.achieved ? 0 : (newBuckets[g.id] ?? g.bucketPercent),
+        }));
+        newState.screen = 'financialSetup';
+        newState.decisionHistory = [
+          ...s.decisionHistory,
+          { day: s.currentDay, type: 'redirect_goal_surplus', goalId, goalName: goal.name },
+        ];
+        return newState;
+      }
 
       if (action === 'spend') {
         // Goal achieved — deduct from pool (crediting any dedicated contribution already banked)
