@@ -54,7 +54,23 @@ const EventCard = ({ event, onChoice }) => {
   const isBad = event.type === 'bad' || impact.type === 'loss' || impact.type === 'income_loss' || impact.type === 'inflation';
   const isBusiness = impact.type === 'business';
   const isMedical = event.id === 'medical_emergency' || event.id === 'uninsured_illness';
+  const isHouseRepair = event.id === 'home_renovation';
   const isWedding = event.id === 'family_wedding';
+  const isBonus = event.id === 'work_bonus';
+
+  const activeGoals = (store.goals || []).filter(g => !g.achieved && !g.sacrificed);
+  const [selectedBonusGoalId, setSelectedBonusGoalId] = useState('');
+
+  useEffect(() => {
+    if (activeGoals.length > 0 && !selectedBonusGoalId) {
+      setSelectedBonusGoalId(activeGoals[0].id);
+    }
+  }, [activeGoals, selectedBonusGoalId]);
+
+  const selectedGoalObj = activeGoals.find(g => g.id === selectedBonusGoalId) ||
+    (store.funds || []).find(f => f.id === selectedBonusGoalId) ||
+    activeGoals[0];
+  const selectedGoalName = selectedGoalObj ? selectedGoalObj.name : 'Life Goal';
 
   let borderColor = 'border-accent-action';
   let badgeBg = 'bg-blue-50 text-blue-800 border-blue-200';
@@ -77,8 +93,10 @@ const EventCard = ({ event, onChoice }) => {
   const cashRemaining = Math.max(0, windfallAmount - totalAllocated);
 
   const weddingSelectedAmount = Math.max(0, Number(weddingContributionAmount) || 0);
-  const expenseAmt = isWedding ? weddingSelectedAmount : (impact.outOfPocket || impact.amount || 0);
-  const projectedWaterfall = (expenseAmt > 0 && (isMedical || impact.type === 'loss'))
+  const expenseAmt = isWedding
+    ? weddingSelectedAmount
+    : (impact.outOfPocket || impact.fullCost || impact.amount || 0);
+  const projectedWaterfall = (expenseAmt > 0 && (isMedical || isHouseRepair || impact.type === 'loss'))
     ? calculateExpenseWaterfall(expenseAmt, event.id, store)
     : null;
 
@@ -86,6 +104,9 @@ const EventCard = ({ event, onChoice }) => {
     const extraData = { isAuto: false };
     if (isMedical && optInInsurance) {
       extraData.optInHealthInsurance = true;
+    }
+    if (isBonus && choiceIdx === 1) {
+      extraData.targetGoalId = selectedBonusGoalId || (activeGoals[0]?.id || '');
     }
     if (isWedding) {
       extraData.contributionAmount = weddingSelectedAmount;
@@ -313,7 +334,7 @@ const EventCard = ({ event, onChoice }) => {
                 <div className="mt-3 pt-2.5 border-t border-slate-200/80 space-y-1.5">
                   <div className="flex justify-between items-center text-[11px] font-extrabold">
                     <span className="text-slate-800">
-                      {isMedical ? '🏥 Payment Source Waterfall:' : '🛡️ Payment Breakdown:'}
+                      {isMedical ? '🏥 Medical Payment Waterfall:' : isHouseRepair ? '🔨 House Repair Payment Waterfall:' : '🛡️ Payment Breakdown:'}
                     </span>
                     <span className={projectedWaterfall.shortfall > 0 ? 'text-red-600' : 'text-emerald-700'}>
                       {projectedWaterfall.shortfall > 0
@@ -374,8 +395,8 @@ const EventCard = ({ event, onChoice }) => {
                   <p className="text-[10px] text-text-muted leading-tight">
                     {projectedWaterfall.shortfall > 0
                       ? '⚠️ Your funds, liquid savings, and goals cannot cover the total bill. Emergency credit will be required.'
-                      : isMedical
-                      ? '✓ Cascades automatically: Medical Fund → Other Funds → Liquid Savings → Goals.'
+                      : isMedical || isHouseRepair
+                      ? '✓ Deductions cascade: Emergency Fund → Other Reserves → Liquid Savings → Goals.'
                       : '✓ Cascades automatically from your safety reserves.'}
                   </p>
                 </div>
@@ -674,6 +695,43 @@ const EventCard = ({ event, onChoice }) => {
               </div>
             ) : (
               <>
+                {/* Goal Selector for Annual Performance Bonus */}
+                {isBonus && (
+                  <div className="p-2.5 bg-indigo-50/90 rounded-xl border border-indigo-200/90 space-y-1.5 shadow-2xs mb-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                        <span>🎯</span>
+                        <span>Choose Goal to Invest Bonus:</span>
+                      </span>
+                      <span className="text-[10px] font-black text-indigo-700 bg-white px-2 py-0.5 rounded-full border border-indigo-200">
+                        +{formatCurrency(windfallAmount)}
+                      </span>
+                    </div>
+                    <select
+                      value={selectedBonusGoalId || activeGoals[0]?.id || ''}
+                      onChange={(e) => setSelectedBonusGoalId(e.target.value)}
+                      className="w-full p-2 bg-white border border-indigo-300 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
+                      <optgroup label="Life Goals">
+                        {activeGoals.map(g => (
+                          <option key={g.id} value={g.id}>
+                            {g.name} — Target: {formatCurrency(g.currentTarget)}
+                          </option>
+                        ))}
+                      </optgroup>
+                      {store.funds && store.funds.length > 0 && (
+                        <optgroup label="Safety Reserves">
+                          {store.funds.map(f => (
+                            <option key={f.id} value={f.id}>
+                              {f.name} — Balance: {formatCurrency(f.currentAmount || 0)} / {formatCurrency(f.targetAmount)}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                )}
+
                 {event.options?.map((opt, i) => (
                   <Button
                     key={i}
@@ -684,13 +742,15 @@ const EventCard = ({ event, onChoice }) => {
                   >
                     <div className="flex flex-col text-left w-full">
                       <span className="font-bold text-xs sm:text-sm text-text-primary">
-                        {opt.label}
+                        {isBonus && i === 1
+                          ? `Invest Bonus into ${selectedGoalName} (+${formatCurrency(windfallAmount)}) 🎯`
+                          : opt.label}
                       </span>
-                      {opt.description && (
-                        <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
-                          {opt.description}
-                        </span>
-                      )}
+                      <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
+                        {isBonus && i === 1
+                          ? `Allocate ${formatCurrency(windfallAmount)} directly towards achieving ${selectedGoalName}.`
+                          : opt.description}
+                      </span>
                     </div>
                   </Button>
                 ))}
@@ -727,12 +787,14 @@ const EventCard = ({ event, onChoice }) => {
                     {isMedical
                       ? projectedWaterfall && projectedWaterfall.shortfall > 0
                         ? `Acknowledge Bill (Shortfall: ${formatCurrency(projectedWaterfall.shortfall)}) →`
-                        : `Pay Medical Bill (${formatCurrency(expenseAmt)}) via Reserves & Cash →`
+                        : `Pay Medical Bill (${formatCurrency(expenseAmt)}) via Emergency Fund & Reserves →`
+                      : isHouseRepair
+                      ? `Pay House Repair (${formatCurrency(expenseAmt)}) via Emergency Fund →`
                       : 'Acknowledge & Continue'}
                   </span>
                   <span className="text-[11px] text-text-muted mt-0.5 font-normal leading-snug">
-                    {isMedical
-                      ? 'Deductions cascade automatically: Medical Fund → Other Funds → Liquid Savings → Goals.'
+                    {isMedical || isHouseRepair
+                      ? 'Deductions cascade automatically: Emergency Fund → Other Reserves → Liquid Savings → Goals.'
                       : 'Proceed to next simulation day.'}
                   </span>
                 </div>

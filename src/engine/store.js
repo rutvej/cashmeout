@@ -52,14 +52,71 @@ export function normalizeInstruments(instruments) {
 export function calculateExpenseWaterfall(amount, eventId, state = {}) {
   let remaining = Math.max(0, Math.round(amount));
   const isMedical = eventId === 'medical_emergency' || eventId === 'uninsured_illness';
-  const targetTypes = isMedical
-    ? ['medical', 'emergency', 'general']
-    : ['emergency', 'general', 'medical'];
+  const isHouseRepair = eventId === 'home_renovation';
 
   const updatedFunds = (state.funds || []).map(f => ({ ...f, currentAmount: f.currentAmount || 0 }));
   const fundDeltas = [];
+  const updatedGoals = (state.goals || []).map(g => ({ ...g }));
+  const goalDeltas = [];
+  let absorbedFromSavings = 0;
+  let absorbedFromInvestments = 0;
 
-  // 1. Primary matching safety funds (Medical fund first for medical bills, Emergency buffer for others)
+  // 1. Mandatory Emergency Fund priority for Medical Emergency bills and House Repairs
+  if (isMedical || isHouseRepair) {
+    // 1a. Primary: Active Emergency Fund in Safety Funds (state.funds)
+    const emgFunds = updatedFunds.filter(f =>
+      (f.type === 'emergency' || (f.name && f.name.toLowerCase().includes('emergency'))) && f.currentAmount > 0
+    );
+    for (const fund of emgFunds) {
+      if (remaining <= 0) break;
+      const take = Math.min(remaining, fund.currentAmount);
+      fund.currentAmount -= take;
+      remaining -= take;
+      fundDeltas.push({ fundId: fund.id, fundName: fund.name, icon: fund.icon || '🛡️', absorbed: take, type: fund.type });
+    }
+
+    // 1b. Emergency Fund Goal dedicated contributions (state.goals)
+    if (remaining > 0) {
+      const emgGoals = updatedGoals.filter(g =>
+        (g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))) && (g.dedicatedContribution || 0) > 0
+      );
+      for (const g of emgGoals) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, g.dedicatedContribution);
+        g.dedicatedContribution -= take;
+        remaining -= take;
+        goalDeltas.push({ goalId: g.id, goalName: g.name, icon: g.icon || '🛡️', absorbed: take, source: 'emergency_dedicated' });
+      }
+    }
+
+    // 1c. Emergency Fund Goal accumulated bucket reserve in liquid pool
+    if (remaining > 0) {
+      const emgGoal = updatedGoals.find(g =>
+        (g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency')))
+      );
+      if (emgGoal) {
+        const emgBucketPct = state.buckets?.[emgGoal.id] !== undefined
+          ? state.buckets[emgGoal.id]
+          : (emgGoal.bucketPercent || 0);
+        const pool = state.pool || 0;
+        const efBucketCapital = Math.round((emgBucketPct / 100) * pool);
+        if (efBucketCapital > 0) {
+          const take = Math.min(remaining, efBucketCapital);
+          absorbedFromSavings += take;
+          remaining -= take;
+          goalDeltas.push({ goalId: emgGoal.id, goalName: emgGoal.name, icon: emgGoal.icon || '🛡️', absorbed: take, source: 'emergency_bucket' });
+        }
+      }
+    }
+  }
+
+  // 2. Primary matching safety funds (Medical fund for remaining medical bill, etc.)
+  const targetTypes = isMedical
+    ? ['medical', 'general']
+    : isHouseRepair
+    ? ['general']
+    : ['emergency', 'general', 'medical'];
+
   for (const t of targetTypes) {
     if (remaining <= 0) break;
     const matching = updatedFunds.filter(f => f.type === t && f.currentAmount > 0);
@@ -72,11 +129,11 @@ export function calculateExpenseWaterfall(amount, eventId, state = {}) {
     }
   }
 
-  // 2. Secondary other funds (if not enough in primary fund, draw from other active funds)
+  // 3. Secondary other safety funds (if not enough in primary fund, draw from other active funds)
   if (remaining > 0) {
     for (const fund of updatedFunds) {
       if (remaining <= 0) break;
-      if (!targetTypes.includes(fund.type) && fund.currentAmount > 0) {
+      if (fund.currentAmount > 0) {
         const take = Math.min(remaining, fund.currentAmount);
         fund.currentAmount -= take;
         remaining -= take;
@@ -86,21 +143,19 @@ export function calculateExpenseWaterfall(amount, eventId, state = {}) {
   }
   const absorbedFromFunds = fundDeltas.reduce((s, d) => s + d.absorbed, 0);
 
-  // 3. Liquid savings buffer in cash pool
+  // 4. Liquid savings buffer in cash pool
   const pool = state.pool || 0;
   const savingsPercent = state.instruments?.savings || 0;
-  const liquidSavings = Math.round((savingsPercent / 100) * pool);
-  let absorbedFromSavings = 0;
-  if (remaining > 0 && liquidSavings > 0) {
-    absorbedFromSavings = Math.min(remaining, liquidSavings);
-    remaining -= absorbedFromSavings;
+  const totalLiquidSavings = Math.round((savingsPercent / 100) * pool);
+  const remainingLiquidSavings = Math.max(0, totalLiquidSavings - absorbedFromSavings);
+  if (remaining > 0 && remainingLiquidSavings > 0) {
+    const take = Math.min(remaining, remainingLiquidSavings);
+    absorbedFromSavings += take;
+    remaining -= take;
   }
 
-  // 4. Goals & Goal Reserves
-  const updatedGoals = (state.goals || []).map(g => ({ ...g }));
-  const goalDeltas = [];
-
-  // 4a. Dedicated goal contributions (lump sum windfalls stored in goals)
+  // 5. Goals & Goal Reserves
+  // 5a. Dedicated goal contributions (lump sum windfalls stored in other goals)
   if (remaining > 0) {
     for (const g of updatedGoals) {
       if (remaining <= 0) break;
@@ -113,9 +168,8 @@ export function calculateExpenseWaterfall(amount, eventId, state = {}) {
     }
   }
 
-  // 4b. Investment capital backing goal buckets (MF, stocks, gold, fd)
-  const remainingInvestments = Math.max(0, pool - liquidSavings);
-  let absorbedFromInvestments = 0;
+  // 5b. Investment capital backing goal buckets (MF, stocks, gold, fd)
+  const remainingInvestments = Math.max(0, pool - absorbedFromSavings);
   if (remaining > 0 && remainingInvestments > 0) {
     absorbedFromInvestments = Math.min(remaining, remainingInvestments);
     remaining -= absorbedFromInvestments;
@@ -568,7 +622,7 @@ const useGameStore = create((set, get) => ({
       return g;
     });
 
-    const cashRemaining = Math.max(0, total - totalToFunds);
+    const cashRemaining = Math.max(0, total - totalToFunds - totalToGoals);
     const newPool = s.pool + cashRemaining;
     const finalInstruments = newInstruments ? normalizeInstruments(newInstruments) : s.instruments;
 
@@ -1080,6 +1134,28 @@ const useGameStore = create((set, get) => ({
     const newPool = Math.max(0, state.pool + poolDelta);
     const newInstruments = changes.newInstruments || { ...state.instruments };
 
+    let updatedGoalsState = state.goals ? state.goals.map(g => ({ ...g })) : [];
+    if (changes.goalDeposits) {
+      updatedGoalsState = updatedGoalsState.map(g => {
+        const dep = changes.goalDeposits[g.id];
+        if (dep && dep > 0) {
+          return { ...g, dedicatedContribution: (g.dedicatedContribution || 0) + dep };
+        }
+        return g;
+      });
+    }
+
+    let resolvedFunds = updatedFunds;
+    if (changes.fundDeposits) {
+      resolvedFunds = resolvedFunds.map(f => {
+        const dep = changes.fundDeposits[f.id];
+        if (dep && dep > 0) {
+          return { ...f, currentAmount: (f.currentAmount || 0) + dep };
+        }
+        return f;
+      });
+    }
+
     set(s => {
       const currentEvt = s.currentEvent;
       const choiceLabel = currentEvt?.options?.[choiceIndex]?.label || 'Acknowledged';
@@ -1091,7 +1167,8 @@ const useGameStore = create((set, get) => ({
       const newState = {
         pool: newPool,
         instruments: normalizeInstruments(newInstruments),
-        funds: updatedFunds,
+        funds: resolvedFunds,
+        goals: updatedGoalsState,
         currentEvent: null,
         loans: finalLoans,
         eventHistory: [
@@ -1192,6 +1269,25 @@ const useGameStore = create((set, get) => ({
       // Course raise used (one-time)
       if (changes.courseRaiseUsed) {
         newState.courseRaiseUsed = true;
+      }
+
+      // Check if any goal reached its target through dedicated deposits
+      if (changes.goalDeposits) {
+        for (const g of updatedGoalsState) {
+          if (!g.achieved && !g.sacrificed && changes.goalDeposits[g.id]) {
+            const currentPool = newPool;
+            const allocatedAmount = (currentPool * ((s.buckets?.[g.id] || g.bucketPercent || 0) / 100)) + (g.dedicatedContribution || 0);
+            if (allocatedAmount >= g.currentTarget) {
+              newState.showMilestone = {
+                goalId: g.id,
+                goalName: g.name,
+                currentValue: Math.round(allocatedAmount),
+                targetValue: Math.round(g.currentTarget),
+              };
+              break;
+            }
+          }
+        }
       }
 
       // Trigger allocation screen only if there are active goals remaining
@@ -2027,10 +2123,12 @@ const useGameStore = create((set, get) => ({
       const newState = { showMilestone: null };
 
       if (action === 'spend') {
-        // Goal achieved — deduct from pool
-        newState.pool = Math.max(0, s.pool - goal.currentTarget);
+        // Goal achieved — deduct from pool (crediting any dedicated contribution already banked)
+        const dedicated = goal.dedicatedContribution || 0;
+        const fromPool = Math.max(0, goal.currentTarget - dedicated);
+        newState.pool = Math.max(0, s.pool - fromPool);
         newState.goals = s.goals.map(g =>
-          g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0 } : g
+          g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0, dedicatedContribution: 0 } : g
         );
         // Redistribute the freed bucket percentage
         const newBuckets = redistributeBuckets(s.goals, goalId, 'redistribute');
@@ -2847,8 +2945,8 @@ function buildEventOptions(event, state) {
         description: 'Deposit 100% of corporate bonus into liquid cash reserves.'
       });
       options.push({
-        label: `Auto-Invest into Mutual Funds (SIP Boost) 📊`,
-        description: 'Channel bonus directly into diversified equity mutual funds.'
+        label: `Invest into a Life Goal 🎯`,
+        description: 'Channel bonus directly towards achieving one of your life goals.'
       });
       options.push({
         label: `Celebration & Dining (Splurge 40%, Save 60%) 🍽️`,
@@ -2927,7 +3025,7 @@ function buildEventOptions(event, state) {
       const homeValue = (state.homesOwned && state.homesOwned[0]?.value) || 3000000;
       const fullCost = randInt(80000, Math.min(300000, Math.round(homeValue * 0.04)));
       const patchCost = randInt(20000, 55000);
-      financialImpact = { type: 'loss', amount: fullCost };
+      financialImpact = { type: 'loss', amount: fullCost, fullCost, patchCost };
       options.push({
         label: `Full Renovation (₹${fullCost.toLocaleString('en-IN')})`,
         description: 'Complete fix. Home value appreciates by ~60% of cost.',

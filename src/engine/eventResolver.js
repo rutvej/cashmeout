@@ -397,15 +397,20 @@ export const resolveEvent = (event, playerChoice, state) => {
         changes.poolDelta = bonus;
         changes.statusMessages.push(`Corporate performance bonus: +₹${bonus.toLocaleString('en-IN')} banked to liquid cash reserves!`);
       } else if (playerChoice === 1) {
-        changes.poolDelta = bonus;
-        const currentPool = (state.pool || 0) + bonus;
-        const addPct = Math.min(25, Math.round((bonus / Math.max(1, currentPool)) * 100));
-        changes.newInstruments = {
-          ...state.instruments,
-          mf: Math.min(75, (state.instruments.mf || 0) + addPct),
-          savings: Math.max(5, (state.instruments.savings || 100) - addPct),
-        };
-        changes.statusMessages.push(`Invested ₹${bonus.toLocaleString('en-IN')} performance bonus directly into Mutual Funds!`);
+        const targetGoalId = event.targetGoalId || event.selectedBonusGoalId || event.selectedGoalId;
+        const targetFund = (state.funds || []).find(f => f.id === targetGoalId);
+        const targetGoal = (state.goals || []).find(g => g.id === targetGoalId) || (state.goals || []).find(g => !g.achieved && !g.sacrificed);
+
+        if (targetFund) {
+          changes.fundDeposits = { [targetFund.id]: bonus };
+          changes.statusMessages.push(`Invested ₹${bonus.toLocaleString('en-IN')} performance bonus directly into ${targetFund.name}!`);
+        } else if (targetGoal) {
+          changes.goalDeposits = { [targetGoal.id]: bonus };
+          changes.statusMessages.push(`Invested ₹${bonus.toLocaleString('en-IN')} performance bonus directly towards ${targetGoal.name}!`);
+        } else {
+          changes.poolDelta = bonus;
+          changes.statusMessages.push(`Invested ₹${bonus.toLocaleString('en-IN')} performance bonus into your liquid reserves.`);
+        }
       } else {
         const savedPart = Math.round(bonus * 0.6);
         changes.poolDelta = savedPart;
@@ -417,13 +422,13 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'home_renovation': {
       if (playerChoice === 0) {
         const homeValue = (state.homesOwned && state.homesOwned[0]?.value) || 3000000;
-        const cost = randInt(80000, Math.min(300000, Math.round(homeValue * 0.04)));
+        const cost = impact.fullCost || impact.amount || randInt(80000, Math.min(300000, Math.round(homeValue * 0.04)));
         changes.poolDelta = -cost;
         changes.homeValueIncrease = Math.round(cost * 0.6);
         changes.homeNeedsRenovation = false;
         changes.statusMessages.push(`Full renovation complete! Paid ₹${cost.toLocaleString('en-IN')}. Home value appreciated by ₹${Math.round(cost * 0.6).toLocaleString('en-IN')}.`);
       } else {
-        const cost = randInt(20000, 55000);
+        const cost = impact.patchCost || randInt(20000, 55000);
         changes.poolDelta = -cost;
         changes.homeNeedsRenovation = false;
         changes.statusMessages.push(`Quick patch done for ₹${cost.toLocaleString('en-IN')}. A more thorough renovation will be needed soon.`);
