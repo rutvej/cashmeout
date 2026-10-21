@@ -29,6 +29,11 @@ const Landing = () => {
 
   const handleStart = () => {
     if (!selectedTier || !selectedField) return;
+    try {
+      localStorage.removeItem('cashflow-game-save');
+    } catch (e) {
+      // ignore
+    }
     startGame(seedInput.trim(), selectedTier, selectedField, retirementAge);
     setScreen('spawn');
   };

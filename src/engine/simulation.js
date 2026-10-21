@@ -461,7 +461,7 @@ export const simulateTick = (state) => {
     }
   }
 
-  // Broke check
+  // Broke check - only evaluated after the first month (Day > 30)
   const projectedPool = pool + (stateChanges.poolDelta || 0);
   
   const monthlySurplus = incomes.reduce((sum, inc) => sum + inc.amount, 0)
@@ -478,11 +478,19 @@ export const simulateTick = (state) => {
     || (state.homesOwned || []).length > 0
     || state.hasActiveBusiness;
 
-  if (projectedPool <= 0 && monthlySurplus <= 0 && !hasAssetsToSell) {
+  const hasFunds = (state.funds || []).some(f => (f.currentAmount || 0) > 0);
+  const hasGoalSavings = (state.goals || []).some(g => (g.accumulatedAmount || 0) > 0 || (g.dedicatedContribution || 0) > 0);
+  const hasInvestments = (instruments && ((instruments.stocks || 0) + (instruments.mf || 0) + (instruments.gold || 0) + (instruments.fd || 0)) > 0) && pool > 0;
+
+  if (nextDay > 30 && projectedPool <= 0 && monthlySurplus <= 0 && !hasAssetsToSell && !hasFunds && !hasGoalSavings && !hasInvestments) {
     stateChanges.gameOverReason = 'broke';
   }
 
-  if (nextDay >= state.totalDays) {
+  const effectiveTotalDays = (typeof state.totalDays === 'number' && state.totalDays > 0)
+    ? state.totalDays
+    : Math.max(365 * 10, ((state.retirementAge || 50) - (state.player?.characterAge || 22)) * 365 || 7300);
+
+  if (nextDay >= effectiveTotalDays) {
     stateChanges.gameOverReason = 'time_up';
   }
 

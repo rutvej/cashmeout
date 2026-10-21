@@ -346,7 +346,7 @@ const useGameStore = create((set, get) => ({
       player: p,
       retirementAge: finalRetirementAge,
       cityName: p.cityName || '',
-      totalDays: (finalRetirementAge - (p.characterAge || 22)) * 365,
+      totalDays: Math.max(365 * 10, ((finalRetirementAge || 50) - (p.characterAge || 22)) * 365),
       gameSeed: seed,
       pool: p.startingSavings,
       goalInstruments: {},

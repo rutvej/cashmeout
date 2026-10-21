@@ -40,6 +40,10 @@ const MainGame = () => {
     if (store.pool !== prevPool) {
       setPoolDelta(store.pool - prevPool);
       setPrevPool(store.pool);
+      const timer = setTimeout(() => {
+        setPoolDelta(0);
+      }, 2000);
+      return () => clearTimeout(timer);
     }
   }, [store.pool, prevPool]);
 
