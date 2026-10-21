@@ -72,6 +72,11 @@ export const getEligibleEvents = (state, eventDeck) => {
                daysSince('downsizing') > 1825 && 
                state.currentDay > 365 &&
                state.incomes.some(i => i.type === 'job');
+      case 'new_job_offer':
+      case 'senior_job_offer':
+      case 'freelance_gig':
+        // If player is unemployed, periodically offer corporate re-entry or gig
+        return !state.incomes.some(i => i.type === 'job') && daysSince('Offer') > 60;
       default:
         return false;
     }
@@ -177,9 +182,55 @@ export const simulateTick = (state) => {
       stateChanges.goalsUpdate = updatedGoals;
     }
 
-    const poolAfterCashflow = Math.max(0, pool + surplusForPool);
-    const poolAfterReturns = calculateMonthlyReturns(instruments, poolAfterCashflow, currentCycle);
-    const monthlyInvestmentReturns = Math.max(0, poolAfterReturns - poolAfterCashflow);
+    // If running a monthly deficit (e.g. after job loss), cover expenses from Emergency Fund first!
+    let emergencyAbsorbed = 0;
+    if (monthlySurplus < 0) {
+      let needed = Math.abs(monthlySurplus);
+
+      // 1. Draw from emergency goal in state.goals
+      const currentGoalsList = (stateChanges.goalsUpdate || goals || []).map(g => ({ ...g }));
+      const emgGoalIdx = currentGoalsList.findIndex(g =>
+        g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))
+      );
+      if (emgGoalIdx !== -1) {
+        const eg = currentGoalsList[emgGoalIdx];
+        const currentBal = eg.accumulatedAmount !== undefined ? eg.accumulatedAmount : (eg.dedicatedContribution || 0);
+        if (currentBal > 0) {
+          const take = Math.min(needed, currentBal);
+          const newBal = currentBal - take;
+          needed -= take;
+          emergencyAbsorbed += take;
+          currentGoalsList[emgGoalIdx] = {
+            ...eg,
+            accumulatedAmount: newBal,
+            dedicatedContribution: newBal,
+          };
+          stateChanges.goalsUpdate = currentGoalsList;
+        }
+      }
+
+      // 2. Draw from emergency safety fund in state.funds (if any)
+      if (needed > 0 && state.funds && state.funds.length > 0) {
+        const updatedFunds = (stateChanges.fundsUpdate || state.funds).map(f => {
+          if ((f.type === 'emergency' || (f.name && f.name.toLowerCase().includes('emergency'))) && (f.currentAmount || 0) > 0 && needed > 0) {
+            const take = Math.min(needed, f.currentAmount);
+            needed -= take;
+            emergencyAbsorbed += take;
+            return { ...f, currentAmount: f.currentAmount - take };
+          }
+          return f;
+        });
+        stateChanges.fundsUpdate = updatedFunds;
+      }
+
+      stateChanges.emergencyAbsorbed = emergencyAbsorbed;
+      // surplusForPool only contains unabsorbed deficit after emergency fund was applied
+      surplusForPool = -needed;
+    }
+
+    const poolAfterCashflow = pool + surplusForPool;
+    const poolAfterReturns = poolAfterCashflow > 0 ? calculateMonthlyReturns(instruments, poolAfterCashflow, currentCycle) : poolAfterCashflow;
+    const monthlyInvestmentReturns = Math.max(0, poolAfterReturns - Math.max(0, poolAfterCashflow));
     
     stateChanges.poolDelta = poolAfterReturns - pool;
     stateChanges.monthlySurplus = monthlySurplus;

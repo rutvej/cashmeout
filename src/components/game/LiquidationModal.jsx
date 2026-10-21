@@ -52,7 +52,15 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
     + (store.carMaintenanceCost || 0);
   const currentSurplus = totalIncome - totalDeductions;
 
-  const isCompletelyInsolvent = !hasPhysicalAssets && !hasInvestments && !canAffordLoan;
+  const availableGoals = (store.goals || []).filter(g => {
+    const amt = g.accumulatedAmount !== undefined ? g.accumulatedAmount : (g.dedicatedContribution || 0);
+    return amt > 0;
+  });
+
+  const availableFunds = (store.funds || []).filter(f => (f.currentAmount || 0) > 0);
+  const hasGoalSavings = availableGoals.length > 0 || availableFunds.length > 0;
+
+  const isCompletelyInsolvent = !hasPhysicalAssets && !hasInvestments && !canAffordLoan && !hasGoalSavings;
 
   return (
     <BottomSheet isOpen={!!deficitInfo} title="Financial Crisis: Shortfall Resolution">
@@ -69,9 +77,66 @@ const LiquidationModal = ({ deficitInfo, onResolve }) => {
             Your liquid cash cannot cover <strong>{reason}</strong>. Shortfall due: <strong className="text-red-700 font-extrabold text-sm">{formatCurrency(shortfall)}</strong>.
           </p>
           <span className="text-[10px] text-red-700 block mt-1.5 font-medium">
-            Choose an asset to liquidate or apply for an emergency bank facility to avoid insolvency:
+            Choose an asset or savings fund to draw from, or apply for an emergency bank facility:
           </span>
         </div>
+
+        {/* 0. Available Savings & Goal Reserves */}
+        {hasGoalSavings && (
+          <div className="space-y-2">
+            <span className="text-[11px] font-extrabold text-text-muted uppercase tracking-wider block">
+              Draw from Goal Savings & Other Reserves
+            </span>
+            {availableGoals.map(goal => {
+              const bal = goal.accumulatedAmount !== undefined ? goal.accumulatedAmount : (goal.dedicatedContribution || 0);
+              const drawAmt = Math.min(shortfall, bal);
+              return (
+                <div key={goal.id} className="p-3 bg-white rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
+                  <div>
+                    <span className="text-xs font-bold text-text-primary block">
+                      {goal.icon || '🎯'} {goal.name}
+                    </span>
+                    <span className="text-[10px] text-indigo-700 font-semibold">
+                      Accumulated: {formatCurrency(bal)}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 shrink-0 font-bold"
+                    onClick={() => onResolve({ action: 'draw_goal', goalId: goal.id, amount: drawAmt })}
+                  >
+                    Draw {formatCurrency(drawAmt)}
+                  </Button>
+                </div>
+              );
+            })}
+            {availableFunds.map(fund => {
+              const bal = fund.currentAmount || 0;
+              const drawAmt = Math.min(shortfall, bal);
+              return (
+                <div key={fund.id} className="p-3 bg-white rounded-xl border border-indigo-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 shadow-xs">
+                  <div>
+                    <span className="text-xs font-bold text-text-primary block">
+                      {fund.icon || '🛡️'} {fund.name}
+                    </span>
+                    <span className="text-[10px] text-indigo-700 font-semibold">
+                      Balance: {formatCurrency(bal)}
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="w-full sm:w-auto text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border-indigo-200 shrink-0 font-bold"
+                    onClick={() => onResolve({ action: 'draw_fund', fundId: fund.id, amount: drawAmt })}
+                  >
+                    Draw {formatCurrency(drawAmt)}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* 1. Physical Assets (Cars, Real Estate, Business) */}
         {hasPhysicalAssets && (

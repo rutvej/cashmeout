@@ -17,6 +17,8 @@ import EventCard from '../game/EventCard';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
 import AllocationSheet from '../game/AllocationSheet';
+import JobMarketModal from '../game/JobMarketModal';
+import RefillEmergencyModal from '../game/RefillEmergencyModal';
 import { formatCurrency } from '../../utils/format';
 
 const GOAL_COLORS = {
@@ -35,6 +37,7 @@ const MainGame = () => {
   const [poolDelta, setPoolDelta] = useState(0);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' | 'ledger' | 'both'
   const [chartType, setChartType] = useState('bar'); // 'bar' | 'trend'
+  const [showJobMarket, setShowJobMarket] = useState(false);
 
   useEffect(() => {
     if (store.pool !== prevPool) {
@@ -475,9 +478,9 @@ const MainGame = () => {
           </div>
       </div>
 
-      {/* Sticky Bottom Goal Redesign Action Bar */}
+      {/* Sticky Bottom Goal Redesign & Career Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 shadow-2xl">
-        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-2.5">
           <div className="flex flex-col min-w-0">
             <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">
               Active Monthly Cashflow
@@ -486,21 +489,74 @@ const MainGame = () => {
               {surplus >= 0 ? '+' : ''}{formatCurrency(surplus)}/mo surplus
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              store.pauseSimulation();
-              useGameStore.setState({ screen: 'financialSetup' });
-            }}
-            className="py-2.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center space-x-1.5 shrink-0"
-          >
-            <span>🎯</span>
-            <span>Readjust Goal Investments</span>
-          </button>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Career / Reapply for Job button */}
+            {!(store.incomes || []).some(i => i.type === 'job') ? (
+              <button
+                type="button"
+                onClick={() => {
+                  store.pauseSimulation();
+                  setShowJobMarket(true);
+                }}
+                className="py-2 px-3 bg-gradient-to-r from-amber-500 to-emerald-500 hover:from-amber-400 hover:to-emerald-400 active:scale-95 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-amber-500/25 animate-pulse transition flex items-center space-x-1.5 shrink-0 border border-amber-300"
+              >
+                <span>💼</span>
+                <span>Apply for Job</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  store.pauseSimulation();
+                  setShowJobMarket(true);
+                }}
+                className="py-2 px-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition flex items-center space-x-1 shrink-0"
+              >
+                <span>💼</span>
+                <span>Job Market</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                store.pauseSimulation();
+                useGameStore.setState({ screen: 'financialSetup' });
+              }}
+              className="py-2 px-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center space-x-1.5 shrink-0"
+            >
+              <span>🎯</span>
+              <span>Readjust Goals</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Modals with Strict Priority Hierarchy */}
+      <JobMarketModal
+        isOpen={showJobMarket}
+        onClose={() => {
+          setShowJobMarket(false);
+          if (!store.currentEvent && !store.deficitInfo && !store.showMilestone && !store.showAllocation && !store.refillEmergencyPrompt) {
+            store.startSimulation();
+          }
+        }}
+      />
+
+      <RefillEmergencyModal
+        prompt={store.refillEmergencyPrompt}
+        onDismiss={() => {
+          store.dismissRefillPrompt();
+          store.startSimulation();
+        }}
+        onRefill={() => {
+          store.dismissRefillPrompt();
+          store.pauseSimulation();
+          useGameStore.setState({ screen: 'financialSetup' });
+        }}
+      />
+
       {activeModal === 'liquidation' && (
         <LiquidationModal deficitInfo={store.deficitInfo} onResolve={store.resolveLiquidation} />
       )}

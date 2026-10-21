@@ -21,6 +21,9 @@ export const ALLOWED_EVENT_IDS = new Set([
   'marriage',
   'annual_tax',
   'annual_inflation',
+  'new_job_offer',
+  'senior_job_offer',
+  'freelance_gig',
 ]);
 
 export function normalizeInstruments(instruments) {
@@ -261,6 +264,7 @@ const useGameStore = create((set, get) => ({
   showMilestone: null,
   activeTab: null,
   deficitInfo: null,
+  refillEmergencyPrompt: null,
   calendarQueue: null,
   showMonthlyLedger: false,
   financialChanged: true,
@@ -413,6 +417,7 @@ const useGameStore = create((set, get) => ({
   clearAutoToast: () => set({ recentAutoToast: null }),
 
   setScreen: (screen) => set({ screen }),
+  dismissRefillPrompt: () => set({ refillEmergencyPrompt: null }),
 
   setGoals: (goals) => {
     set(s => {
@@ -780,13 +785,15 @@ const useGameStore = create((set, get) => ({
         // Check if player has any way out:
         const hasPhysicalAssets = (s.carsOwned || []).length > 0 || (s.homesOwned || []).length > 0 || s.hasActiveBusiness;
         const hasInvestments = ((s.instruments?.stocks || 0) + (s.instruments?.mf || 0) + (s.instruments?.gold || 0) + (s.instruments?.fd || 0)) > 0 && s.pool > 0;
+        const hasGoalSavings = (changes.goalsUpdate || s.goals || []).some(g => (g.accumulatedAmount || 0) > 0 || (g.dedicatedContribution || 0) > 0);
+        const hasSafetyFunds = (changes.fundsUpdate || s.funds || []).some(f => (f.currentAmount || 0) > 0);
 
         // Estimate EMI for this deficit
         const mRate = 0.12 / 12;
         const estEMI = Math.max(500, Math.round((deficit * mRate * Math.pow(1 + mRate, 24)) / (Math.pow(1 + mRate, 24) - 1)));
         const canLoan = get().canAffordLoan(estEMI);
 
-        if (!hasPhysicalAssets && !hasInvestments && !canLoan) {
+        if (!hasPhysicalAssets && !hasInvestments && !hasGoalSavings && !hasSafetyFunds && !canLoan) {
           newState.gameOver = true;
           newState.gameOverReason = 'broke';
           try {
@@ -798,7 +805,7 @@ const useGameStore = create((set, get) => ({
         } else {
           newState.deficitInfo = {
             shortfall: deficit,
-            reason: 'Monthly expenses exceed cash reserves',
+            reason: 'Monthly expenses exceed cash reserves and emergency buffer',
           };
         }
       } else if (changes.monthlySurplus && changes.monthlySurplus > 0) {
@@ -830,9 +837,22 @@ const useGameStore = create((set, get) => ({
         newState.instruments = normalizeInstruments(s.instruments);
       }
 
-      // Apply goals update (inflation)
+      // Apply goals update (inflation / emergency fund absorption)
       if (changes.goalsUpdate) {
         newState.goals = changes.goalsUpdate;
+      }
+
+      // Record emergency fund absorption in live ledger
+      if (changes.emergencyAbsorbed && changes.emergencyAbsorbed > 0) {
+        const efEntry = {
+          day: changes.currentDay,
+          eventName: 'Emergency Fund Protection',
+          icon: '🛡️',
+          choice: `Withdrew ₹${changes.emergencyAbsorbed.toLocaleString('en-IN')}`,
+          poolDelta: 0,
+          outcome: `Withdrew ₹${changes.emergencyAbsorbed.toLocaleString('en-IN')} directly from Emergency Fund to cover living expenses during career transition.`,
+        };
+        newState.eventHistory = [efEntry, ...(newState.eventHistory || s.eventHistory || [])];
       }
 
       if (changes.fixedDeductionsUpdate) {
@@ -1338,11 +1358,73 @@ const useGameStore = create((set, get) => ({
 
   // --- Investment Liquidation Resolution ---
 
-  resolveLiquidation: ({ action, assetKey, amount }) => {
+  resolveLiquidation: ({ action, assetKey, amount, goalId, fundId }) => {
     const state = get();
     const currentShortfall = state.deficitInfo?.shortfall || amount || 0;
 
-    if (action === 'liquidate') {
+    if (action === 'draw_goal') {
+      const targetGoal = (state.goals || []).find(g => g.id === goalId);
+      if (!targetGoal) return false;
+      const available = targetGoal.accumulatedAmount !== undefined ? targetGoal.accumulatedAmount : (targetGoal.dedicatedContribution || 0);
+      const paidAmount = Math.min(amount || available, currentShortfall, available);
+      if (paidAmount <= 0) return false;
+
+      const remainingShortfall = currentShortfall - paidAmount;
+      const newAccumulated = available - paidAmount;
+
+      set(s => ({
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        goals: (s.goals || []).map(g => g.id === goalId ? { ...g, accumulatedAmount: newAccumulated, dedicatedContribution: newAccumulated } : g),
+        financialChanged: true,
+        eventHistory: [
+          {
+            day: s.currentDay,
+            eventName: 'Living Expense Fund Draw',
+            icon: '🛡️',
+            choice: `Drew ₹${paidAmount.toLocaleString('en-IN')} from ${targetGoal.name}`,
+            poolDelta: 0,
+            outcome: `Used ₹${paidAmount.toLocaleString('en-IN')} from ${targetGoal.name} reserves to pay living expenses.`,
+          },
+          ...s.eventHistory,
+        ]
+      }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
+      return true;
+    } else if (action === 'draw_fund') {
+      const targetFund = (state.funds || []).find(f => f.id === fundId);
+      if (!targetFund) return false;
+      const available = targetFund.currentAmount || 0;
+      const paidAmount = Math.min(amount || available, currentShortfall, available);
+      if (paidAmount <= 0) return false;
+
+      const remainingShortfall = currentShortfall - paidAmount;
+      const newAmount = available - paidAmount;
+
+      set(s => ({
+        deficitInfo: remainingShortfall > 0 ? { ...s.deficitInfo, shortfall: remainingShortfall } : null,
+        funds: (s.funds || []).map(f => f.id === fundId ? { ...f, currentAmount: newAmount } : f),
+        financialChanged: true,
+        eventHistory: [
+          {
+            day: s.currentDay,
+            eventName: 'Living Expense Safety Fund Draw',
+            icon: '🛡️',
+            choice: `Drew ₹${paidAmount.toLocaleString('en-IN')} from ${targetFund.name}`,
+            poolDelta: 0,
+            outcome: `Used ₹${paidAmount.toLocaleString('en-IN')} from ${targetFund.name} to cover monthly living expenses.`,
+          },
+          ...s.eventHistory,
+        ]
+      }));
+
+      if (remainingShortfall <= 0) {
+        get().startSimulation();
+      }
+      return true;
+    } else if (action === 'liquidate') {
       const assetPercent = state.instruments[assetKey] || 0;
       const freedPercent = Math.min(assetPercent, Math.max(1, Math.round((amount / Math.max(1, state.pool)) * 100)));
       
@@ -1512,6 +1594,7 @@ const useGameStore = create((set, get) => ({
 
       set(s => ({
         deficitInfo: null,
+  refillEmergencyPrompt: null,
         instruments: normalizeInstruments(s.instruments),
         loans: [...s.loans, newLoan],
         eventHistory: [
@@ -1537,6 +1620,7 @@ const useGameStore = create((set, get) => ({
       }
       set({
         deficitInfo: null,
+  refillEmergencyPrompt: null,
         gameOver: true,
         gameOverReason: 'broke',
         simRunning: false,
@@ -1783,8 +1867,8 @@ const useGameStore = create((set, get) => ({
     const oldSalary = currentJob ? currentJob.amount : 0;
     const cooldown = getJobSwitchCooldown(oldSalary);
 
-    // Dynamic Cooldown: increases with seniority
-    if (state.lastJobSwitchDay && (state.currentDay - state.lastJobSwitchDay) < cooldown) {
+    // Dynamic Cooldown: only applies when actively employed switching between jobs
+    if (currentJob && state.lastJobSwitchDay && (state.currentDay - state.lastJobSwitchDay) < cooldown) {
       return false;
     }
 
@@ -1804,10 +1888,28 @@ const useGameStore = create((set, get) => ({
       }
     ];
 
+    // Check if Emergency Fund needs refilling
+    const emergencyGoal = (state.goals || []).find(g => g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency')));
+    const emergencyFund = (state.funds || []).find(f => f.type === 'emergency' || (f.name && f.name.toLowerCase().includes('emergency')));
+    const currentEmergency = (emergencyGoal ? (emergencyGoal.accumulatedAmount !== undefined ? emergencyGoal.accumulatedAmount : (emergencyGoal.dedicatedContribution || 0)) : 0) +
+                             (emergencyFund ? (emergencyFund.currentAmount || 0) : 0);
+    const targetEmergency = emergencyGoal?.currentTarget || emergencyFund?.targetAmount || 150000;
+
+    const refillPrompt = currentEmergency < targetEmergency ? {
+      role: offer.role || 'Corporate Specialist',
+      company: offer.company || 'New Employer',
+      newSalary: targetSalary,
+      currentEmergency,
+      targetEmergency,
+      shortfall: targetEmergency - currentEmergency,
+    } : null;
+
     set(s => ({
       incomes: newIncomes,
       financialChanged: true,
       lastJobSwitchDay: s.currentDay,
+      refillEmergencyPrompt: refillPrompt,
+      simRunning: false, // pause to let user view confirmation and choose refill
       eventHistory: [
         ...s.eventHistory,
         {
