@@ -1,11 +1,12 @@
 export const computeNetWorth = (state) => {
   const pool = state.pool || 0;
   const fundBalances = (state.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
+  const goalInvestments = (state.goals || []).reduce((sum, g) => sum + (g.accumulatedAmount !== undefined ? g.accumulatedAmount : (g.dedicatedContribution || 0)), 0);
   const homeValues = (state.homesOwned || []).reduce((sum, home) => sum + (home.value || 0), 0);
   const businessValue = state.hasActiveBusiness ? (state.businessIncome || 0) * 22 : 0;
   const loanDebt = (state.loans || []).reduce((sum, loan) => sum + (loan.principal || 0), 0);
   
-  return pool + fundBalances + homeValues + businessValue - loanDebt;
+  return pool + fundBalances + goalInvestments + homeValues + businessValue - loanDebt;
 };
 
 export const calculateFinancialLiteracyScore = (state) => {
@@ -18,7 +19,9 @@ export const calculateFinancialLiteracyScore = (state) => {
                    (state.homeMaintenanceCost || 0) +
                    (state.carMaintenanceCost || 0);
   
-  const totalLiquidBuffer = (state.pool || 0) + (state.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
+  const totalLiquidBuffer = (state.pool || 0) + 
+                            (state.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0) +
+                            (state.goals || []).filter(g => g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))).reduce((sum, g) => sum + (g.accumulatedAmount || g.dedicatedContribution || 0), 0);
   const snapshots = state.monthlySnapshots || [];
   if (snapshots.length > 0) {
     let healthyMonths = 0;
@@ -29,14 +32,13 @@ export const calculateFinancialLiteracyScore = (state) => {
   }
 
   // Safety Fund Creation & Quality Scoring
-  const emergencyFund = (state.funds || []).find(f => f.type === 'emergency');
+  const emergencyFund = (state.funds || []).find(f => f.type === 'emergency') ||
+                        (state.goals || []).find(g => g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency')));
   if (emergencyFund) {
     score += 10;
-    const liquidRatio = (emergencyFund.instruments?.savings || 0) + (emergencyFund.instruments?.fd || 0);
-    if (liquidRatio >= 75) {
-      score += 10; // Prudent liquidity
-    } else if (liquidRatio < 40) {
-      score -= 5;  // Imprudent: risky equity allocation in emergency fund
+    const currentAmt = emergencyFund.currentAmount || emergencyFund.accumulatedAmount || emergencyFund.dedicatedContribution || 0;
+    if (currentAmt > 0 || emergencyFund.achieved) {
+      score += 10; // Maintained emergency buffer
     }
   }
 

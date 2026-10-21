@@ -891,10 +891,12 @@ const useGameStore = create((set, get) => ({
       if (changes.currentDay % 30 === 0) {
         const currentPool = finalPool;
         const fundsVal = (newState.funds || s.funds || []).reduce((sum, f) => sum + (f.currentAmount || 0), 0);
+        const goalsVal = (newState.goals || s.goals || []).reduce((sum, g) => sum + (g.accumulatedAmount !== undefined ? g.accumulatedAmount : (g.dedicatedContribution || 0)), 0);
         const assetValue = (s.homesOwned || []).reduce((sum, h) => sum + (h.value || 0), 0);
+        const debtVal = (newState.loans || s.loans || []).reduce((sum, l) => sum + (l.principal || 0), 0);
         newState.monthlySnapshots = [
           ...s.monthlySnapshots,
-          { day: changes.currentDay, pool: currentPool, netWorth: currentPool + fundsVal + assetValue },
+          { day: changes.currentDay, pool: currentPool, netWorth: currentPool + fundsVal + goalsVal + assetValue - debtVal },
         ];
       }
 
@@ -1119,6 +1121,16 @@ const useGameStore = create((set, get) => ({
             .concat(changes.newIncomes || []);
         }
 
+        if (changes.goalsUpdate) {
+          newState.goals = changes.goalsUpdate;
+        }
+        if (changes.goalMonthlyAllocationsUpdate) {
+          newState.goalMonthlyAllocations = {
+            ...(s.goalMonthlyAllocations || {}),
+            ...changes.goalMonthlyAllocationsUpdate,
+          };
+        }
+
         if (extraData.redesignGoals || currentEvt?.options?.[choiceIndex]?.action === 'redesign_goals' || changes.triggerRedesign) {
           newState.screen = 'financialSetup';
         }
@@ -1273,6 +1285,16 @@ const useGameStore = create((set, get) => ({
       // Course raise used (one-time)
       if (changes.courseRaiseUsed) {
         newState.courseRaiseUsed = true;
+      }
+
+      if (changes.goalsUpdate) {
+        newState.goals = changes.goalsUpdate;
+      }
+      if (changes.goalMonthlyAllocationsUpdate) {
+        newState.goalMonthlyAllocations = {
+          ...(s.goalMonthlyAllocations || {}),
+          ...changes.goalMonthlyAllocationsUpdate,
+        };
       }
 
       // Check if any goal reached its target through dedicated deposits
@@ -2554,6 +2576,9 @@ const useGameStore = create((set, get) => ({
 // ─── Helper: build marriage event ───
 
 function buildMarriageEvent(state) {
+  const weddingGoal = (state.goals || []).find(
+    g => g.type === 'marriage' || (g.name && g.name.toLowerCase().includes('wedding'))
+  );
   const tier = state.player?.cityTier || 2;
   const costs = {
     1: [1200000, 2500000],
@@ -2561,8 +2586,14 @@ function buildMarriageEvent(state) {
     3: [500000, 1200000],
   };
   const [wMin, wMax] = costs[tier] || costs[2];
-  const weddingCost = randInt(wMin, wMax);
-  const loanAmt = Math.round(weddingCost * 0.6);
+  
+  // Use dream target if set, otherwise default tier
+  const dreamWeddingTarget = weddingGoal ? Math.round(weddingGoal.currentTarget || weddingGoal.originalTarget || randInt(wMin, wMax)) : randInt(wMin, wMax);
+  const weddingSavings = weddingGoal ? Math.round((weddingGoal.accumulatedAmount !== undefined ? weddingGoal.accumulatedAmount : (weddingGoal.dedicatedContribution || 0))) : 0;
+  
+  const weddingCost = dreamWeddingTarget;
+  const netOutOfPocket = Math.max(0, weddingCost - weddingSavings);
+  const loanAmt = Math.round(netOutOfPocket > 0 ? netOutOfPocket : weddingCost * 0.6);
   const monthlyRate = 0.108 / 12;
   const emi = Math.round(
     (loanAmt * monthlyRate * Math.pow(1 + monthlyRate, 36)) /
@@ -2570,27 +2601,78 @@ function buildMarriageEvent(state) {
   );
   const marriageAge = state.player?.marriageAge || 28;
 
+  const options = [];
+
+  if (weddingSavings >= weddingCost && weddingCost > 0) {
+    // 100% Fully funded from Dream Wedding Fund!
+    options.push({
+      label: `Celebrate Dream Wedding 🎉 — 100% Funded from Wedding Fund (₹${weddingCost.toLocaleString('en-IN')})`,
+      description: `Debt-free celebration! Paid entirely from your dedicated dream wedding savings.`,
+      action: 'pay_from_fund',
+    });
+    options.push({
+      label: `Court Marriage & Save Fund — ₹50,000 Only (Keep ₹${(weddingSavings - 50000).toLocaleString('en-IN')} for Home/Wealth)`,
+      description: `Simple ceremony, roll remaining savings into your next life goal.`,
+      action: 'court_marriage',
+    });
+  } else if (weddingSavings > 0) {
+    // Partially funded from Wedding Fund!
+    options.push({
+      label: `Dream Wedding — Use ₹${weddingSavings.toLocaleString('en-IN')} Fund + ₹${netOutOfPocket.toLocaleString('en-IN')} from Savings`,
+      description: `Combine your dream wedding fund with liquid savings to achieve your dream celebration.`,
+      action: 'fund_and_savings',
+    });
+    options.push({
+      label: `Dream Wedding with Loan — Use ₹${weddingSavings.toLocaleString('en-IN')} Fund + Loan (EMI ₹${emi.toLocaleString('en-IN')}/mo × 36m)`,
+      description: `Cover the shortfall of ₹${netOutOfPocket.toLocaleString('en-IN')} with an EMI loan to preserve liquid cash.`,
+      action: 'fund_and_loan',
+    });
+    options.push({
+      label: `Intimate Celebration — Spend Only Saved ₹${weddingSavings.toLocaleString('en-IN')} (Debt-Free)`,
+      description: `Scale ceremony to fit strictly within what you have saved without touching liquid cash.`,
+      action: 'spend_saved_only',
+    });
+    options.push({
+      label: `Court Marriage — ₹50,000 Only (Redirect ₹${Math.max(0, weddingSavings - 50000).toLocaleString('en-IN')} to Investments)`,
+      description: `Simple ceremony. Redirect remaining wedding fund to other goals or a new account.`,
+      action: 'court_marriage',
+    });
+  } else {
+    // No dedicated wedding fund saved
+    options.push({
+      label: `Grand Wedding — Pay ₹${weddingCost.toLocaleString('en-IN')} from Savings`,
+      description: 'Full Indian wedding with all ceremonies. Deducted from liquid pool.',
+      action: 'savings_only',
+    });
+    options.push({
+      label: `Wedding Loan — EMI ₹${emi.toLocaleString('en-IN')}/mo × 36 months`,
+      description: `Borrow ₹${loanAmt.toLocaleString('en-IN')} at 10.8% interest to preserve cash.`,
+      action: 'loan_only',
+    });
+    options.push({
+      label: 'Court Marriage — ₹50,000 Only',
+      description: 'Simple registered marriage. Save your money for a home and future.',
+      action: 'court_marriage',
+    });
+  }
+
   return {
     id: 'marriage_event',
     name: `Your Wedding Day! 💍`,
     type: 'choice',
     icon: '💍',
-    description: `You've reached the age of ${Math.floor(marriageAge)}. It's time to celebrate your wedding! How would you like to handle the expenses?`,
-    financialImpact: { type: 'marriage', weddingCost, loanAmt, emi },
-    options: [
-      {
-        label: `Grand Wedding — Pay ₹${weddingCost.toLocaleString('en-IN')} from Savings`,
-        description: 'Full Indian wedding with all ceremonies. Deducted from your liquid pool.',
-      },
-      {
-        label: `Wedding Loan — EMI ₹${emi.toLocaleString('en-IN')}/mo × 36 months`,
-        description: `Borrow ₹${loanAmt.toLocaleString('en-IN')} at 10.8% interest to preserve cash.`,
-      },
-      {
-        label: 'Court Marriage — ₹50,000 Only',
-        description: 'Simple registered marriage. Save your money for a home and future.',
-      },
-    ],
+    description: `You've reached the age of ${Math.floor(marriageAge)}. It's time to celebrate your dream wedding! How would you like to handle the expenses?`,
+    financialImpact: { 
+      type: 'marriage', 
+      weddingCost, 
+      weddingSavings, 
+      netOutOfPocket, 
+      loanAmt, 
+      emi,
+      dreamWeddingTarget,
+      weddingGoalId: weddingGoal?.id,
+    },
+    options,
   };
 }
 

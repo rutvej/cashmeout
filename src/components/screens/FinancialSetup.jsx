@@ -29,9 +29,28 @@ const FinancialSetup = () => {
   const setGoalMonthlyAllocation = store.setGoalMonthlyAllocation;
   const setGoalInstrument = store.setGoalInstrument;
 
-  const goals = store.goals || [];
+  const allGoals = store.goals || [];
+  const goals = useMemo(() => {
+    return allGoals.filter(g => {
+      if (g.achieved) {
+        // Keep only recurring/fixed goals in active allocation (Emergency Fund & Travel)
+        const isRecurring = g.type === 'emergency' || g.type === 'travel' || g.type === 'vacation' ||
+          (g.name && (g.name.toLowerCase().includes('emergency') || g.name.toLowerCase().includes('travel') || g.name.toLowerCase().includes('vacation')));
+        return isRecurring;
+      }
+      return !g.sacrificed;
+    });
+  }, [allGoals]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [skippedGoals, setSkippedGoals] = useState(new Set());
+  const [showAddGoalModal, setShowAddGoalModal] = useState(false);
+  const [newGoalName, setNewGoalName] = useState('');
+  const [newGoalTarget, setNewGoalTarget] = useState('1000000');
+  const [newGoalInstrument, setNewGoalInstrument] = useState('mf');
+
+  // Ensure currentIndex stays within bounds if goals list shrinks
+  const safeIndex = Math.min(currentIndex, Math.max(0, goals.length - 1));
 
   // Income / Deductions
   const totalIncome = (store.incomes?.reduce((sum, inc) => sum + inc.amount, 0) || 0) + (store.businessIncome || 0);
@@ -53,16 +72,39 @@ const FinancialSetup = () => {
 
   const remainingSurplus = monthlySurplus - totalAllocated;
 
-  const currentGoal = goals[currentIndex];
+  const currentGoal = goals[safeIndex];
 
   const handleNext = () => {
-    if (currentIndex < goals.length - 1) setCurrentIndex(currentIndex + 1);
+    if (safeIndex < goals.length - 1) setCurrentIndex(safeIndex + 1);
   };
   const handlePrev = () => {
-    if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
+    if (safeIndex > 0) setCurrentIndex(safeIndex - 1);
+  };
+
+  const handleCreateNewGoal = (name, targetAmt, instKey) => {
+    const goalId = `goal_${Date.now()}`;
+    const newGoalObj = {
+      id: goalId,
+      name: name || 'New Life Goal / Account',
+      type: 'custom',
+      icon: '💎',
+      currentTarget: Number(targetAmt) || 1000000,
+      originalTarget: Number(targetAmt) || 1000000,
+      accumulatedAmount: 0,
+      dedicatedContribution: 0,
+      bucketPercent: 0,
+      achieved: false,
+    };
+    store.setGoals([...allGoals, newGoalObj]);
+    setGoalMonthlyAllocation(goalId, 0);
+    setGoalInstrument(goalId, instKey || 'mf');
+    setShowAddGoalModal(false);
+    setNewGoalName('');
+    setCurrentIndex(goals.length);
   };
 
   const handleSkip = () => {
+    if (!currentGoal) return;
     if (currentGoal.type === 'medical') {
       store.setHealthInsurancePlan('none');
     } else {
@@ -112,7 +154,34 @@ const FinancialSetup = () => {
     setAllocation(current + addAmount);
   };
 
-  if (!currentGoal) return null;
+  if (!currentGoal) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-6 text-center">
+        <span className="text-5xl mb-3">🎯</span>
+        <h2 className="text-xl font-black mb-2">All Life Goals Achieved!</h2>
+        <p className="text-xs text-slate-400 mb-6 max-w-xs">
+          You have successfully achieved your active life milestones! You have <span className="font-bold text-emerald-400">{formatCurrency(monthlySurplus)}/mo</span> surplus cashflow ready to redirect into new investment accounts.
+        </p>
+        <div className="space-y-3 w-full max-w-xs">
+          <Button fullWidth variant="primary" onClick={() => handleCreateNewGoal('Wealth Multiplier Fund 🚀', 2500000, 'mf')}>
+            + Open Wealth Multiplier (₹25L)
+          </Button>
+          <Button fullWidth variant="secondary" onClick={() => handleCreateNewGoal('Early Retirement Corpus 🏖️', 10000000, 'equity')}>
+            + Open Early Retirement Fund (₹1Cr)
+          </Button>
+          <Button fullWidth variant="secondary" onClick={() => handleCreateNewGoal('Luxury World Travel ✈️', 1000000, 'gold')}>
+            + Open Travel & Leisure Fund (₹10L)
+          </Button>
+          <button
+            onClick={() => { setScreen('game'); store.startSimulation(); }}
+            className="text-xs text-slate-400 hover:text-white pt-2 underline block w-full"
+          >
+            ← Resume Simulation
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const currentAge = player?.characterAge
     ? player.characterAge + Math.floor(store.currentDay / 365)
@@ -217,17 +286,26 @@ const FinancialSetup = () => {
             className="h-2 bg-slate-800"
           />
           
-          <div className="flex justify-center items-center mt-3 gap-1.5">
-            {goals.map((g, idx) => (
-              <div 
-                key={g.id} 
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  idx === currentIndex ? 'w-6 bg-blue-500' : 
-                  skippedGoals.has(g.id) ? 'w-2 bg-slate-700' :
-                  (store.goalMonthlyAllocations[g.id] > 0) ? 'w-2 bg-emerald-500' : 'w-2 bg-slate-600'
-                }`}
-              />
-            ))}
+          <div className="flex justify-between items-center mt-3">
+            <div className="flex items-center gap-1.5 flex-1 justify-center">
+              {goals.map((g, idx) => (
+                <div 
+                  key={g.id} 
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    idx === safeIndex ? 'w-6 bg-blue-500' : 
+                    skippedGoals.has(g.id) ? 'w-2 bg-slate-700' :
+                    (store.goalMonthlyAllocations[g.id] > 0) ? 'w-2 bg-emerald-500' : 'w-2 bg-slate-600'
+                  }`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => handleCreateNewGoal('Wealth Multiplier 🚀', 2500000, 'mf')}
+              className="text-[10px] font-bold text-blue-400 hover:text-blue-300 bg-blue-950/60 border border-blue-800/80 px-2 py-0.5 rounded-lg shrink-0 transition"
+            >
+              + New Goal
+            </button>
           </div>
         </div>
       </div>

@@ -5,28 +5,16 @@ import {
   ReferenceLine, ResponsiveContainer, Legend 
 } from 'recharts';
 import useGameStore from '../../engine/store';
-import TabBar from '../ui/TabBar';
 import Timeline from '../game/Timeline';
 import SimControls from '../game/SimControls';
 import PoolDisplay from '../game/PoolDisplay';
 import FloatingDelta from '../game/FloatingDelta';
-import IncomeDeductions from '../game/IncomeDeductions';
-import InstrumentBar from '../game/InstrumentBar';
-import BucketBar from '../game/BucketBar';
 import LiveFinancialLedger from '../game/LiveFinancialLedger';
 import EventCard from '../game/EventCard';
 import MilestoneModal from '../game/MilestoneModal';
 import LiquidationModal from '../game/LiquidationModal';
 import AllocationSheet from '../game/AllocationSheet';
 import { formatCurrency } from '../../utils/format';
-
-// Tab screens
-import BankTab from './tabs/BankTab';
-import InvestmentsTab from './tabs/InvestmentsTab';
-import InsuranceTab from './tabs/InsuranceTab';
-import LoansTab from './tabs/LoansTab';
-import IncomeTab from './tabs/IncomeTab';
-import GoalsTab from './tabs/GoalsTab';
 
 const GOAL_COLORS = {
   Emergency: '#10b981',
@@ -42,7 +30,6 @@ const MainGame = () => {
   const store = useGameStore();
   const [prevPool, setPrevPool] = useState(store.pool);
   const [poolDelta, setPoolDelta] = useState(0);
-  const [showIncomeOptions, setShowIncomeOptions] = useState(false);
   const [viewMode, setViewMode] = useState('chart'); // 'chart' | 'ledger' | 'both'
   const [chartType, setChartType] = useState('bar'); // 'bar' | 'trend'
 
@@ -58,26 +45,6 @@ const MainGame = () => {
     store.startSimulation();
     return () => store.pauseSimulation();
   }, []);
-
-  const handleTabChange = (tab) => {
-    if (tab === 'home' || tab === null) {
-      useGameStore.setState({ activeTab: null });
-    } else {
-      useGameStore.setState({ activeTab: store.activeTab === tab ? null : tab });
-    }
-  };
-
-  const renderTabContent = () => {
-    switch (store.activeTab) {
-      case 'bank': return <BankTab />;
-      case 'investments': return <InvestmentsTab />;
-      case 'insurance': return <InsuranceTab />;
-      case 'loans': return <LoansTab />;
-      case 'income': return <IncomeTab />;
-      case 'goals': return <GoalsTab />;
-      default: return null;
-    }
-  };
 
   const rentalIncome = (store.homesOwned || [])
     .filter(h => h.isRentedOut && h.rentalIncome)
@@ -135,65 +102,76 @@ const MainGame = () => {
     const monthsElapsed = Math.max(0, Math.floor(currentDay / 30));
     const rateMap = { equity: 0.15/12, mf: 0.12/12, fd: 0.07/12, gold: 0.08/12, silver: 0.08/12, savings: 0.04/12 };
 
-    return goals.map(goal => {
-      const cleanName = (goal.name || '').replace(/^[^\w\s]+/, '').trim();
-      const firstWord = cleanName.split(' ')[0];
-      const shortName = firstWord.length > 7 ? firstWord.slice(0, 6) + '…' : firstWord;
+    return goals
+      .filter(goal => {
+        // If achieved, remove from chart EXCEPT recurring/fixed goals (emergency fund and travel)
+        if (goal.achieved) {
+          const isRecurring = goal.type === 'emergency' || goal.type === 'travel' || goal.type === 'vacation' || 
+            (goal.name && (goal.name.toLowerCase().includes('emergency') || goal.name.toLowerCase().includes('travel') || goal.name.toLowerCase().includes('vacation')));
+          return isRecurring;
+        }
+        return !goal.sacrificed;
+      })
+      .map(goal => {
+        const cleanName = (goal.name || '').replace(/^[^\w\s]+/, '').trim();
+        const firstWord = cleanName.split(' ')[0];
+        const shortName = firstWord.length > 7 ? firstWord.slice(0, 6) + '…' : firstWord;
 
-      if (goal.type === 'medical') {
-        const isCovered = store.hasHealthInsurance;
-        const cov = store.healthInsuranceCoverage || (isCovered ? 1000000 : 0);
+        if (goal.type === 'medical') {
+          const isCovered = store.hasHealthInsurance;
+          const cov = store.healthInsuranceCoverage || (isCovered ? 1000000 : 0);
+          return {
+            id: goal.id,
+            name: 'Medical',
+            fullName: 'Medical Insurance',
+            icon: '🏥',
+            saved: isCovered ? cov : 0,
+            target: 1000000,
+            percent: isCovered ? 100 : 0,
+            color: '#f43f5e',
+            achieved: isCovered,
+            type: 'medical',
+          };
+        }
+
+        const target = goal.currentTarget || goal.targetAmount || 100000;
+        let saved = goal.accumulatedAmount !== undefined ? goal.accumulatedAmount : (goal.dedicatedContribution || 0);
+
+        if (saved === 0 && !goal.achieved) {
+          let monthlyAmt = store.goalMonthlyAllocations?.[goal.id];
+          if (monthlyAmt === undefined || monthlyAmt === null) {
+            const allocPct = store.buckets?.[goal.id] || 0;
+            monthlyAmt = Math.max(0, Math.round((allocPct / 100) * surplus));
+          }
+          const instKey = store.goalInstruments?.[goal.id] || 'mf';
+          const rate = rateMap[instKey] || 0.08 / 12;
+          let fv = monthlyAmt * monthsElapsed;
+          if (rate > 0 && monthlyAmt > 0) {
+            fv = monthlyAmt * ((Math.pow(1 + rate, monthsElapsed) - 1) / rate);
+          }
+          const bucketShare = (store.pool || 0) * ((store.buckets?.[goal.id] || 0) / 100);
+          saved = Math.min(target, Math.round(fv + bucketShare));
+        }
+        if (goal.achieved) {
+          saved = Math.max(saved, target);
+        }
+
+        const percent = Math.min(100, Math.round((saved / Math.max(1, target)) * 100));
+        const color = GOAL_COLORS[firstWord] || '#10b981';
+
         return {
           id: goal.id,
-          name: 'Medical',
-          fullName: 'Medical Insurance',
-          icon: '🏥',
-          saved: isCovered ? cov : 0,
-          target: 1000000,
-          percent: isCovered ? 100 : 0,
-          color: '#f43f5e',
-          achieved: isCovered,
-          type: 'medical',
+          name: shortName,
+          fullName: goal.name,
+          icon: goal.icon || '🎯',
+          saved,
+          target,
+          percent,
+          color,
+          achieved: !!goal.achieved,
+          type: goal.type,
         };
-      }
-
-      const target = goal.currentTarget || goal.targetAmount || 100000;
-      let saved = 0;
-      if (goal.achieved) {
-        saved = target;
-      } else {
-        let monthlyAmt = store.goalMonthlyAllocations?.[goal.id];
-        if (monthlyAmt === undefined || monthlyAmt === null) {
-          const allocPct = store.buckets?.[goal.id] || 0;
-          monthlyAmt = Math.max(0, Math.round((allocPct / 100) * surplus));
-        }
-        const instKey = store.goalInstruments?.[goal.id] || 'mf';
-        const rate = rateMap[instKey] || 0.08 / 12;
-        let fv = monthlyAmt * monthsElapsed;
-        if (rate > 0 && monthlyAmt > 0) {
-          fv = monthlyAmt * ((Math.pow(1 + rate, monthsElapsed) - 1) / rate);
-        }
-        const dedicated = goal.dedicatedContribution || 0;
-        const bucketShare = (store.pool || 0) * ((store.buckets?.[goal.id] || 0) / 100);
-        saved = Math.min(target, Math.round(fv + dedicated + bucketShare));
-      }
-
-      const percent = Math.min(100, Math.round((saved / Math.max(1, target)) * 100));
-      const color = GOAL_COLORS[firstWord] || '#10b981';
-
-      return {
-        id: goal.id,
-        name: shortName,
-        fullName: goal.name,
-        icon: goal.icon || '🎯',
-        saved,
-        target,
-        percent,
-        color,
-        achieved: !!goal.achieved,
-        type: goal.type,
-      };
-    });
+      });
   }, [store.goals, store.currentDay, store.goalMonthlyAllocations, store.goalInstruments, store.buckets, store.pool, store.hasHealthInsurance, store.healthInsuranceCoverage, surplus]);
 
   // Strict modal priority
@@ -241,28 +219,11 @@ const MainGame = () => {
           onToggle={() => store.simRunning ? store.pauseSimulation() : store.startSimulation()} 
           onSpeedChange={store.setSimSpeed} 
         />
-
-        {/* Pending Event Alert Banner when in tabs */}
-        {hasPendingEvent && store.activeTab && (
-          <div
-            onClick={() => handleTabChange(null)}
-            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 text-xs font-bold flex items-center justify-between cursor-pointer transition shadow-sm"
-          >
-            <div className="flex items-center space-x-2 truncate">
-              <span className="text-base animate-pulse">⚡</span>
-              <span className="truncate">Decision Pending: {store.currentEvent.name}</span>
-            </div>
-            <span className="bg-white/20 hover:bg-white/30 text-white px-2.5 py-0.5 rounded-full text-[11px] font-black whitespace-nowrap ml-2">
-              Decide on Home →
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden w-full">
-        {!store.activeTab ? (
-          <div className="py-3 px-3 max-w-md w-full mx-auto space-y-3">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden w-full pb-20">
+        <div className="py-3 px-3 max-w-md w-full mx-auto space-y-3">
             
             {/* Active Life Event Card (Slide-In) */}
             {hasPendingEvent && (
@@ -505,75 +466,32 @@ const MainGame = () => {
             )}
 
           </div>
-        ) : (
-          <div className="p-3 sm:p-4 bg-slate-900 min-h-full max-w-md w-full mx-auto overflow-x-hidden pb-24 text-slate-100">
-            {/* Tab Header with Close Button */}
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-black capitalize text-slate-100">
-                {store.activeTab} Overview
-              </h2>
-              <button
-                onClick={() => handleTabChange(null)}
-                className="text-xs text-slate-300 bg-slate-800 border border-slate-700 hover:bg-slate-700 rounded-full px-3 py-1 font-semibold transition"
-              >
-                ✕ Close Tab
-              </button>
-            </div>
-            {renderTabContent()}
-          </div>
-        )}
       </div>
 
-      {/* Floating Action Button for Income Options */}
-      {!store.activeTab && (
-        <button 
-          onClick={() => { store.pauseSimulation(); setShowIncomeOptions(true); }}
-          className="fixed bottom-24 right-4 z-40 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white w-12 h-12 rounded-full shadow-lg shadow-indigo-600/40 flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-          title="Career & Income Options"
-        >
-          <span className="text-xl">⚡</span>
-        </button>
-      )}
-
-      {/* Income Options Bottom Sheet */}
-      {showIncomeOptions && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowIncomeOptions(false)}>
-          <div className="bg-slate-800 w-full max-w-md rounded-t-3xl p-5 border-t border-slate-700 space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold text-slate-100">Career & Income Accelerators</h3>
-              <button onClick={() => setShowIncomeOptions(false)} className="text-slate-400 hover:text-white">✕</button>
-            </div>
-            <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
-              <span className="text-2xl">📚</span>
-              <div>
-                <div className="font-bold text-slate-200">Upskill via Course</div>
-                <div className="text-xs text-slate-400">Invest in certification to unlock leadership roles</div>
-              </div>
-            </button>
-            <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
-              <span className="text-2xl">💼</span>
-              <div>
-                <div className="font-bold text-slate-200">Switch Company / Apply</div>
-                <div className="text-xs text-slate-400">Explore market job offers for immediate salary hike</div>
-              </div>
-            </button>
-            <button className="w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition flex items-center space-x-3" onClick={() => { setShowIncomeOptions(false); handleTabChange('income'); }}>
-              <span className="text-2xl">🏢</span>
-              <div>
-                <div className="font-bold text-slate-200">Launch Side Business</div>
-                <div className="text-xs text-slate-400">Create recurring commercial cashflow</div>
-              </div>
-            </button>
+      {/* Sticky Bottom Goal Redesign Action Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 shadow-2xl">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-3">
+          <div className="flex flex-col min-w-0">
+            <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400">
+              Active Monthly Cashflow
+            </span>
+            <span className={`text-sm font-black truncate ${surplus >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {surplus >= 0 ? '+' : ''}{formatCurrency(surplus)}/mo surplus
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              store.pauseSimulation();
+              useGameStore.setState({ screen: 'financialSetup' });
+            }}
+            className="py-2.5 px-4 bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 hover:from-blue-500 hover:to-indigo-600 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center space-x-1.5 shrink-0"
+          >
+            <span>🎯</span>
+            <span>Readjust Goal Investments</span>
+          </button>
         </div>
-      )}
-
-      {/* Persistent Bottom Tab Bar */}
-      <TabBar 
-        activeTab={store.activeTab} 
-        onTabChange={handleTabChange} 
-        hasPendingEvent={hasPendingEvent}
-      />
+      </div>
 
       {/* Modals with Strict Priority Hierarchy */}
       {activeModal === 'liquidation' && (

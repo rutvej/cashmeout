@@ -56,6 +56,7 @@ const EventCard = ({ event, onChoice }) => {
   const isMedical = event.id === 'medical_emergency' || event.id === 'uninsured_illness';
   const isHouseRepair = event.id === 'home_renovation';
   const isWedding = event.id === 'family_wedding';
+  const isMarriage = impact.type === 'marriage' || event.id === 'marriage_event' || event.id === 'marriage';
   const isBonus = event.id === 'work_bonus';
 
   const activeGoals = (store.goals || []).filter(g => !g.achieved && !g.sacrificed);
@@ -83,6 +84,9 @@ const EventCard = ({ event, onChoice }) => {
   } else if (isBusiness) {
     borderColor = 'border-indigo-400';
     badgeBg = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+  } else if (isMarriage) {
+    borderColor = 'border-rose-400';
+    badgeBg = 'bg-rose-50 text-rose-800 border-rose-200';
   }
 
   const isWindfall = event.id === 'work_bonus' || event.id === 'inheritance_gift' || (impact.type === 'gain' && (impact.amount || 0) >= 15000);
@@ -102,7 +106,7 @@ const EventCard = ({ event, onChoice }) => {
 
   const isIncomeIncrease = event.id === 'annual_inflation' || event.id === 'salary_hike' || event.id === 'senior_job_offer' || event.id === 'new_job_offer' || event.id === 'job_switch' || event.id === 'freelance_gig' || impact.type === 'gain_recurring';
   const isEmergencyOrSpending = isMedical || isHouseRepair || event.id === 'vehicle_accident' || event.id === 'family_wedding' || (impact.type === 'loss' && expenseAmt > 0);
-  const canRedesignGoals = isIncomeIncrease || isWindfall || isEmergencyOrSpending;
+  const canRedesignGoals = isIncomeIncrease || isWindfall || isEmergencyOrSpending || isMarriage;
 
   const handleChoiceClick = (choiceIdx, customData = {}) => {
     const extraData = { isAuto: false, ...customData };
@@ -305,12 +309,12 @@ const EventCard = ({ event, onChoice }) => {
                 </div>
               )}
 
-              {/* Direct Cash Loss / Wedding */}
+              {/* Direct Cash Loss / Family Wedding */}
               {(impact.type === 'loss' || isWedding) && event.id !== 'annual_tax' && (
                 <div className="flex justify-between items-center">
                   <div>
                     <span className="text-xs font-bold block">
-                      {isWedding ? 'Wedding Contribution' : 'Financial Deduction'}
+                      {isWedding ? 'Family Wedding Contribution' : 'Financial Deduction'}
                     </span>
                     {impact.insured && (
                       <span className="text-[11px] text-green-700 font-medium">
@@ -333,6 +337,49 @@ const EventCard = ({ event, onChoice }) => {
                       </span>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* Dream Wedding Milestone Financial Overview */}
+              {isMarriage && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs font-bold">
+                    <span className="text-rose-950 flex items-center gap-1.5 font-black">
+                      <span>💍</span>
+                      <span>DREAM WEDDING CELEBRATION</span>
+                    </span>
+                    <span className="text-[10px] text-rose-800 bg-rose-100/90 border border-rose-200 px-2 py-0.5 rounded-full font-black">
+                      Life Dream Milestone
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-center bg-white/90 p-2.5 rounded-xl border border-rose-200 text-slate-800 shadow-2xs">
+                    <div className="border-r border-rose-100 pr-2">
+                      <span className="text-[10px] text-text-muted block uppercase tracking-wider font-semibold">Dream Wedding Cost</span>
+                      <span className="font-extrabold text-sm text-rose-950">
+                        {formatCurrency(impact.weddingCost || 500000)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-text-muted block uppercase tracking-wider font-semibold">Saved in Wedding Fund</span>
+                      <span className={`font-extrabold text-sm ${(impact.weddingSavings || 0) >= (impact.weddingCost || 1) ? 'text-emerald-700' : 'text-indigo-700'}`}>
+                        {formatCurrency(impact.weddingSavings || 0)}
+                      </span>
+                    </div>
+                  </div>
+                  {(impact.weddingSavings || 0) >= (impact.weddingCost || 1) && (impact.weddingCost || 0) > 0 ? (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-center text-xs font-bold text-emerald-800 flex items-center justify-center gap-1">
+                      <span>🎉</span>
+                      <span>100% Fully Funded! Fulfill your wedding dream completely debt-free.</span>
+                    </div>
+                  ) : (impact.weddingSavings || 0) > 0 ? (
+                    <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg text-center text-xs font-medium text-blue-900">
+                      Dedicated fund covers <span className="font-bold">{Math.round(((impact.weddingSavings || 0) / (impact.weddingCost || 1)) * 100)}%</span> of your dream wedding. Shortfall: <span className="font-bold">{formatCurrency(impact.netOutOfPocket || 0)}</span>.
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-center text-xs font-medium text-amber-900">
+                      No dedicated wedding fund was saved. You can use liquid savings, take an EMI loan, or hold a court ceremony.
+                    </div>
+                  )}
                 </div>
               )}
 

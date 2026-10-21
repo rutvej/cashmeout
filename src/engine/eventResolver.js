@@ -456,10 +456,48 @@ export const resolveEvent = (event, playerChoice, state) => {
     case 'marriage_event': {
       changes.married = true;
       changes.marriageEventFired = true;
-      if (playerChoice === 0) {
-        changes.poolDelta = -(impact.weddingCost || 0);
-        changes.statusMessages.push(`Grand wedding celebrated! Paid ₹${(impact.weddingCost || 0).toLocaleString('en-IN')}.`);
-      } else if (playerChoice === 1) {
+      const weddingGoal = (state.goals || []).find(
+        g => g.type === 'marriage' || (g.name && g.name.toLowerCase().includes('wedding'))
+      );
+      const weddingSavings = weddingGoal ? Math.round((weddingGoal.accumulatedAmount !== undefined ? weddingGoal.accumulatedAmount : (weddingGoal.dedicatedContribution || 0))) : 0;
+      const selectedOpt = eventWithData?.options?.[playerChoice] || {};
+      const action = selectedOpt.action || (playerChoice === 0 ? 'pay_from_fund' : playerChoice === 1 ? 'fund_and_loan' : 'court_marriage');
+
+      if (action === 'pay_from_fund') {
+        const cost = Math.min(weddingSavings, impact.weddingCost || 500000);
+        changes.statusMessages.push(`Dream wedding celebrated! ₹${cost.toLocaleString('en-IN')} paid directly from your dedicated Wedding Fund.`);
+      } else if (action === 'fund_and_savings') {
+        const fromPool = impact.netOutOfPocket !== undefined ? impact.netOutOfPocket : Math.max(0, (impact.weddingCost || 500000) - weddingSavings);
+        changes.poolDelta = -fromPool;
+        changes.statusMessages.push(`Dream wedding celebrated! Paid ₹${weddingSavings.toLocaleString('en-IN')} from Wedding Fund + ₹${fromPool.toLocaleString('en-IN')} from liquid savings.`);
+      } else if (action === 'fund_and_loan') {
+        const loanAmt = impact.loanAmt || 400000;
+        const emi = impact.emi || 12000;
+        changes.newLoans.push({
+          id: `loan_wedding_${Date.now()}`,
+          name: 'Wedding Loan',
+          principal: loanAmt,
+          emi,
+          remainingMonths: 36,
+          rate: 10.8,
+          type: 'personal',
+        });
+        changes.statusMessages.push(`Dream wedding celebrated! Paid ₹${weddingSavings.toLocaleString('en-IN')} from Wedding Fund. Loan of ₹${loanAmt.toLocaleString('en-IN')} taken (EMI ₹${emi.toLocaleString('en-IN')}/mo).`);
+      } else if (action === 'spend_saved_only') {
+        changes.statusMessages.push(`Intimate wedding celebrated debt-free! Spent ₹${weddingSavings.toLocaleString('en-IN')} strictly within saved budget.`);
+      } else if (action === 'court_marriage') {
+        const remainingSavings = Math.max(0, weddingSavings - 50000);
+        if (weddingSavings >= 50000) {
+          changes.poolDelta = remainingSavings;
+          changes.statusMessages.push(`Simple registered marriage completed! ₹50,000 paid from Wedding Fund, and remaining ₹${remainingSavings.toLocaleString('en-IN')} transferred to liquid savings!`);
+        } else {
+          changes.poolDelta = -50000;
+          changes.statusMessages.push(`Court marriage completed. Paid ₹50,000.`);
+        }
+      } else if (action === 'savings_only' || playerChoice === 0) {
+        changes.poolDelta = -(impact.weddingCost || 500000);
+        changes.statusMessages.push(`Grand wedding celebrated! Paid ₹${(impact.weddingCost || 500000).toLocaleString('en-IN')} from savings.`);
+      } else if (action === 'loan_only' || playerChoice === 1) {
         const loanAmt = impact.loanAmt || 500000;
         const emi = impact.emi || 15000;
         changes.newLoans.push({
@@ -472,11 +510,22 @@ export const resolveEvent = (event, playerChoice, state) => {
           type: 'personal',
         });
         changes.statusMessages.push(`Wedding loan taken! EMI: ₹${emi.toLocaleString('en-IN')}/mo for 36 months.`);
-      } else {
-        changes.poolDelta = -50000;
-        changes.statusMessages.push(`Court marriage completed. Paid ₹50,000.`);
+      }
+
+      // Mark wedding goal achieved and remove from active list
+      if (weddingGoal) {
+        changes.goalsUpdate = (state.goals || []).map(g =>
+          g.id === weddingGoal.id
+            ? { ...g, achieved: true, achievedDay: state.currentDay, bucketPercent: 0, accumulatedAmount: 0, dedicatedContribution: 0 }
+            : g
+        );
+        changes.goalMonthlyAllocationsUpdate = {
+          ...(state.goalMonthlyAllocations || {}),
+          [weddingGoal.id]: 0,
+        };
       }
       changes.triggerPostMarriageHome = true;
+      changes.triggerRedesign = true;
       break;
     }
 

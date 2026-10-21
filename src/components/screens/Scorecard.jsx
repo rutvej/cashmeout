@@ -45,8 +45,13 @@ const Scorecard = () => {
   
   // financialHealth = (emergencyFundScore + emiRatioScore) * 10 each
   let emergencyFundScore = 0;
-  if ((store.funds || []).some(f => f.type === 'emergency')) emergencyFundScore = 1;
-  const emiRatio = totalDebt > 0 ? 0 : 1; // Simplification, calculate appropriately
+  if (
+    (store.funds || []).some(f => f.type === 'emergency' && (f.currentAmount || 0) > 0) ||
+    (store.goals || []).some(g => (g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))) && ((g.accumulatedAmount || 0) > 0 || g.achieved))
+  ) {
+    emergencyFundScore = 1;
+  }
+  const emiRatio = totalDebt > 0 ? 0 : 1;
   const financialHealth = (emergencyFundScore + emiRatio) * 10;
 
   // riskManagement = (hasHealthInsurance * 5 + hasVehicleInsurance * 5 + emergencyFundMaintained * 5)
@@ -60,7 +65,7 @@ const Scorecard = () => {
   // debtManagement
   const debtManagement = totalDebt === 0 ? 10 : 5;
 
-  const totalScore = Math.round(goalsAchievement + financialHealth + riskManagement + investmentWisdom + debtManagement);
+  const totalScore = Math.min(100, Math.max(0, Math.round(goalsAchievement + financialHealth + riskManagement + investmentWisdom + debtManagement)));
 
   // Grade
   let grade = 'F';
@@ -78,7 +83,7 @@ const Scorecard = () => {
   const chartData = (store.monthlySnapshots || [])
     .filter((_, i) => i % 3 === 0)
     .map(s => ({
-      age: formatAge(s.day || 0),
+      age: `Y${Math.floor((s.day || 0) / 365) + 1}`,
       'Net Worth': Math.round(s.netWorth ?? s.pool ?? 0),
     }));
 
@@ -97,10 +102,13 @@ const Scorecard = () => {
   };
 
   const formatCompact = (val) => {
-    if (val >= 10000000) return `${(val / 10000000).toFixed(1)}Cr`;
-    if (val >= 100000) return `${(val / 100000).toFixed(1)}L`;
-    if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
-    return val;
+    if (val === undefined || val === null || isNaN(val)) return '₹0';
+    const sign = val < 0 ? '-' : '';
+    const absVal = Math.abs(Math.round(val));
+    if (absVal >= 10000000) return `${sign}₹${(absVal / 10000000).toFixed(2)}Cr`;
+    if (absVal >= 100000) return `${sign}₹${(absVal / 100000).toFixed(2)}L`;
+    if (absVal >= 1000) return `${sign}₹${(absVal / 1000).toFixed(1)}K`;
+    return `${sign}₹${absVal.toLocaleString('en-IN')}`;
   };
 
   const categories = [
@@ -147,7 +155,9 @@ const Scorecard = () => {
           <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 text-center">
             <div className="text-xl mb-1">💰</div>
             <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">Net Worth</div>
-            <div className="font-black text-emerald-400 text-sm truncate">{formatCompact(totalNetWorth)}</div>
+            <div className={`font-black text-sm truncate ${totalNetWorth >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {formatCompact(totalNetWorth)}
+            </div>
           </div>
           <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 text-center">
             <div className="text-xl mb-1">⏳</div>

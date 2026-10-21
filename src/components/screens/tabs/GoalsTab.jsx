@@ -17,6 +17,9 @@ const GoalsTab = () => {
   const [loanGoal, setLoanGoal] = useState(null);
   const [loanDownPayment, setLoanDownPayment] = useState(0);
 
+  const hasCarAchieved = (store.carsOwned && store.carsOwned.length > 0) || (store.goals || []).some(g => (g.type === 'car' || g.type === 'vehicle') && g.achieved);
+  const hasMarriageAchieved = store.married || store.marriageEventFired || (store.goals || []).some(g => g.type === 'marriage' && g.achieved);
+
   const handleOpenLoanSheet = (goal) => {
     setLoanGoal(goal);
     const defaultPct = goal.type === 'home' ? 0.20 : goal.type === 'car' ? 0.15 : 0.10;
@@ -25,6 +28,8 @@ const GoalsTab = () => {
   };
 
   const handleSelectSuggested = (type, customLabel, fallbackTarget) => {
+    if (type === 'car' && hasCarAchieved) return;
+    if (type === 'marriage' && hasMarriageAchieved) return;
     const tier = store.player?.cityTier || 2;
     if (type === 'custom') {
       setNewGoal({
@@ -423,14 +428,16 @@ const GoalsTab = () => {
               Quick Pick: Suggested Fixed Goals
             </label>
             <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleSelectSuggested('car', 'Upgrade / 2nd Car 🚗')}
-                className="p-2 bg-white border border-gray-200 hover:border-accent-action rounded-lg text-left transition"
-              >
-                <span className="text-xs font-bold block text-text-primary">🚗 Upgrade Car</span>
-                <span className="text-[10px] text-text-muted">City Tier suggested</span>
-              </button>
+              {!hasCarAchieved && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectSuggested('car', 'Upgrade / 2nd Car 🚗')}
+                  className="p-2 bg-white border border-gray-200 hover:border-accent-action rounded-lg text-left transition"
+                >
+                  <span className="text-xs font-bold block text-text-primary">🚗 Upgrade Car</span>
+                  <span className="text-[10px] text-text-muted">City Tier suggested</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => handleSelectSuggested('home', 'Vacation Home / Villa 🏠')}
@@ -447,14 +454,16 @@ const GoalsTab = () => {
                 <span className="text-xs font-bold block text-text-primary">💼 Business Venture</span>
                 <span className="text-[10px] text-text-muted">Generates cashflow</span>
               </button>
-              <button
-                type="button"
-                onClick={() => handleSelectSuggested('marriage', 'Milestone Celebration 💍')}
-                className="p-2 bg-white border border-gray-200 hover:border-accent-action rounded-lg text-left transition"
-              >
-                <span className="text-xs font-bold block text-text-primary">💍 Celebration</span>
-                <span className="text-[10px] text-text-muted">Anniversary / Wedding</span>
-              </button>
+              {!hasMarriageAchieved && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectSuggested('marriage', 'Milestone Celebration 💍')}
+                  className="p-2 bg-white border border-gray-200 hover:border-accent-action rounded-lg text-left transition"
+                >
+                  <span className="text-xs font-bold block text-text-primary">💍 Celebration</span>
+                  <span className="text-[10px] text-text-muted">Anniversary / Wedding</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => handleSelectSuggested('custom', 'Luxury World Tour 🏖️', 350000)}

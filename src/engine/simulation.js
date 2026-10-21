@@ -126,6 +126,57 @@ export const simulateTick = (state) => {
       stateChanges.fundsUpdate = updatedFunds;
     }
 
+    // Deposit surplus share into active goals & compound based on their instruments
+    if (goals && goals.length > 0) {
+      const goalAllocs = state.goalMonthlyAllocations || {};
+      const goalBuckets = state.buckets || {};
+      const goalInstruments = state.goalInstruments || {};
+
+      const currentGoalsList = stateChanges.goalsUpdate || goals;
+      const updatedGoals = currentGoalsList.map(goal => {
+        let accumulated = goal.accumulatedAmount !== undefined 
+          ? goal.accumulatedAmount 
+          : (goal.dedicatedContribution || 0);
+
+        const isRecurring = goal.type === 'emergency' || goal.type === 'travel' || goal.type === 'vacation' || 
+          (goal.name && (goal.name.toLowerCase().includes('emergency') || goal.name.toLowerCase().includes('travel') || goal.name.toLowerCase().includes('vacation')));
+
+        // If goal already achieved and not recurring, no further deposits or auto-growth needed
+        if (goal.achieved && !isRecurring) {
+          return goal;
+        }
+
+        // Determine monthly deposit
+        let deposit = 0;
+        if (monthlySurplus > 0) {
+          if (goalAllocs[goal.id] !== undefined && goalAllocs[goal.id] !== null) {
+            deposit = Math.max(0, goalAllocs[goal.id]);
+          } else if (goalBuckets[goal.id]) {
+            deposit = Math.round(monthlySurplus * (goalBuckets[goal.id] / 100));
+          }
+          deposit = Math.min(Math.max(0, surplusForPool), deposit);
+        }
+
+        if (deposit > 0) {
+          surplusForPool -= deposit;
+          accumulated += deposit;
+        }
+
+        // Compound monthly returns based on the goal's assigned financial instrument
+        if (accumulated > 0) {
+          const instKey = goalInstruments[goal.id] || (goal.type === 'emergency' ? 'savings' : 'mf');
+          accumulated = calculateMonthlyReturns({ [instKey]: 100 }, accumulated, currentCycle);
+        }
+
+        return {
+          ...goal,
+          accumulatedAmount: Math.round(accumulated),
+          dedicatedContribution: Math.round(accumulated),
+        };
+      });
+      stateChanges.goalsUpdate = updatedGoals;
+    }
+
     const poolAfterCashflow = Math.max(0, pool + surplusForPool);
     const poolAfterReturns = calculateMonthlyReturns(instruments, poolAfterCashflow, currentCycle);
     const monthlyInvestmentReturns = Math.max(0, poolAfterReturns - poolAfterCashflow);
@@ -389,16 +440,18 @@ export const simulateTick = (state) => {
   // --- Milestones check ---
   if (nextDay % 5 === 0) {
     const currentPool = pool + (stateChanges.poolDelta || 0);
-    for (const goal of goals) {
+    const goalsToCheck = stateChanges.goalsUpdate || goals;
+    for (const goal of goalsToCheck) {
       if (!goal.achieved && !goal.sacrificed) {
-        const allocatedAmount = (currentPool * (goal.bucketPercent / 100)) + (goal.dedicatedContribution || 0);
-        if (checkMilestone(goal, allocatedAmount)) {
+        const savedAmount = (goal.accumulatedAmount !== undefined ? goal.accumulatedAmount : (goal.dedicatedContribution || 0))
+          + (currentPool * ((goal.bucketPercent || 0) / 100));
+        if (checkMilestone(goal, savedAmount)) {
           const isEmergency = goal.type === 'emergency' || (goal.name && goal.name.toLowerCase().includes('emergency'));
           milestoneTriggered = {
             goalId: goal.id,
             goalName: goal.name,
             goalType: goal.type,
-            currentValue: Math.round(allocatedAmount),
+            currentValue: Math.round(savedAmount),
             targetValue: Math.round(goal.currentTarget),
             isEmergency,
           };
