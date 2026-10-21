@@ -658,9 +658,10 @@ const useGameStore = create((set, get) => ({
 
   startSimulation: () => {
     const state = get();
-    if (state.simRunning || state.gameOver) return;
+    if (state.gameOver) return;
+    if (state.simIntervalId) clearInterval(state.simIntervalId);
 
-    const speed = state.simSpeed;
+    const speed = state.simSpeed || 1;
     const intervalMs = Math.max(10, SIMULATION_SPEED_MS / speed);
 
     const interval = setInterval(() => {

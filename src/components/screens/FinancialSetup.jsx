@@ -123,17 +123,17 @@ const FinancialSetup = () => {
     });
     store.updateBucketAllocations(newBuckets);
 
-    // If emergency fund target was dynamically updated due to inflation, persist it
-    if (isEmergency && effectiveTarget !== currentGoal.currentTarget) {
-      store.setGoals(goals.map(g => g.id === currentGoal.id ? { ...g, currentTarget: effectiveTarget } : g));
+    // If emergency fund target needs dynamic re-evaluation against active living costs
+    const emergencyGoal = goals.find(g => g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency')));
+    if (emergencyGoal) {
+      const evalTarget = calculateRequiredEmergencyFund(store);
+      if (evalTarget > emergencyGoal.currentTarget) {
+        store.setGoals(allGoals.map(g => g.id === emergencyGoal.id ? { ...g, currentTarget: evalTarget } : g));
+      }
     }
 
-    if (store.currentDay > 0) {
-      setScreen('game');
-      store.startSimulation();
-    } else {
-      setScreen('game');
-    }
+    setScreen('game');
+    store.startSimulation();
   };
 
   const setAllocation = (amount) => {
