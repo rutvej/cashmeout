@@ -182,17 +182,29 @@ export const simulateTick = (state) => {
       stateChanges.goalsUpdate = updatedGoals;
     }
 
-    // If running a monthly deficit (e.g. after job loss), cover expenses from Emergency Fund first!
+    // If running a monthly deficit (e.g. after job loss), cover expenses from liquid savings first,
+    // then Emergency Fund — the emergency fund should only be touched when liquid savings are insufficient.
     let emergencyAbsorbed = 0;
     if (monthlySurplus < 0) {
       let needed = Math.abs(monthlySurplus);
 
-      // 1. Draw from emergency goal in state.goals
+      // 1. First, draw from liquid savings in the pool (instruments.savings portion)
+      //    This prevents draining the Emergency Fund for routine monthly shortfalls
+      //    when there is still liquid cash available.
+      const liquidSavingsPct = state.instruments?.savings || 0;
+      const liquidSavingsBalance = Math.round((liquidSavingsPct / 100) * pool);
+      if (liquidSavingsBalance > 0 && needed > 0) {
+        const take = Math.min(needed, liquidSavingsBalance);
+        needed -= take;
+        // poolDelta will already absorb this via surplusForPool reduction below
+      }
+
+      // 2. Only if liquid savings are exhausted, draw from emergency goal in state.goals
       const currentGoalsList = (stateChanges.goalsUpdate || goals || []).map(g => ({ ...g }));
       const emgGoalIdx = currentGoalsList.findIndex(g =>
         g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'))
       );
-      if (emgGoalIdx !== -1) {
+      if (emgGoalIdx !== -1 && needed > 0) {
         const eg = currentGoalsList[emgGoalIdx];
         const currentBal = eg.accumulatedAmount !== undefined ? eg.accumulatedAmount : (eg.dedicatedContribution || 0);
         if (currentBal > 0) {
@@ -209,7 +221,7 @@ export const simulateTick = (state) => {
         }
       }
 
-      // 2. Draw from emergency safety fund in state.funds (if any)
+      // 3. Draw from emergency safety fund in state.funds (if liquid savings exhausted)
       if (needed > 0 && state.funds && state.funds.length > 0) {
         const updatedFunds = (stateChanges.fundsUpdate || state.funds).map(f => {
           if ((f.type === 'emergency' || (f.name && f.name.toLowerCase().includes('emergency'))) && (f.currentAmount || 0) > 0 && needed > 0) {

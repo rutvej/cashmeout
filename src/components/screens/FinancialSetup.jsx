@@ -268,6 +268,21 @@ const FinancialSetup = () => {
               </span>
             </div>
           )}
+
+          {/* Emergency Redesign Alert — shown when redirected due to emergency fund depletion */}
+          {store.pendingEmergencyRedesign && (
+            <div className="mb-2 p-2.5 bg-amber-500/10 border border-amber-500/40 rounded-xl flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div>
+                <p className="text-[11px] font-black text-amber-400 uppercase tracking-wide">Emergency Fund Depleted!</p>
+                <p className="text-[10px] text-amber-300/80 leading-snug mt-0.5">
+                  Your Emergency Fund was used to cover expenses and is now low or empty.
+                  Please increase your monthly allocation to the <strong>Emergency Fund</strong> goal
+                  to rebuild your 6-month safety buffer.
+                </p>
+              </div>
+            </div>
+          )}
           <div className="flex justify-between items-end mb-2">
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Monthly Surplus</span>

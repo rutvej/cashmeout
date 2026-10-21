@@ -460,7 +460,7 @@ export const resolveEvent = (event, playerChoice, state) => {
         g => g.type === 'marriage' || (g.name && g.name.toLowerCase().includes('wedding'))
       );
       const weddingSavings = weddingGoal ? Math.round((weddingGoal.accumulatedAmount !== undefined ? weddingGoal.accumulatedAmount : (weddingGoal.dedicatedContribution || 0))) : 0;
-      const selectedOpt = eventWithData?.options?.[playerChoice] || {};
+      const selectedOpt = event?.options?.[playerChoice] || {};
       const action = selectedOpt.action || (playerChoice === 0 ? 'pay_from_fund' : playerChoice === 1 ? 'fund_and_loan' : 'court_marriage');
 
       if (action === 'pay_from_fund') {

@@ -56,6 +56,15 @@ const MainGame = () => {
     return () => store.pauseSimulation();
   }, []);
 
+  // When a shortfall is resolved AND emergency fund was depleted, redirect
+  // to FinancialSetup so the player can readjust investments to replenish it.
+  useEffect(() => {
+    if (!store.deficitInfo && store.pendingEmergencyRedesign && store.screen === 'game') {
+      store.pauseSimulation();
+      useGameStore.setState({ pendingEmergencyRedesign: false, screen: 'financialSetup' });
+    }
+  }, [store.deficitInfo, store.pendingEmergencyRedesign, store.screen]);
+
   const rentalIncome = (store.homesOwned || [])
     .filter(h => h.isRentedOut && h.rentalIncome)
     .reduce((sum, h) => sum + h.rentalIncome, 0);

@@ -193,8 +193,13 @@ export function calculateExpenseWaterfall(amount, eventId, state = {}) {
     goalDeltas,
     updatedFunds,
     updatedGoals,
+    // FIX: funds have their own currentAmount balance (separate from pool), so
+    // drawing from a Safety Fund does NOT reduce the liquid pool. Only liquid
+    // savings (pool %) and investment capital drawn out of the pool need to be
+    // deducted from pool. absorbedFromFunds is handled via updatedFunds state.
     poolDeduction: absorbedFromSavings + absorbedFromInvestments,
     absorbedFromInvestments,
+    emergencyFundUsed: absorbedFromFunds > 0 || goalDeltas.some(d => d.source === 'emergency_dedicated' || d.source === 'emergency_bucket'),
   };
 }
 
@@ -271,6 +276,7 @@ const useGameStore = create((set, get) => ({
   recentAutoToast: null,
   currentYearStatements: [],
   monthlyStatementsHistory: [],
+  pendingEmergencyRedesign: false,
 
   // --- Game tracking ---
   gameOver: false,
@@ -411,6 +417,7 @@ const useGameStore = create((set, get) => ({
       monthlyStatementsHistory: [],
       lastJobSwitchDay: 0,
       lastAppraisalDay: 0,
+      pendingEmergencyRedesign: false,
     });
   },
 
@@ -1060,6 +1067,13 @@ const useGameStore = create((set, get) => ({
               .concat(changes.newIncomes || []);
           }
 
+          // BUG FIX: If the emergency fund was used (and is now short/depleted),
+          // flag a redesign prompt so the player can readjust allocations to
+          // replenish the emergency fund after handling the shortfall.
+          if (waterfall.emergencyFundUsed) {
+            shortfallState.pendingEmergencyRedesign = true;
+          }
+
           shortfallState.instruments = normalizeInstruments(shortfallState.instruments);
           return shortfallState;
         });
@@ -1154,6 +1168,14 @@ const useGameStore = create((set, get) => ({
 
         if (extraData.redesignGoals || currentEvt?.options?.[choiceIndex]?.action === 'redesign_goals' || changes.triggerRedesign) {
           newState.screen = 'financialSetup';
+        }
+
+        // BUG FIX: If the emergency fund was used (and is now short/depleted),
+        // and we're not already triggering a redesign, prompt the player to
+        // readjust their investment/allocation plan to replenish the emergency fund.
+        if (waterfall.emergencyFundUsed && newState.screen !== 'financialSetup') {
+          newState.screen = 'financialSetup';
+          newState.pendingEmergencyRedesign = true;
         }
 
         return newState;
