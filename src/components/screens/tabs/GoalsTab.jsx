@@ -263,9 +263,10 @@ const GoalsTab = () => {
       {/* Goals List */}
       <div className="space-y-3">
         {store.goals.map(goal => {
+          const isEmergency = goal.type === 'emergency' || (goal.name && goal.name.toLowerCase().includes('emergency'));
           const bucketAmount = Math.round((store.buckets[goal.id] / 100) * store.pool || 0) + (goal.dedicatedContribution || 0);
           const progress = Math.min(100, Math.round((bucketAmount / goal.currentTarget) * 100));
-          const canBuyFromTotalPool = store.pool >= goal.currentTarget;
+          const canBuyFromTotalPool = store.pool >= goal.currentTarget && !isEmergency;
 
           return (
             <Card
@@ -348,14 +349,16 @@ const GoalsTab = () => {
                           Achieve (Full Cash)
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenLoanSheet(goal)}
-                        className="text-[10px] text-indigo-700 hover:text-indigo-900 font-bold bg-indigo-50 px-2 py-1 rounded border border-indigo-200 flex items-center space-x-1"
-                      >
-                        <span>💳</span>
-                        <span>Achieve with Loan</span>
-                      </button>
+                      {!isEmergency && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenLoanSheet(goal)}
+                          className="text-[10px] text-indigo-700 hover:text-indigo-900 font-bold bg-indigo-50 px-2 py-1 rounded border border-indigo-200 flex items-center space-x-1"
+                        >
+                          <span>💳</span>
+                          <span>Achieve with Loan</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => {

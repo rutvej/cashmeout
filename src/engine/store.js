@@ -1347,11 +1347,14 @@ const useGameStore = create((set, get) => ({
             const currentPool = newPool;
             const allocatedAmount = (currentPool * ((s.buckets?.[g.id] || g.bucketPercent || 0) / 100)) + (g.dedicatedContribution || 0);
             if (allocatedAmount >= g.currentTarget) {
+              const isEmergency = g.type === 'emergency' || (g.name && g.name.toLowerCase().includes('emergency'));
               newState.showMilestone = {
                 goalId: g.id,
                 goalName: g.name,
+                goalType: g.type,
                 currentValue: Math.round(allocatedAmount),
                 targetValue: Math.round(g.currentTarget),
+                isEmergency,
               };
               break;
             }
@@ -2275,9 +2278,16 @@ const useGameStore = create((set, get) => ({
       const goal = s.goals.find(g => g.id === goalId);
       if (!goal) return {};
 
+      const isEmergency = goal.type === 'emergency' || (goal.name && goal.name.toLowerCase().includes('emergency'));
+      let effectiveAction = action;
+      if (effectiveAction === 'spend' && isEmergency) {
+        // Emergency fund is a permanent reserve, not a consumption expense to be spent
+        effectiveAction = 'redirect';
+      }
+
       const newState = { showMilestone: null };
 
-      if (action === 'redirect') {
+      if (effectiveAction === 'redirect') {
         // Goal reached full capacity! Stop future monthly allocations and redirect to other goals
         newState.goals = s.goals.map(g =>
           g.id === goalId ? { ...g, achieved: true, achievedDay: s.currentDay, bucketPercent: 0 } : g
@@ -2300,7 +2310,7 @@ const useGameStore = create((set, get) => ({
         return newState;
       }
 
-      if (action === 'spend') {
+      if (effectiveAction === 'spend') {
         // Goal achieved — deduct from pool (crediting any dedicated contribution already banked)
         const dedicated = goal.dedicatedContribution || 0;
         const fromPool = Math.max(0, goal.currentTarget - dedicated);
@@ -2361,12 +2371,12 @@ const useGameStore = create((set, get) => ({
           newState.married = true;
           newState.marriageEventFired = true;
         }
-      } else if (action === 'grow') {
+      } else if (effectiveAction === 'grow') {
         // Raise the target by 25%
         newState.goals = s.goals.map(g =>
           g.id === goalId ? { ...g, currentTarget: Math.round(g.currentTarget * 1.25) } : g
         );
-      } else if (action === 'delete') {
+      } else if (effectiveAction === 'delete') {
         // Sacrifice the goal
         newState.goals = s.goals.map(g =>
           g.id === goalId ? { ...g, sacrificed: true, bucketPercent: 0 } : g

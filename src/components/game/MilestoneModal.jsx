@@ -6,26 +6,37 @@ import { formatCurrency } from '../../utils/format';
 const MilestoneModal = ({ milestone, onAction }) => {
   if (!milestone) return null;
 
+  const isEmergency = Boolean(
+    milestone.isEmergency ||
+    milestone.goalType === 'emergency' ||
+    (milestone.goalName && milestone.goalName.toLowerCase().includes('emergency'))
+  );
+
   return (
-    <BottomSheet isOpen={!!milestone} title="Milestone Reached! 🎉">
+    <BottomSheet isOpen={!!milestone} title={isEmergency ? "Emergency Buffer Secured! 🛡️" : "Milestone Reached! 🎉"}>
       <div className="flex flex-col items-center text-center">
         <div className="w-20 h-20 bg-accent-bonus/20 rounded-full flex items-center justify-center text-4xl mb-4">
-          🏆
+          {isEmergency ? '🛡️' : '🏆'}
         </div>
-        <h3 className="text-xl font-bold mb-1 text-text-primary">Goal Achieved: {milestone.goalName}</h3>
+        <h3 className="text-xl font-bold mb-1 text-text-primary">
+          {isEmergency ? `Safety Target Reached: ${milestone.goalName}` : `Goal Achieved: ${milestone.goalName}`}
+        </h3>
         <p className="text-text-muted mb-6">
-          You've saved {formatCurrency(milestone.currentValue)}, surpassing your target of {formatCurrency(milestone.targetValue)}.
+          {isEmergency
+            ? `Your safety buffer of ${formatCurrency(milestone.currentValue)} is fully funded! It will safeguard your household against job loss and sudden emergencies.`
+            : `You've saved ${formatCurrency(milestone.currentValue)}, surpassing your target of ${formatCurrency(milestone.targetValue)}.`
+          }
         </p>
         
         <div className="w-full space-y-3">
-          {milestone.isEmergency ? (
+          {isEmergency ? (
             <Button 
               fullWidth 
               variant="primary" 
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
               onClick={() => onAction('redirect')}
             >
-              Stop Investing & Redirect Surplus to Other Goals 🎯
+              Protect Buffer & Redirect Surplus to Other Goals 🎯
             </Button>
           ) : (
             <>
@@ -51,16 +62,18 @@ const MilestoneModal = ({ milestone, onAction }) => {
             variant="secondary" 
             onClick={() => onAction('grow')}
           >
-            Grow the target (Keep saving)
+            {isEmergency ? 'Expand Emergency Buffer (Keep saving)' : 'Grow the target (Keep saving)'}
           </Button>
-          <Button 
-            fullWidth 
-            variant="ghost" 
-            className="text-red-500"
-            onClick={() => onAction('delete')}
-          >
-            Delete this goal (Refund to pool)
-          </Button>
+          {!isEmergency && (
+            <Button 
+              fullWidth 
+              variant="ghost" 
+              className="text-red-500"
+              onClick={() => onAction('delete')}
+            >
+              Delete this goal (Refund to pool)
+            </Button>
+          )}
         </div>
       </div>
     </BottomSheet>
