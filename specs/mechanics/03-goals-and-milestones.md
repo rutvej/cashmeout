@@ -1,79 +1,99 @@
 # Mechanism Spec: Goals & Milestones System (`specs/mechanics/03-goals-and-milestones.md`)
 
 ## 1. Overview & Objective
-This mechanism manages life goals. Every character begins life with an auto-generated set of realistic financial milestones tailored to their city tier, starting income, and age. Goals have target amounts, target ages (deadlines), and priority levels.
-
-In later screens (Screen 4 & 5), monthly surplus is allocated to investment instruments dedicated to funding these goals, and milestone events trigger upon reaching their target deadlines.
+This mechanism manages life goals. Goals in this game are categorized into two fundamentally distinct types:
+1. **One-Time Milestone Goals:** Have a fixed target date/age (e.g., Marriage at 29, Home at 34, Retirement at 60). Once achieved, they trigger a life transition.
+2. **Recurring / Dynamic Goals:** 
+   - **Yearly Trip / Vacation (Annual Cycle):** Every 12 months. Flexible package selection (Domestic vs International). Resets every year.
+   - **Emergency Fund (Dynamic Continuous Buffer):** Stays funded at $6\times$ monthly outflow. Allocations stop when full, but automatically resume if drawn down by emergencies or if living expenses rise due to lifestyle inflation.
 
 ---
 
 ## 2. Global Type Schema (`GoalItem`)
 
 ```typescript
+export type GoalKind = 'milestone' | 'recurring';
 export type GoalCategory = 'safety' | 'lifestyle' | 'asset' | 'long_term';
 
 export interface GoalItem {
-  id: string;                     // e.g. "goal_emergency", "goal_home"
-  name: string;                   // Display title e.g. "Emergency Fund (6 Months)"
+  id: string;                     // e.g. "goal_emergency", "goal_vacation", "goal_home"
+  name: string;                   // Display title
+  kind: GoalKind;                 // 'milestone' (one-time) | 'recurring' (repeating cycle / buffer)
   category: GoalCategory;
   description: string;
+  
   targetAmount: number;           // Target corpus in ₹
-  currentAmount: number;          // Accumulated corpus in ₹ (starts at 0)
-  targetAge: number;              // Target age deadline (e.g. 28, 33, 60)
-  targetMonth: number;            // (targetAge - startingAge) * 12
+  currentAmount: number;          // Accumulated corpus in ₹
+  
+  // Timeline & Dates
+  targetAge: number | null;       // Target age deadline for milestones (e.g. 27, 29, 34, 60), null for continuous
+  targetMonthsRemaining: number;  // Months until maturity (or until next annual cycle)
+  recurrenceIntervalMonths?: number; // e.g. 12 for annual vacation, 0 for continuous safety buffer
+  
+  // Customization & Options
+  selectedTierOption?: string;    // e.g. "domestic" | "international" for vacation
   isMandatory: boolean;           // true for Emergency Fund & Retirement
   priority: number;               // 1 (highest) to 5 (lowest)
   status: 'in_progress' | 'completed' | 'missed';
-  icon: string;                   // Visual icon / emoji e.g. "🛡️", "🏠"
+  icon: string;                   // Visual icon / emoji
 }
 ```
 
 ---
 
-## 3. Mathematical Models & Goal Calibration
+## 3. Detailed Goal Specifications & Mechanics
 
-Goals are auto-scaled dynamically to the character's baseline financial reality:
+### Group A: Dynamic & Recurring Goals
 
-### 1. Emergency Fund (Safety) — Mandatory
-- **Formula:** $6 \times \text{totalMonthlyOutflow}$
-- **Target Age:** $\text{startingAge} + 2$ years (24 months to fully fund).
-- **Priority:** 1 (Highest).
-- **Rule:** Non-negotiable safety net before high-risk investments.
+#### 1. 🛡️ Emergency Fund (Safety • Continuous Dynamic Buffer • Mandatory)
+- **Target Formula:** $6 \times \text{totalMonthlyOutflow}$.
+- **Target Deadline:** Initial target age = $\text{startingAge} + 2$ (24 months to fully fund).
+- **Behavior:**
+  - When $\text{currentAmount} \ge \text{targetAmount}$, monthly contributions **stop** and money is redirected to other goals.
+  - **Refill Trigger:** If an emergency event deducts money from this buffer, status changes to `refill_needed` and allocations resume until restored.
+  - **Inflation Trigger:** Whenever salary raises or lifestyle upgrades increase $\text{totalMonthlyOutflow}$, the target expands automatically, resuming funding.
 
-### 2. Vehicle / Car Purchase (Lifestyle) — Optional
-- **Formula:** Scaled to annual take-home: $\approx 0.8\text{x}$ to $1.2\text{x}$ annual take-home.
-  - Tier 1: ₹7,00,000 to ₹10,00,000.
-  - Tier 2: ₹5,50,000 to ₹7,50,000.
-  - Tier 3: ₹4,00,000 to ₹6,00,000.
-- **Target Age:** Age 27 (or $\text{startingAge} + 4$).
-- **Priority:** 3.
+#### 2. ✈️ Annual Vacation / Trip (Lifestyle • Recurring 12-Month Cycle • Optional)
+- **Recurrence:** Every 12 months.
+- **Flexible Package Options:**
+  - **Domestic Trip:** ₹40,000 to ₹75,000 / year (e.g. Goa, Himachal, Kerala).
+  - **International Trip:** ₹1,50,000 to ₹2,50,000 / year (e.g. Southeast Asia, Europe).
+- **Behavior:** At month 12 of each year, if target is met, vacation is executed, burnout/stress is reset, corpus is spent, and the goal resets for the next 12 months.
 
-### 3. Marriage & Wedding (Lifestyle) — Optional
-- **Formula:**
-  - Tier 1: ₹10,00,000 to ₹15,00,000.
-  - Tier 2: ₹7,00,000 to ₹10,00,000.
-  - Tier 3: ₹5,00,000 to ₹7,00,000.
-- **Target Age:** Age 29.
-- **Priority:** 2.
+---
 
-### 4. Home Down Payment (Asset) — Optional
-- **Formula:** 20% down payment on a standard residential apartment in that city tier.
-  - Tier 1: ₹25,00,000 to ₹35,00,000.
-  - Tier 2: ₹16,00,000 to ₹22,00,000.
-  - Tier 3: ₹10,00,000 to ₹15,00,000.
-- **Target Age:** Age 34.
-- **Priority:** 2.
+### Group B: One-Time Life Milestones (Fixed Target Dates)
 
-### 5. Child Higher Education (Long Term) — Optional
-- **Target Amount:** ₹25,00,000 to ₹40,00,000.
-- **Target Age:** Age 46.
-- **Priority:** 3.
+#### 3. 🚗 Buy First Car (Lifestyle • One-Time)
+- **Target Date / Age:** Age 27 ($\text{startingAge} + (27 - \text{startingAge})$).
+- **Target Amount:** 
+  - Tier 1: ₹8,00,000
+  - Tier 2: ₹6,50,000
+  - Tier 3: ₹5,00,000
+- **Consequence:** Once purchased, adds +₹4,000/mo vehicle running cost.
 
-### 6. Retirement Corpus / Financial Independence (Long Term) — Mandatory
-- **Formula:** $300 \times \text{totalMonthlyOutflow}$ (Rule of 25 / 4% Safe Withdrawal Rate for 25-30 years post-retirement).
-  - Typically ₹1.5 Crore to ₹3.5 Crore depending on lifestyle and tier.
-- **Target Age:** Age 60.
-- **Priority:** 1 (Highest).
+#### 4. 💍 Marriage & Wedding (Life Milestone • One-Time)
+- **Target Date / Age:** Age 29.
+- **Target Amount:** $\approx 12 \times \text{monthlyTakeHome}$ (Tier 1: ₹10L–₹14L, Tier 2: ₹7L–₹10L, Tier 3: ₹5L–₹7L).
+- **Consequence:** Unlocks dual-income boost (+40% household income) and shared living efficiencies.
+
+#### 5. 🏠 Home Down Payment (Asset • One-Time)
+- **Target Date / Age:** Age 34.
+- **Target Amount:** 25% down payment on standard apartment:
+  - Tier 1: ₹28,00,000
+  - Tier 2: ₹18,00,000
+  - Tier 3: ₹11,00,000
+- **Consequence:** Eliminates rent; initiates 20-year home loan EMI and property asset appreciation.
+
+#### 6. 🎓 Child Higher Education (Family • One-Time)
+- **Target Date / Age:** Age 46.
+- **Target Amount:** ₹25,00,000 to ₹35,00,000.
+- **Consequence:** Pays university fees debt-free.
+
+#### 7. 🌴 Retirement & Financial Independence (Endgame • One-Time • Mandatory)
+- **Target Date / Age:** Age 60.
+- **Target Amount:** $300 \times \text{totalFixedExpenses}$ (Rule of 25 / 4% Safe Withdrawal Rate).
+- **Consequence:** Final scorecard evaluation. Tests if 4% annual withdrawal covers living expenses forever.
 
 ---
 
@@ -81,20 +101,12 @@ Goals are auto-scaled dynamically to the character's baseline financial reality:
 
 ```javascript
 /**
- * Generates the initial list of financial goals tailored to the character.
+ * Generates initial goals tailored to the character.
  * 
  * @param {CharacterState} character
  * @returns {GoalItem[]}
  */
 export function generateInitialGoals(character) {
-  // Deterministic calculation from character state
+  // Pure deterministic generation
 }
 ```
-
----
-
-## 5. Verification & Unit Test Criteria
-1. **Safety First:** Emergency fund target equals exact $6 \times \text{totalMonthlyOutflow}$.
-2. **Retirement Sizing:** Retirement corpus equals exact $300 \times \text{totalMonthlyOutflow}$.
-3. **Deadlines Order:** Target ages strictly follow $\text{Emergency Fund} < \text{Car} < \text{Marriage} < \text{Home} < \text{Child} < \text{Retirement}$.
-4. **Customization Validation:** If user edits a goal target, target must be $> 0$ and target age must be $> \text{startingAge}$ and $\le \text{retirementAge}$.

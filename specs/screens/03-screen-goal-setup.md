@@ -1,9 +1,11 @@
 # Screen 3: Goal Setup (`specs/screens/03-screen-goal-setup.md`)
 
 ## 1. Purpose & User Objective
-On this screen, the player reviews the financial goals auto-generated for their life. They see the timeline of major milestones from age 23 to age 60 (Emergency Fund, Car, Marriage, Home Down Payment, Child Education, and Retirement). 
+On this screen, the player reviews and calibrates their life goals before committing monthly investment allocations. Goals are split into:
+1. **Recurring Life Goals:** Continuous Emergency Shield and Flexible Annual Vacation (Domestic vs International packages).
+2. **One-Time Life Milestones:** Fixed target dates (Car at 27, Wedding at 29, Home at 34, Child College at 46, Retirement at 60).
 
-The player has the opportunity to review, calibrate target amounts, or toggle optional goals before committing their monthly surplus on Screen 4. Clicking **"Continue to Financial Planning"** advances to Screen 4 (`financial_setup`).
+Clicking **"Plan Monthly Allocations ->"** saves the goal roadmap and advances to Screen 4 (`financial_setup`).
 
 ---
 
@@ -11,40 +13,39 @@ The player has the opportunity to review, calibrate target amounts, or toggle op
 
 ```
 +-------------------------------------------------------------+
-|                     LIFE GOALS TIMELINE                     |
+|                     LIFE GOALS ROADMAP                      |
 |      Aarav (Age 23)  •  Available Surplus: ₹16,015 / mo     |
 +-------------------------------------------------------------+
 |                                                             |
-|  [ GOALS LIST ]                                             |
-|                                                             |
+|  [ RECURRING & SAFETY GOALS ]                               |
 |  +-------------------------------------------------------+  |
-|  | 🛡️ Emergency Fund (6 Months)               [MANDATORY] |  |
-|  | Target: ₹3,15,000  •  Target Age: 25 (in 2 years)      |  |
-|  | Priority: High  •  Essential liquid safety buffer     |  |
-|  +-------------------------------------------------------+  |
-|                                                             |
-|  +-------------------------------------------------------+  |
-|  | 🚗 Buy First Car                           [OPTIONAL]  |  |
-|  | Target: ₹6,50,000  •  Target Age: 27 (in 4 years)      |  |
-|  | Priority: Medium  •  Reliable daily commute            |  |
+|  | 🛡️ Emergency Fund (6 Months Buffer)        [MANDATORY] |  |
+|  | Target: ₹3,15,000  •  Continuous Dynamic Shield       |  |
+|  | Pauses when full; auto-refills if emergencies occur    |  |
 |  +-------------------------------------------------------+  |
 |                                                             |
 |  +-------------------------------------------------------+  |
-|  | 💍 Marriage & Wedding                      [OPTIONAL]  |  |
-|  | Target: ₹8,00,000  •  Target Age: 29 (in 6 years)      |  |
-|  | Priority: High  •  Wedding ceremony & setup            |  |
+|  | ✈️ Annual Vacation (Every 12 Months)       [OPTIONAL]  |  |
+|  | Package: [Domestic: ₹50,000] [International: ₹1.5L]   |  |
+|  | Resets every year; resets burnout & boosts happiness   |  |
 |  +-------------------------------------------------------+  |
 |                                                             |
+|  [ ONE-TIME LIFE MILESTONES (TARGET DATES) ]                |
 |  +-------------------------------------------------------+  |
-|  | 🏠 Home Down Payment                       [OPTIONAL]  |  |
-|  | Target: ₹22,00,000 •  Target Age: 34 (in 11 years)     |  |
-|  | Priority: High  •  20% down payment on apartment       |  |
+|  | 🚗 Buy First Car                     Target: Age 27    |  |
+|  | Target: ₹6,50,000 (in 4 years) • 48 months remaining   |  |
 |  +-------------------------------------------------------+  |
-|                                                             |
+|  | 💍 Marriage & Wedding                Target: Age 29    |  |
+|  | Target: ₹8,00,000 (in 6 years) • 72 months remaining   |  |
 |  +-------------------------------------------------------+  |
-|  | 🌴 Retirement & Financial Independence    [MANDATORY]  |  |
-|  | Target: ₹1,58,00,000 (1.58 Cr) • Target Age: 60        |  |
-|  | Priority: Critical • Rule of 25 corpus                |  |
+|  | 🏠 Home Down Payment                 Target: Age 34    |  |
+|  | Target: ₹22,00,000 (in 11 yrs) • 132 months remaining  |  |
+|  +-------------------------------------------------------+  |
+|  | 🎓 Child Higher Education            Target: Age 46    |  |
+|  | Target: ₹25,00,000 (in 23 yrs) • 276 months remaining  |  |
+|  +-------------------------------------------------------+  |
+|  | 🌴 Retirement (FI/RE)                Target: Age 60    |  |
+|  | Target: ₹1,58,00,000 [MANDATORY] • 4% withdrawal rule  |  |
 |  +-------------------------------------------------------+  |
 |                                                             |
 |  +-------------------------------------------------------+  |
@@ -63,7 +64,7 @@ The player has the opportunity to review, calibrate target amounts, or toggle op
 - `goals: GoalItem[]` (auto-generated by `generateInitialGoals(character)`)
 
 ### B. Outputs (Mutations on State)
-- `goals`: Updated array of `GoalItem` if the player modifies amounts or toggles goals.
+- `goals`: Updated array of `GoalItem` (with package selections or target adjustments).
 - `currentScreen: 'financial_setup'`
 
 ---
@@ -76,14 +77,15 @@ The player has the opportunity to review, calibrate target amounts, or toggle op
 
 2. **Goal Card Elements:**
    - **Icon & Title:** Identifies the life milestone.
-   - **Badge:** `[MANDATORY]` (Emerald) or `[OPTIONAL]` (Slate). Mandatory goals cannot be deleted or toggled off.
+   - **Badge:** `[MANDATORY]` (Emerald) or `[OPTIONAL]` (Slate). Mandatory goals cannot be toggled off.
    - **Target Amount Display:** Formatted in INR (e.g. `₹8,00,000` or `₹1.58 Cr`).
-   - **Deadline Tag:** Target age and remaining years (e.g., `Age 29 • in 6 years`).
-   - **Category Tag:** Safety, Lifestyle, Asset, Long Term.
+   - **Deadline Tag:** Target age, years remaining, and months countdown.
 
-3. **Target Calibration (Optional Adjustment):**
-   - Quick stepper / adjustment buttons (`- ₹50k` / `+ ₹50k`) or target toggle.
-   - Allows fine-tuning targets if the player wants an ambitious or modest goal.
+3. **Trip Package Switcher:**
+   - On the Annual Vacation card, toggle between:
+     - `Domestic` (e.g., ₹50,000)
+     - `International` (e.g., ₹1,50,000)
+   - Toggling updates `targetAmount` and `selectedTierOption`.
 
 4. **Action Buttons:**
    - **"← Back to Profile"**: Returns to `spawn_reveal`.
@@ -91,14 +93,7 @@ The player has the opportunity to review, calibrate target amounts, or toggle op
 
 ---
 
-## 5. Edge Cases & Boundary Conditions
-- **Mandatory Goal Protection:** `Emergency Fund` and `Retirement` can never be disabled or deleted.
-- **Timeline Consistency:** Target age must always be greater than character's current age.
-- **Large Numbers Formatting:** Values over ₹1 Crore (10,000,000) display clean Crore abbreviations in secondary badges (e.g., `₹1.58 Cr`).
-
----
-
-## 6. Exit Criteria & Navigation
+## 5. Exit Criteria & Navigation
 - **Next Screen:** Screen 4 (`financial_setup`).
 - **Trigger:** Player clicks `[ Plan Monthly Allocations -> ]`.
 - **Global Store Mutation:**
