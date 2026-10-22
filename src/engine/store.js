@@ -1,16 +1,20 @@
 import { create } from 'zustand';
 import { generateRandomSeedString } from './prng.js';
+import { generateCharacter } from './characterGenerator.js';
 
-export const useGameStore = create((set) => ({
-  // Active screen state
-  currentScreen: 'landing', // 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
+export const useGameStore = create((set, get) => ({
+  // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
+  currentScreen: 'landing',
 
-  // Initial config state
+  // Config state from Landing screen
   config: {
     seed: generateRandomSeedString(),
-    cityTier: 'tier1', // 'tier1' | 'tier2' | 'tier3'
-    careerField: 'science', // 'science' | 'commerce' | 'arts'
+    cityTier: 'tier1',
+    careerField: 'science',
   },
+
+  // Generated character state (strictly follows specs/mechanics/02-character-generation-and-finances.md)
+  character: null,
 
   // Actions
   setConfig: (partialConfig) =>
@@ -23,9 +27,17 @@ export const useGameStore = create((set) => ({
       config: { ...state.config, seed: generateRandomSeedString() },
     })),
 
+  generateAndSetCharacter: () => {
+    const { config } = get();
+    const character = generateCharacter(config.seed, config.cityTier, config.careerField);
+    set({
+      character,
+      currentScreen: 'spawn_reveal',
+    });
+  },
+
   navigateTo: (screen) => set({ currentScreen: screen }),
 
-  // Reset all state to defaults
   resetGame: () =>
     set({
       currentScreen: 'landing',
@@ -34,5 +46,6 @@ export const useGameStore = create((set) => ({
         cityTier: 'tier1',
         careerField: 'science',
       },
+      character: null,
     }),
 }));

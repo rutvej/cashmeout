@@ -47,7 +47,7 @@ const CAREER_FIELDS = [
 ];
 
 export default function LandingScreen() {
-  const { config, setConfig, randomizeSeed, navigateTo } = useGameStore();
+  const { config, setConfig, randomizeSeed, generateAndSetCharacter } = useGameStore();
 
   const handleSeedChange = (e) => {
     setConfig({ seed: e.target.value.trim() });
@@ -57,7 +57,7 @@ export default function LandingScreen() {
 
   const handleGenerate = () => {
     if (!isSeedValid) return;
-    navigateTo('spawn_reveal');
+    generateAndSetCharacter();
   };
 
   return (
