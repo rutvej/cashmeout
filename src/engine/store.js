@@ -20,6 +20,28 @@ export const useGameStore = create((set, get) => ({
   // Generated goals roadmap
   goals: [],
 
+  // Insurance policies
+  insurance: {
+    health: {
+      id: 'health_insurance',
+      name: 'Comprehensive Health Insurance',
+      isPurchased: true,
+      monthlyPremium: 800,
+      sumInsured: 1000000,
+      deductible: 5000,
+      description: 'Protects emergency fund from sudden medical bills up to ₹10 Lakh.',
+    },
+    termLife: {
+      id: 'term_life_insurance',
+      name: 'Term Life Cover',
+      isPurchased: false,
+      monthlyPremium: 600,
+      sumInsured: 5000000,
+      deductible: 0,
+      description: 'Protects dependants with ₹50 Lakh pure risk coverage.',
+    },
+  },
+
   // Actions
   setConfig: (partialConfig) =>
     set((state) => ({
@@ -45,6 +67,22 @@ export const useGameStore = create((set, get) => ({
   updateGoal: (goalId, updates) =>
     set((state) => ({
       goals: state.goals.map((g) => (g.id === goalId ? { ...g, ...updates } : g)),
+    })),
+
+  setGoalAllocation: (goalId, allocationUpdates) =>
+    set((state) => ({
+      goals: state.goals.map((g) => (g.id === goalId ? { ...g, ...allocationUpdates } : g)),
+    })),
+
+  toggleInsurance: (type) =>
+    set((state) => ({
+      insurance: {
+        ...state.insurance,
+        [type]: {
+          ...state.insurance[type],
+          isPurchased: !state.insurance[type].isPurchased,
+        },
+      },
     })),
 
   setGoals: (goals) => set({ goals }),

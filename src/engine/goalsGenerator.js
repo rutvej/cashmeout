@@ -67,6 +67,14 @@ export function generateInitialGoals(character) {
   const retirementTargetAge = 60;
   const retirementTarget = Math.round((character.totalFixedExpenses * 300) / 50000) * 50000;
 
+  // Intelligent baseline SIP distribution (fits starting surplus)
+  const surplus = character.monthlySurplus;
+  const emergencySIP = Math.min(Math.round((surplus * 0.35) / 500) * 500, Math.round(emergencyTarget / 24));
+  const vacationSIP = Math.round(vacationTarget / 12 / 500) * 500;
+  const remainingSurplus = Math.max(0, surplus - emergencySIP - vacationSIP);
+  const retirementSIP = Math.round((remainingSurplus * 0.5) / 500) * 500;
+  const carSIP = remainingSurplus - retirementSIP;
+
   return [
     {
       id: 'goal_emergency',
@@ -79,6 +87,10 @@ export function generateInitialGoals(character) {
       targetAge: startAge + 2,
       targetMonthsRemaining: (startAge + 2 - startAge) * 12,
       recurrenceIntervalMonths: 0,
+      baseMonthlySIP: emergencySIP,
+      instrumentId: 'savings',
+      redirectGoalId: 'goal_car',
+      isRefillPriority: true,
       isMandatory: true,
       priority: 1,
       status: 'in_progress',
@@ -96,6 +108,9 @@ export function generateInitialGoals(character) {
       targetMonthsRemaining: 12,
       recurrenceIntervalMonths: 12,
       selectedTierOption: defaultTripOption,
+      baseMonthlySIP: vacationSIP,
+      instrumentId: 'savings',
+      redirectGoalId: 'goal_car',
       isMandatory: false,
       priority: 3,
       status: 'in_progress',
@@ -111,6 +126,9 @@ export function generateInitialGoals(character) {
       currentAmount: 0,
       targetAge: carTargetAge,
       targetMonthsRemaining: (carTargetAge - startAge) * 12,
+      baseMonthlySIP: Math.max(0, carSIP),
+      instrumentId: 'fd',
+      redirectGoalId: 'goal_marriage',
       isMandatory: false,
       priority: 3,
       status: 'in_progress',
@@ -126,6 +144,9 @@ export function generateInitialGoals(character) {
       currentAmount: 0,
       targetAge: weddingTargetAge,
       targetMonthsRemaining: (weddingTargetAge - startAge) * 12,
+      baseMonthlySIP: 0,
+      instrumentId: 'fd',
+      redirectGoalId: 'goal_home',
       isMandatory: false,
       priority: 2,
       status: 'in_progress',
@@ -141,6 +162,9 @@ export function generateInitialGoals(character) {
       currentAmount: 0,
       targetAge: homeTargetAge,
       targetMonthsRemaining: (homeTargetAge - startAge) * 12,
+      baseMonthlySIP: 0,
+      instrumentId: 'gold',
+      redirectGoalId: 'goal_retirement',
       isMandatory: false,
       priority: 2,
       status: 'in_progress',
@@ -156,6 +180,9 @@ export function generateInitialGoals(character) {
       currentAmount: 0,
       targetAge: childTargetAge,
       targetMonthsRemaining: (childTargetAge - startAge) * 12,
+      baseMonthlySIP: 0,
+      instrumentId: 'equity',
+      redirectGoalId: 'goal_retirement',
       isMandatory: false,
       priority: 3,
       status: 'in_progress',
@@ -171,6 +198,9 @@ export function generateInitialGoals(character) {
       currentAmount: 0,
       targetAge: retirementTargetAge,
       targetMonthsRemaining: (retirementTargetAge - startAge) * 12,
+      baseMonthlySIP: Math.max(0, retirementSIP),
+      instrumentId: 'equity',
+      redirectGoalId: null, // Ultimate sink
       isMandatory: true,
       priority: 1,
       status: 'in_progress',
