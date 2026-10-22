@@ -1,108 +1,37 @@
 import React from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import useGameStore from './engine/store';
+import { useGameStore } from './engine/store.js';
+import LandingScreen from './components/screens/LandingScreen.jsx';
 
-// Screens
-import Landing from './components/screens/Landing';
-import SpawnReveal from './components/screens/SpawnReveal';
-import GoalSetup from './components/screens/GoalSetup';
-import FinancialSetup from './components/screens/FinancialSetup';
-import MainGame from './components/screens/MainGame';
-import Scorecard from './components/screens/Scorecard';
+export default function App() {
+  const { currentScreen, config, resetGame } = useGameStore();
 
-class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
+  if (currentScreen === 'landing') {
+    return <LandingScreen />;
   }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error, errorInfo) {
-    console.error("ErrorBoundary caught an unhandled screen error:", error, errorInfo);
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-surface-bg p-6 flex flex-col justify-center items-center text-center">
-          <span className="text-5xl mb-3 animate-bounce">🏆</span>
-          <h2 className="text-xl font-black text-text-primary mb-1">Life Simulation Run Complete</h2>
-          <p className="text-xs text-text-muted mb-5 max-w-xs leading-relaxed">
-            Your 20-year financial run was processed. Tap below to view your final scorecard or start a fresh run.
-          </p>
-          <div className="flex flex-col gap-2.5 w-full max-w-xs">
-            <button
-              onClick={() => {
-                useGameStore.setState({ screen: 'scorecard' });
-                this.setState({ hasError: false, error: null });
-              }}
-              className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-2xl shadow-md transition"
-            >
-              📊 View Life Scorecard →
-            </button>
-            <button
-              onClick={() => {
-                useGameStore.getState().resetGame();
-                this.setState({ hasError: false, error: null });
-              }}
-              className="py-3 px-4 bg-gray-200 hover:bg-gray-300 text-text-primary text-xs font-bold rounded-2xl transition"
-            >
-              🔄 Start Fresh Life Run
-            </button>
+
+  // Placeholder for upcoming Screen 2
+  if (currentScreen === 'spawn_reveal') {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl max-w-md w-full space-y-3">
+          <div className="text-emerald-400 font-mono text-sm font-semibold">
+            ✓ Landing Complete → Screen 2 (Spawn Reveal)
           </div>
+          <div className="text-left bg-slate-900 p-3 rounded-xl text-xs font-mono space-y-1 text-slate-300">
+            <div><span className="text-slate-500">Seed:</span> {config.seed}</div>
+            <div><span className="text-slate-500">City Tier:</span> {config.cityTier}</div>
+            <div><span className="text-slate-500">Career Field:</span> {config.careerField}</div>
+          </div>
+          <button
+            onClick={resetGame}
+            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+          >
+            ← Back to Landing
+          </button>
         </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-function App() {
-  const screen = useGameStore(state => state.screen);
-
-  const renderScreen = () => {
-    switch (screen) {
-      case 'landing':
-        return <Landing key="landing" />;
-      case 'spawn':
-        return <SpawnReveal key="spawn" />;
-      case 'goalSetup':
-        return <GoalSetup key="goalSetup" />;
-      case 'financialSetup':
-        return <FinancialSetup key="financialSetup" />;
-      case 'setup':
-        return <FinancialSetup key="setup" />;
-      case 'goals':
-        return <GoalSetup key="goalSetup" />;
-      case 'game':
-        return <MainGame key="game" />;
-      case 'scorecard':
-        return <Scorecard key="scorecard" />;
-      default:
-        return <Landing key="landing" />;
-    }
-  };
-
-  return (
-    <div className="font-sans text-text-primary bg-black min-h-screen">
-      <div className="max-w-md mx-auto bg-surface-bg min-h-screen relative shadow-2xl overflow-x-hidden sm:border-x sm:border-gray-200">
-        <ErrorBoundary>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={screen}
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.02 }}
-              transition={{ duration: 0.25 }}
-              className="min-h-screen w-full"
-            >
-              {renderScreen()}
-            </motion.div>
-          </AnimatePresence>
-        </ErrorBoundary>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-export default App;
+  return null;
+}
