@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { generateRandomSeedString } from './prng.js';
 import { generateCharacter } from './characterGenerator.js';
 import { generateInitialGoals } from './goalsGenerator.js';
+import { tickMonthlySimulation } from './simulationEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -42,6 +43,17 @@ export const useGameStore = create((set, get) => ({
     },
   },
 
+  // Simulation state
+  simulation: {
+    currentMonthIndex: 0,
+    currentAge: 23,
+    currentMonthOfYear: 1,
+    isPaused: true,
+    gameSpeed: 1, // 1 | 2 | 5
+    activeModal: null, // null | { type, ... }
+    history: [],
+  },
+
   // Actions
   setConfig: (partialConfig) =>
     set((state) => ({
@@ -61,6 +73,24 @@ export const useGameStore = create((set, get) => ({
       character,
       goals,
       currentScreen: 'spawn_reveal',
+      simulation: {
+        currentMonthIndex: 0,
+        currentAge: character.age,
+        currentMonthOfYear: 1,
+        isPaused: true,
+        gameSpeed: 1,
+        activeModal: null,
+        history: [
+          {
+            month: 0,
+            age: character.age,
+            netWorth: character.liquidCash - (character.loans || []).reduce((s, l) => s + l.principalRemaining, 0),
+            liquidCash: character.liquidCash,
+            totalInvestments: 0,
+            totalDebt: (character.loans || []).reduce((s, l) => s + l.principalRemaining, 0),
+          },
+        ],
+      },
     });
   },
 
@@ -85,7 +115,70 @@ export const useGameStore = create((set, get) => ({
       },
     })),
 
-  setGoals: (goals) => set({ goals }),
+  // Simulation Controls
+  play: () =>
+    set((state) => ({
+      simulation: { ...state.simulation, isPaused: false },
+    })),
+
+  pause: () =>
+    set((state) => ({
+      simulation: { ...state.simulation, isPaused: true },
+    })),
+
+  setSpeed: (gameSpeed) =>
+    set((state) => ({
+      simulation: { ...state.simulation, gameSpeed },
+    })),
+
+  tickMonth: () => {
+    const currentState = get();
+    const nextState = tickMonthlySimulation(currentState);
+    set(nextState);
+  },
+
+  closeModal: () =>
+    set((state) => ({
+      simulation: { ...state.simulation, activeModal: null, isPaused: false },
+    })),
+
+  executeVacationSelection: (option) => {
+    const amount = option === 'domestic' ? 50000 : 150000;
+    set((state) => ({
+      goals: state.goals.map((g) =>
+        g.id === 'goal_vacation'
+          ? { ...g, targetAmount: amount, selectedTierOption: option, currentAmount: 0 }
+          : g
+      ),
+      simulation: { ...state.simulation, activeModal: null, isPaused: false },
+    }));
+  },
+
+  prepayLoan: (loanId, amount) => {
+    const { character } = get();
+    const payAmount = Math.min(amount, character.liquidCash);
+    if (payAmount <= 0) return;
+
+    const updatedLoans = character.loans.map((l) => {
+      if (l.id === loanId) {
+        const nextPrincipal = Math.max(0, l.principalRemaining - payAmount);
+        return {
+          ...l,
+          principalRemaining: nextPrincipal,
+          tenureMonthsRemaining: nextPrincipal === 0 ? 0 : l.tenureMonthsRemaining,
+        };
+      }
+      return l;
+    }).filter((l) => l.principalRemaining > 0);
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        liquidCash: state.character.liquidCash - payAmount,
+        loans: updatedLoans,
+      },
+    }));
+  },
 
   navigateTo: (screen) => set({ currentScreen: screen }),
 
@@ -99,5 +192,14 @@ export const useGameStore = create((set, get) => ({
       },
       character: null,
       goals: [],
+      simulation: {
+        currentMonthIndex: 0,
+        currentAge: 23,
+        currentMonthOfYear: 1,
+        isPaused: true,
+        gameSpeed: 1,
+        activeModal: null,
+        history: [],
+      },
     }),
 }));
