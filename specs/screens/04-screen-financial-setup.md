@@ -17,37 +17,40 @@ This screen is the **Financial Command Center** where the player allocates their
 +-------------------------------------------------------------+
 |                     FINANCIAL PLANNING                      |
 |       Total Surplus: ₹16,015 / mo  •  Remaining: ₹0 / mo    |
+|       Views: [Focus Carousel]  [All Goals Grid]             |
 +-------------------------------------------------------------+
 |                                                             |
 |  [ TOP SURPLUS & PROTECTION BAR ]                           |
 |  +-------------------------------------------------------+  |
 |  | Surplus: ₹16,015  | Allocated: ₹16,000 | Unallocated: ₹15|
+|  | [████████████████████████████████████████████░] 99.9%  |  |
 |  | 🛡️ Health Insurance: [✓ Active (₹800/mo)] Covers ₹10L |  |
 |  +-------------------------------------------------------+  |
 |                                                             |
-|  [ GOAL ALLOCATION & WATERFALL CARDS ]                      |
-|                                                             |
-|  +-------------------------------------------------------+  |
-|  | 🛡️ Emergency Fund (Target: ₹3,15,000 in 24 months)     |  |
-|  | Instrument: [Liquid Savings (4%)] [FD (7%)]           |  |
-|  | Monthly SIP: [ - ₹500 ]  [ ₹5,000 ]  [ + ₹500 ]       |  |
-|  | Feasibility: 🟢 On Track                              |  |
-|  | ↪️ When Full, Redirect SIP to: [🚗 Buy First Car  ▼]  |  |
-|  | ⚡ Priority Rule: Automatically recalls SIP if drained |  |
-|  +-------------------------------------------------------+  |
+|  [ FOCUSED GOAL STEPPER CAROUSEL (Goal 2 of 7) ]            |
+|  [ •  ▬  •  •  •  •  • ]                                    |
 |                                                             |
 |  +-------------------------------------------------------+  |
 |  | 🚗 Buy First Car (Target: ₹6,50,000 at Age 27)         |  |
-|  | Instrument: [Fixed Deposit (7% p.a.)]                 |  |
-|  | Monthly SIP: [ ₹4,000 / mo ]                          |  |
-|  | ↪️ When Bought, Redirect SIP to: [🏠 Home Down Pmt ▼] |  |
-|  +-------------------------------------------------------+  |
-|                                                             |
-|  +-------------------------------------------------------+  |
-|  | 🌴 Retirement Corpus (Target: ₹1.58 Cr at Age 60)      |  |
-|  | Instrument: [Equity Mutual Funds (12% p.a.)]          |  |
-|  | Monthly SIP: [ ₹7,000 / mo ]                          |  |
-|  | ↪️ Ultimate Sink: Accumulates all cascading overflows |  |
+|  |                                                       |  |
+|  | [ LIVE RECHARTS PROJECTION AREA CHART ]               |  |
+|  |   ₹6.5L --------------------- Target Line (Dashed)    |  |
+|  |   ₹4.8L        .-~*~-.                                |  |
+|  |   ₹2.0L    _.-~        (Compound Growth Curve)        |  |
+|  |   ₹0L   .-~                                           |  |
+|  |         M0     M12    M24    M36    M48               |  |
+|  |   Status: 🟢 On Track (Projected ₹6,80,000)            |  |
+|  |                                                       |  |
+|  | Select Instrument:                                    |  |
+|  | [Savings 4%] [Fixed Deposit 7%] [Gold 8.5%] [Equity 12%]|
+|  |                                                       |  |
+|  | Monthly SIP Allocation:                               |  |
+|  | [ -500 ] [ ₹4,500 / mo ] [ +500 ]                     |  |
+|  | Quick Add: [+₹1k] [+₹2k] [+₹5k] [Fill Remaining (+₹3k)]|  |
+|  |                                                       |  |
+|  | ↪️ When Full, Redirect SIP to: [🏠 Home Down Pmt ▼]   |  |
+|  |                                                       |  |
+|  | [← Prev Goal]                             [Next Goal →]|
 |  +-------------------------------------------------------+  |
 |                                                             |
 |  +-------------------------------------------------------+  |
@@ -64,7 +67,7 @@ This screen is the **Financial Command Center** where the player allocates their
 ### A. Inputs (Read from Store)
 - `character: CharacterState` (reads `character.monthlySurplus`)
 - `goals: GoalItem[]` (reads list of active goals)
-- `insurance: InsurancePolicy[]` (health and term insurance policies)
+- `insurance: Record<string, InsurancePolicy>` (health and term insurance policies)
 - `allocations: Record<string, GoalAllocation>` (active SIPs and redirect targets)
 
 ### B. Outputs (Mutations on State)
@@ -83,32 +86,32 @@ This screen is the **Financial Command Center** where the player allocates their
      - Clearly notes: *"Covers hospitalization up to ₹10 Lakh. Protects your Emergency Fund from sudden medical wipes."*
      - If activated, deducts ₹800 from available surplus before investments.
 
-2. **Per-Goal Allocation Card:**
-   - **Instrument Selector:** Pills for `Savings (4%)`, `FD (7%)`, `Gold (8.5%)`, and `Equity (12%)`.
-   - **Monthly SIP Input:** Steppers (`- ₹500`, `+ ₹500`, `+ ₹2,000`) and numeric input.
-   - **Live Feasibility Indicator:** 🟢 On Track, 🟡 Borderline, 🔴 Underfunded.
-   - **The Waterfall Redirect Selector (`↪️ When Complete, Redirect SIP to:`):**
-     - Dropdown menu listing other active goals.
-     - Automatically routes SIP to this chosen goal once target corpus is achieved.
-     - On the Emergency Fund card, notes the **Auto-Recall Guarantee**: *"If emergencies deplete the fund, this SIP automatically returns here until restored."*
+2. **Focused Goal Carousel Stepper:**
+   - **Progress dots:** `[ • • ▬ • • ]` indicating active goal and completed funding states.
+   - **Navigation buttons:** `← Prev Goal` and `Next Goal →`.
 
-3. **Validation & Action CTA:**
-   - Button: **"Start Life Simulation 🚀"** (or **"Save Allocations"** in-game).
-   - Disabled if total allocations + insurance exceed available surplus.
+3. **Interactive Recharts AreaChart:**
+   - Plots the compounding annuity curve:
+     $$FV(t) = \text{PV} \times (1 + r)^t + \text{PMT} \times \left[ \frac{(1 + r)^t - 1}{r} \right]$$
+   - Dashed horizontal line indicating the target corpus.
+   - Dynamic curve stroke and gradient fill:
+     - 🟢 Emerald: $FV \ge \text{Target}$
+     - 🟡 Amber: $FV \ge 80\%$ of Target
+     - 🔴 Rose: $FV < 80\%$ of Target
+
+4. **One-Tap Quick Presets:**
+   - Buttons: `+₹1,000`, `+₹2,000`, `+₹5,000`, and `Fill Remaining (+₹X)` to quickly allocate unallocated surplus.
+
+5. **The Waterfall Redirect Selector (`↪️ When Complete, Redirect SIP to:`):**
+   - Dropdown menu listing other active goals.
+   - Automatically routes SIP to this chosen goal once target corpus is achieved.
+   - On the Emergency Fund card, notes the **Auto-Recall Guarantee**: *"If emergencies deplete the fund, this SIP automatically returns here until restored."*
+
+6. **View Mode Toggle:**
+   - Switch between **"Focus Carousel"** (one goal at a time) and **"All Goals Grid"** (overview of all goals).
 
 ---
 
-## 5. Edge Cases & Boundary Conditions
-- **Circular Redirections:** UI dropdown prevents circular dependencies (e.g. Goal A $\rightarrow$ Goal B $\rightarrow$ Goal A). If all intermediate goals are complete, funds flow directly to `goal_retirement`.
-- **Emergency Priority:** Emergency Fund can never have a redirect to itself.
-- **Unallocated Surplus:** Unallocated funds remain in liquid bank cash.
-
----
-
-## 6. Exit Criteria & Navigation
+## 5. Exit Criteria & Navigation
 - **Next Screen:** Screen 5 (`main_game`).
 - **Trigger:** Player clicks `[ START LIFE SIMULATION 🚀 ]`.
-- **Global Store Mutation:**
-  - `gameState.goals` updated with SIPs and redirects.
-  - `gameState.insurance` updated.
-  - `gameState.currentScreen = 'main_game'`
