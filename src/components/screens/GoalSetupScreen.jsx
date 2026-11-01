@@ -1,17 +1,26 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR } from '../../utils/format.js';
+import {
+  pageTransition,
+  staggerContainer,
+  fadeInUp,
+  scaleIn,
+  springPress,
+  hardPress,
+} from '../../utils/motion.js';
 
 export default function GoalSetupScreen() {
   const { character, goals, updateGoal, navigateTo } = useGameStore();
 
   if (!character || !goals.length) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
-        <p className="text-slate-400 mb-4">No goals loaded.</p>
+      <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center p-6">
+        <p className="text-slate-400 mb-4 font-body">No goals loaded.</p>
         <button
           onClick={() => navigateTo('landing')}
-          className="px-4 py-2 bg-emerald-500 text-slate-950 font-semibold rounded-xl"
+          className="px-5 py-2.5 bg-emerald-500 text-surface-0 font-bold btn-press"
         >
           Return to Start
         </button>
@@ -32,118 +41,146 @@ export default function GoalSetupScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-3xl bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-sm space-y-6">
-        
-        {/* Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-2">
+    <motion.div
+      className="min-h-screen bg-mesh noise-overlay relative flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8"
+      {...pageTransition}
+    >
+      <motion.div
+        className="w-full max-w-3xl relative z-10 space-y-6"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        {/* ─── Header ─── */}
+        <motion.div
+          className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-surface-3 gap-3"
+          variants={fadeInUp}
+        >
           <div>
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                Screen 3: Life Goals Roadmap
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
+                Life Goals Roadmap
               </span>
             </div>
-            <h1 className="text-2xl font-black text-white mt-1">
-              Your Milestones & Financial Targets
+            <h1 className="font-display text-3xl font-black text-white">
+              Your Milestones
             </h1>
           </div>
 
-          <div className="bg-slate-950/80 px-4 py-2 rounded-2xl border border-emerald-500/30 text-right">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Available Surplus</div>
-            <div className="text-lg font-black text-emerald-400 font-mono">
-              {formatINR(character.monthlySurplus)} <span className="text-xs font-normal text-slate-400">/ mo</span>
+          <div className="bg-surface-1 px-5 py-3 border border-emerald-500/30 text-right">
+            <div className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
+              Available Surplus
+            </div>
+            <div className="text-xl font-mono font-black text-emerald-400">
+              {formatINR(character.monthlySurplus)}
+              <span className="text-xs font-normal text-slate-500 ml-1">/ mo</span>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <p className="text-xs text-slate-400 leading-relaxed">
-          Review your life roadmap below. On the next screen, you will allocate your monthly surplus into specific investment instruments to fund these milestones.
-        </p>
+        <motion.p
+          className="text-xs text-slate-500 font-body leading-relaxed"
+          variants={fadeInUp}
+        >
+          Review your life roadmap. On the next screen you will allocate monthly surplus into
+          investment instruments to fund each milestone.
+        </motion.p>
 
-        {/* Section 1: Recurring & Dynamic Goals */}
-        <div className="space-y-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+        {/* ─── Recurring & Dynamic Goals (Timeline) ─── */}
+        <motion.div className="space-y-4" variants={fadeInUp}>
+          <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-400 flex items-center gap-2">
             <span>🔄</span> Recurring & Dynamic Goals
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            {recurringGoals.map((goal) => {
+          <div className="relative space-y-3">
+            {/* Timeline connector */}
+            <div className="absolute left-[22px] top-4 bottom-4 w-px bg-surface-3" />
+
+            {recurringGoals.map((goal, idx) => {
               const isVacation = goal.id === 'goal_vacation';
 
               return (
-                <div
+                <motion.div
                   key={goal.id}
-                  className="bg-slate-950/60 border border-slate-800 hover:border-slate-700/80 rounded-2xl p-4 transition space-y-3"
+                  className="relative pl-12"
+                  variants={fadeInUp}
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl p-2 bg-slate-900 rounded-xl">{goal.icon}</span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-base text-white">{goal.name}</span>
-                          {goal.isMandatory ? (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              MANDATORY
+                  {/* Timeline node */}
+                  <div className="absolute left-3 top-4 w-4 h-4 rounded-full border-2 border-emerald-500 bg-surface-0 z-10" />
+
+                  <div className="bg-surface-1 border border-surface-3 p-5 space-y-3 hover:border-surface-3/80 transition-colors">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-2xl">{goal.icon}</span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-body font-bold text-base text-white">
+                              {goal.name}
                             </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400">
-                              ANNUAL CYCLE
-                            </span>
-                          )}
+                            {goal.isMandatory ? (
+                              <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                MANDATORY
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-surface-2 text-slate-400 border border-surface-3">
+                                ANNUAL
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5 font-body">
+                            {goal.description}
+                          </p>
                         </div>
-                        <p className="text-xs text-slate-400 mt-0.5">{goal.description}</p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-600">
+                          Target
+                        </div>
+                        <div className="text-lg font-mono font-black text-white">
+                          {formatINR(goal.targetAmount)}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="text-[10px] uppercase font-bold text-slate-500">Target</div>
-                      <div className="text-base font-black text-white font-mono">
-                        {formatINR(goal.targetAmount)}
+                    {/* Vacation Package Selector */}
+                    {isVacation && (
+                      <div className="pt-3 border-t border-surface-3 flex items-center justify-between gap-3">
+                        <span className="text-[11px] text-slate-500 font-body">Trip Package:</span>
+                        <div className="flex gap-2">
+                          {[
+                            { id: 'domestic', label: 'Domestic', amount: '₹50K' },
+                            { id: 'international', label: 'International', amount: '₹1.5L' },
+                          ].map((opt) => (
+                            <motion.button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => handleTripOption(opt.id)}
+                              className={`px-3 py-1.5 text-xs font-mono font-bold transition-all ${
+                                goal.selectedTierOption === opt.id
+                                  ? 'bg-emerald-500 text-surface-0'
+                                  : 'bg-surface-2 text-slate-400 border border-surface-3 hover:text-white'
+                              }`}
+                              {...springPress}
+                            >
+                              {opt.label} (~{opt.amount})
+                            </motion.button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
-
-                  {/* Vacation package switcher */}
-                  {isVacation && (
-                    <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-3 text-xs">
-                      <span className="text-slate-400">Select Trip Package:</span>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleTripOption('domestic')}
-                          className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
-                            goal.selectedTierOption === 'domestic'
-                              ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                              : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
-                          }`}
-                        >
-                          Domestic (~₹50,000)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleTripOption('international')}
-                          className={`px-3 py-1 rounded-xl text-xs font-semibold transition ${
-                            goal.selectedTierOption === 'international'
-                              ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                              : 'bg-slate-800 text-slate-300 hover:bg-slate-750'
-                          }`}
-                        >
-                          International (~₹1,50,000)
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                </motion.div>
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Section 2: One-Time Life Milestones */}
-        <div className="space-y-3">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
-            <span>🎯</span> One-Time Milestones (Target Dates)
+        {/* ─── One-Time Milestones ─── */}
+        <motion.div className="space-y-4" variants={fadeInUp}>
+          <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-300 flex items-center gap-2">
+            <span>🎯</span> One-Time Milestones
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -151,69 +188,76 @@ export default function GoalSetupScreen() {
               const yearsAway = (goal.targetAge || 60) - character.age;
 
               return (
-                <div
+                <motion.div
                   key={goal.id}
-                  className={`bg-slate-950/60 border rounded-2xl p-4 flex flex-col justify-between transition ${
+                  className={`bg-surface-1 border p-5 flex flex-col justify-between transition-colors ${
                     goal.isMandatory
-                      ? 'border-emerald-500/40 bg-emerald-950/10'
-                      : 'border-slate-800 hover:border-slate-750'
+                      ? 'border-l-[3px] border-l-emerald-500 border-y-surface-3 border-r-surface-3'
+                      : 'border-surface-3 hover:border-surface-3/80'
                   }`}
+                  variants={fadeInUp}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xl">{goal.icon}</span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-                        Target: Age {goal.targetAge} ({yearsAway} yrs)
+                      <span className="text-2xl">{goal.icon}</span>
+                      <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-surface-2 text-slate-400 border border-surface-3">
+                        AGE {goal.targetAge} · {yearsAway} YRS
                       </span>
                     </div>
 
                     <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-sm text-white">{goal.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-body font-bold text-sm text-white">{goal.name}</span>
                         {goal.isMandatory && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
+                          <span className="text-[8px] font-mono font-bold px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400">
                             CORE
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                      <p className="text-[11px] text-slate-500 mt-1 leading-snug font-body">
                         {goal.description}
                       </p>
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-slate-850 flex items-center justify-between">
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Target Corpus</span>
-                    <span className="text-base font-black text-white font-mono">
+                  <div className="mt-4 pt-3 border-t border-surface-3 flex items-center justify-between">
+                    <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-600">
+                      Target Corpus
+                    </span>
+                    <span className="text-base font-mono font-black text-white">
                       {formatINR(goal.targetAmount)}
                     </span>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Action Footer */}
-        <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">
-          <button
+        {/* ─── Action Footer ─── */}
+        <motion.div
+          className="pt-2 flex flex-col sm:flex-row gap-3 items-center"
+          variants={fadeInUp}
+        >
+          <motion.button
             type="button"
             onClick={() => navigateTo('spawn_reveal')}
-            className="w-full sm:w-auto px-5 py-3.5 rounded-2xl border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white text-sm font-semibold transition"
+            className="w-full sm:w-auto px-6 py-3.5 border border-surface-3 text-slate-400 hover:text-white hover:border-slate-500 text-sm font-body font-semibold transition-colors"
+            {...springPress}
           >
             ← Back to Profile
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             type="button"
             onClick={() => navigateTo('financial_setup')}
-            className="w-full flex-1 py-3.5 px-6 rounded-2xl font-bold text-base bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-[0.99] flex items-center justify-center gap-2 transition cursor-pointer"
+            className="w-full flex-1 py-4 px-8 bg-emerald-500 text-surface-0 font-body font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 btn-press cursor-pointer hover:bg-emerald-400 transition-colors"
+            {...hardPress}
           >
-            <span>Plan Monthly Allocations</span>
-            <span className="text-lg">➔</span>
-          </button>
-        </div>
-
-      </div>
-    </div>
+            <span>Plan Allocations</span>
+            <span className="text-lg">→</span>
+          </motion.button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   );
 }

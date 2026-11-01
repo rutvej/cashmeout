@@ -1,11 +1,146 @@
+/* ─── Font Imports (must precede @tailwind) ─── */
+@import '@fontsource/playfair-display/latin-400.css';
+@import '@fontsource/playfair-display/latin-700.css';
+@import '@fontsource/playfair-display/latin-900.css';
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-800.css';
+@import '@fontsource/inter/latin-900.css';
+@import '@fontsource/jetbrains-mono/latin-400.css';
+@import '@fontsource/jetbrains-mono/latin-700.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base Reset ─── */
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background-color: #020617;
-  color: #f8fafc;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #030712;
+  color: #e2e8f0;
+}
+
+/* ─── Mesh Gradient Backgrounds ─── */
+.bg-mesh {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(16, 185, 129, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(245, 166, 35, 0.02) 0%, transparent 50%),
+    #030712;
+}
+
+.bg-mesh-subtle {
+  background:
+    radial-gradient(ellipse at 30% 40%, rgba(16, 185, 129, 0.025) 0%, transparent 40%),
+    #0a0f1a;
+}
+
+/* ─── Hard-Edge Interactive Cards (NeoPOP style) ─── */
+.card-hard {
+  border: 1px solid #1f2937;
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.6);
+  transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.card-hard:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px rgba(0, 0, 0, 0.6);
+}
+
+.card-hard:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px rgba(0, 0, 0, 0.6);
+}
+
+/* ─── Button Mechanical Press ─── */
+.btn-press {
+  box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.8);
+  transition: all 0.1s ease;
+}
+
+.btn-press:hover {
+  box-shadow: 5px 5px 0px rgba(0, 0, 0, 0.8);
+  transform: translate(-1px, -1px);
+}
+
+.btn-press:active {
+  box-shadow: 0px 0px 0px rgba(0, 0, 0, 0.8);
+  transform: translate(4px, 4px);
+}
+
+/* ─── Glowing Pulse ─── */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.1); }
+  50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.25); }
+}
+
+.animate-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+@keyframes pulse-glow-gold {
+  0%, 100% { box-shadow: 0 0 15px rgba(245, 166, 35, 0.1); }
+  50% { box-shadow: 0 0 30px rgba(245, 166, 35, 0.2); }
+}
+
+.animate-glow-gold {
+  animation: pulse-glow-gold 3s ease-in-out infinite;
+}
+
+/* ─── Noise Texture Overlay ─── */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Gold Accent Bar ─── */
+.bar-gold {
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #F5A623, transparent);
+}
+
+/* ─── Scrollbar Styling ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #030712;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1f2937;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
+/* ─── Selection ─── */
+::selection {
+  background-color: rgba(16, 185, 129, 0.3);
+  color: #ffffff;
+}
+
+/* ─── Number Input Spinners ─── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
 }

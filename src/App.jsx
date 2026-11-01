@@ -1,4 +1,5 @@
 import React from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useGameStore } from './engine/store.js';
 import LandingScreen from './components/screens/LandingScreen.jsx';
 import SpawnRevealScreen from './components/screens/SpawnRevealScreen.jsx';
@@ -10,29 +11,14 @@ import ScorecardScreen from './components/screens/ScorecardScreen.jsx';
 export default function App() {
   const { currentScreen } = useGameStore();
 
-  if (currentScreen === 'landing') {
-    return <LandingScreen />;
-  }
-
-  if (currentScreen === 'spawn_reveal') {
-    return <SpawnRevealScreen />;
-  }
-
-  if (currentScreen === 'goal_setup') {
-    return <GoalSetupScreen />;
-  }
-
-  if (currentScreen === 'financial_setup') {
-    return <FinancialSetupScreen />;
-  }
-
-  if (currentScreen === 'main_game') {
-    return <MainGameScreen />;
-  }
-
-  if (currentScreen === 'scorecard') {
-    return <ScorecardScreen />;
-  }
-
-  return null;
+  return (
+    <AnimatePresence mode="wait">
+      {currentScreen === 'landing' && <LandingScreen key="landing" />}
+      {currentScreen === 'spawn_reveal' && <SpawnRevealScreen key="spawn" />}
+      {currentScreen === 'goal_setup' && <GoalSetupScreen key="goals" />}
+      {currentScreen === 'financial_setup' && <FinancialSetupScreen key="finance" />}
+      {currentScreen === 'main_game' && <MainGameScreen key="game" />}
+      {currentScreen === 'scorecard' && <ScorecardScreen key="score" />}
+    </AnimatePresence>
+  );
 }

@@ -1,17 +1,59 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR, formatPercent } from '../../utils/format.js';
+import {
+  pageSlideUp,
+  staggerContainer,
+  fadeInUp,
+  fadeIn,
+  scaleIn,
+  hardPress,
+  springPress,
+} from '../../utils/motion.js';
+
+/* ─── Animated Counter Hook ─── */
+function useAnimatedCounter(target, duration = 1200) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let start = 0;
+    const startTime = performance.now();
+    const step = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(eased * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target, duration]);
+  return value;
+}
+
+/* ─── Stat Row Component ─── */
+function StatRow({ label, value, color = 'text-slate-200', delay = 0 }) {
+  return (
+    <motion.div
+      className="flex justify-between items-baseline py-2 border-b border-surface-3/50"
+      variants={fadeInUp}
+    >
+      <span className="text-xs text-slate-500 font-body">{label}</span>
+      <span className={`text-sm font-mono font-bold ${color}`}>{value}</span>
+    </motion.div>
+  );
+}
 
 export default function SpawnRevealScreen() {
   const { character, navigateTo, resetGame } = useGameStore();
 
   if (!character) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6">
-        <p className="text-slate-400 mb-4">No character generated yet.</p>
+      <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center p-6">
+        <p className="text-slate-400 mb-4 font-body">No character generated yet.</p>
         <button
           onClick={resetGame}
-          className="px-4 py-2 bg-emerald-500 text-slate-950 font-semibold rounded-xl"
+          className="px-5 py-2.5 bg-emerald-500 text-surface-0 font-bold btn-press"
         >
           Go to Landing
         </button>
@@ -43,173 +85,210 @@ export default function SpawnRevealScreen() {
     .map((n) => n[0])
     .join('');
 
+  const animatedSurplus = useAnimatedCounter(monthlySurplus);
+  const animatedTakeHome = useAnimatedCounter(monthlyTakeHome);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-3xl bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-sm space-y-6">
-        
-        {/* Header Bar */}
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+    <motion.div
+      className="min-h-screen bg-mesh noise-overlay relative flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8"
+      {...pageSlideUp}
+    >
+      <motion.div
+        className="w-full max-w-3xl relative z-10 space-y-6"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        {/* ─── Header Bar ─── */}
+        <motion.div
+          className="flex items-center justify-between pb-4 border-b border-surface-3"
+          variants={fadeInUp}
+        >
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Spawn Profile Revealed
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
+              Spawn Profile
             </span>
           </div>
-          <div className="text-xs font-mono text-slate-500">
-            Seed: <span className="text-emerald-400 font-semibold">#{seed}</span>
+          <div className="text-[10px] font-mono text-slate-600">
+            Seed <span className="text-emerald-400 font-bold">#{seed}</span>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Character Identity Card */}
-        <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-slate-950 font-black text-2xl shadow-lg shadow-emerald-500/20 shrink-0">
+        {/* ─── Character Identity ─── */}
+        <motion.div
+          className="bg-surface-1 border border-surface-3 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-5"
+          variants={scaleIn}
+        >
+          {/* Avatar */}
+          <div className="w-20 h-20 bg-gradient-to-br from-emerald-600 to-teal-400 flex items-center justify-center text-surface-0 font-display font-black text-3xl shadow-hard-emerald shrink-0">
             {initials}
           </div>
-          <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-2xl font-black text-white">{name}</h2>
-              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold">
-                Age {age}
-              </span>
-              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-semibold">
-                📍 {city}
-              </span>
-            </div>
-            <div className="text-emerald-400 font-medium text-sm">{jobTitle}</div>
-            <p className="text-xs text-slate-400 italic pt-0.5">
-              "{primaryDream}"
-            </p>
-          </div>
-        </div>
 
-        {/* Financial Columns: Inflow vs Outflow */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* Monthly Inflow */}
-          <div className="bg-slate-950/50 border border-emerald-500/20 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-emerald-400">
-              <span>Monthly Inflow</span>
-              <span className="text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full">Earnings</span>
-            </div>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between text-slate-400">
-                <span>Gross Monthly CTC</span>
-                <span className="text-slate-200 font-mono">{formatINR(grossMonthlySalary)}</span>
-              </div>
-              <div className="flex justify-between text-slate-400">
-                <span>Taxes & PF Deductions</span>
-                <span className="text-rose-400 font-mono">- {formatINR(taxAndPFDeductions)}</span>
-              </div>
-              <div className="pt-2 border-t border-slate-800 flex justify-between items-baseline">
-                <span className="font-bold text-white">Take-Home Pay</span>
-                <span className="text-lg font-black text-emerald-400 font-mono">
-                  {formatINR(monthlyTakeHome)}
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="font-display text-3xl font-black text-white">{name}</h2>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 bg-surface-2 border border-surface-3 text-[10px] font-mono font-bold text-slate-300">
+                  AGE {age}
+                </span>
+                <span className="px-2.5 py-0.5 bg-surface-2 border border-surface-3 text-[10px] font-mono font-bold text-slate-300">
+                  📍 {city}
                 </span>
               </div>
             </div>
+            <div className="text-emerald-400 font-body font-semibold text-sm">{jobTitle}</div>
+            <p className="text-xs text-slate-500 italic font-body">"{primaryDream}"</p>
           </div>
+        </motion.div>
 
-          {/* Monthly Outflow */}
-          <div className="bg-slate-950/50 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-400">
-              <span>Monthly Outflow</span>
-              <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400">Expenses</span>
+        {/* ─── Financial Dossier: Inflow vs Outflow ─── */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Inflow Column */}
+          <motion.div
+            className="bg-surface-1 border-l-[3px] border-l-emerald-500 border-y border-r border-surface-3 p-5 space-y-1"
+            variants={fadeInUp}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-emerald-400">
+                Monthly Inflow
+              </span>
+              <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                EARNINGS
+              </span>
             </div>
-            <div className="space-y-1.5 text-xs text-slate-400">
-              <div className="flex justify-between">
-                <span>Housing / Rent</span>
-                <span className="text-slate-200 font-mono">{formatINR(expenses.rent)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Utilities & Bills</span>
-                <span className="text-slate-200 font-mono">{formatINR(expenses.utilities)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Groceries & Food</span>
-                <span className="text-slate-200 font-mono">{formatINR(expenses.groceries)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Lifestyle & Dining</span>
-                <span className="text-slate-200 font-mono">{formatINR(expenses.lifestyle)}</span>
-              </div>
+
+            <motion.div variants={staggerContainer} initial="initial" animate="animate">
+              <StatRow label="Gross Monthly CTC" value={formatINR(grossMonthlySalary)} />
+              <StatRow
+                label="Taxes & PF Deductions"
+                value={`- ${formatINR(taxAndPFDeductions)}`}
+                color="text-rose-400"
+              />
+            </motion.div>
+
+            <div className="pt-3 mt-2 border-t border-surface-3 flex justify-between items-baseline">
+              <span className="font-body font-bold text-white text-sm">Take-Home Pay</span>
+              <span className="text-2xl font-mono font-black text-emerald-400">
+                {formatINR(animatedTakeHome)}
+              </span>
+            </div>
+          </motion.div>
+
+          {/* Outflow Column */}
+          <motion.div
+            className="bg-surface-1 border-l-[3px] border-l-slate-600 border-y border-r border-surface-3 p-5 space-y-1"
+            variants={fadeInUp}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400">
+                Monthly Outflow
+              </span>
+              <span className="text-[9px] font-mono font-bold px-2 py-0.5 bg-surface-2 text-slate-400 border border-surface-3">
+                EXPENSES
+              </span>
+            </div>
+
+            <motion.div variants={staggerContainer} initial="initial" animate="animate">
+              <StatRow label="Housing / Rent" value={formatINR(expenses.rent)} />
+              <StatRow label="Utilities & Bills" value={formatINR(expenses.utilities)} />
+              <StatRow label="Groceries & Food" value={formatINR(expenses.groceries)} />
+              <StatRow label="Lifestyle & Dining" value={formatINR(expenses.lifestyle)} />
               {expenses.dependantSupport > 0 && (
-                <div className="flex justify-between text-amber-300">
-                  <span>Family Support</span>
-                  <span className="font-mono">{formatINR(expenses.dependantSupport)}</span>
-                </div>
+                <StatRow
+                  label="Family Support"
+                  value={formatINR(expenses.dependantSupport)}
+                  color="text-amber-300"
+                />
               )}
               {totalLoanEMIs > 0 && (
-                <div className="flex justify-between text-rose-300">
-                  <span>Loan EMIs</span>
-                  <span className="font-mono">{formatINR(totalLoanEMIs)}</span>
-                </div>
+                <StatRow
+                  label="Loan EMIs"
+                  value={formatINR(totalLoanEMIs)}
+                  color="text-rose-300"
+                />
               )}
-              <div className="pt-2 border-t border-slate-800 flex justify-between items-baseline text-sm">
-                <span className="font-bold text-white">Total Outflow</span>
-                <span className="font-bold text-slate-200 font-mono">
-                  {formatINR(totalMonthlyOutflow)}
-                </span>
-              </div>
-            </div>
-          </div>
+            </motion.div>
 
+            <div className="pt-3 mt-2 border-t border-surface-3 flex justify-between items-baseline">
+              <span className="font-body font-bold text-white text-sm">Total Outflow</span>
+              <span className="text-lg font-mono font-bold text-slate-200">
+                {formatINR(totalMonthlyOutflow)}
+              </span>
+            </div>
+          </motion.div>
         </div>
 
-        {/* Education Loan Notice (if present) */}
+        {/* ─── Loan Notice ─── */}
         {loans.length > 0 && (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-xs">
-            <span className="text-lg">🎓</span>
-            <div className="space-y-0.5 flex-1">
+          <motion.div
+            className="p-4 bg-amber-500/5 border-l-[3px] border-l-amber-500 border-y border-r border-amber-500/20 flex items-start gap-3"
+            variants={fadeInUp}
+          >
+            <span className="text-xl mt-0.5">🎓</span>
+            <div className="space-y-0.5 flex-1 text-xs font-body">
               <div className="font-bold text-amber-300">{loans[0].name} Active</div>
-              <p className="text-slate-300">
-                Principal remaining: <strong className="text-white font-mono">{formatINR(loans[0].principalRemaining)}</strong> at{' '}
-                <strong className="text-white">{formatPercent(loans[0].interestRateAnnual)}</strong> p.a. ({loans[0].tenureMonthsRemaining} months tenure remaining at {formatINR(loans[0].emi)}/mo).
+              <p className="text-slate-400">
+                Principal:{' '}
+                <strong className="text-white font-mono">{formatINR(loans[0].principalRemaining)}</strong>{' '}
+                at <strong className="text-white">{formatPercent(loans[0].interestRateAnnual)}</strong>{' '}
+                p.a. ({loans[0].tenureMonthsRemaining} months at {formatINR(loans[0].emi)}/mo)
               </p>
             </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* Cashflow Snapshot: Surplus + Bank Balance */}
-        <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+        {/* ─── Surplus Banner ─── */}
+        <motion.div
+          className="p-6 bg-surface-1 border border-emerald-500/30 flex flex-col sm:flex-row items-center justify-between gap-5 animate-glow"
+          variants={scaleIn}
+        >
           <div className="space-y-1 text-center sm:text-left">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Net Monthly Surplus (Investable)
+            <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
+              Net Monthly Surplus
             </div>
-            <div className="text-3xl font-black text-emerald-400 font-mono">
-              {formatINR(monthlySurplus)} <span className="text-sm font-normal text-slate-400">/ mo</span>
+            <div className="text-4xl sm:text-5xl font-mono font-black text-emerald-400">
+              {formatINR(animatedSurplus)}
+              <span className="text-sm font-normal text-slate-500 ml-2">/ mo</span>
             </div>
-            <p className="text-[11px] text-slate-400">
-              Unallocated cash after all living expenses & debts. Ready to fund life goals.
+            <p className="text-[11px] text-slate-500 font-body">
+              Unallocated cash after all expenses & debts — ready to invest.
             </p>
           </div>
 
-          <div className="text-center sm:text-right bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-            <div className="text-[10px] uppercase font-bold text-slate-400">Liquid Bank Buffer</div>
-            <div className="text-lg font-black text-white font-mono">{formatINR(liquidCash)}</div>
-            <div className="text-[10px] text-slate-500">Emergency baseline</div>
+          <div className="text-center sm:text-right bg-surface-0 p-4 border border-surface-3">
+            <div className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
+              Bank Buffer
+            </div>
+            <div className="text-xl font-mono font-black text-white">{formatINR(liquidCash)}</div>
+            <div className="text-[10px] text-slate-600 font-mono">Emergency baseline</div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Actions */}
-        <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">
-          <button
+        {/* ─── Actions ─── */}
+        <motion.div
+          className="pt-2 flex flex-col sm:flex-row gap-3 items-center"
+          variants={fadeInUp}
+        >
+          <motion.button
             type="button"
             onClick={resetGame}
-            className="w-full sm:w-auto px-5 py-3.5 rounded-2xl border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-white text-sm font-semibold transition"
+            className="w-full sm:w-auto px-6 py-3.5 border border-surface-3 text-slate-400 hover:text-white hover:border-slate-500 text-sm font-body font-semibold transition-colors"
+            {...springPress}
           >
-            ← Back / Reroll
-          </button>
-          <button
+            ← Reroll
+          </motion.button>
+          <motion.button
             type="button"
             onClick={() => navigateTo('goal_setup')}
-            className="w-full flex-1 py-3.5 px-6 rounded-2xl font-bold text-base bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-[0.99] flex items-center justify-center gap-2 transition cursor-pointer"
+            className="w-full flex-1 py-4 px-8 bg-emerald-500 text-surface-0 font-body font-black text-base tracking-wider uppercase flex items-center justify-center gap-3 btn-press cursor-pointer hover:bg-emerald-400 transition-colors"
+            {...hardPress}
           >
-            <span>Continue to Financial Goals</span>
-            <span className="text-lg">➔</span>
-          </button>
-        </div>
-
-      </div>
-    </div>
+            <span>Continue to Goals</span>
+            <span className="text-lg">→</span>
+          </motion.button>
+        </motion.div>
+      </motion.div>
+    </motion.div>
   );
 }
