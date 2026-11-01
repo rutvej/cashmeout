@@ -71,17 +71,38 @@ export function tickMonthlySimulation(state) {
     monthlySurplus = 0;
   }
 
-  // 4. Distribute Waterfall SIPs
+  // 4. Distribute Waterfall SIPs (prevent overflowing full goals)
   const effectiveSIPs = calculateEffectiveSIPs(updatedGoals);
   let totalSIPDeductions = 0;
 
   updatedGoals = updatedGoals.map((g) => {
     const sip = effectiveSIPs[g.id] || 0;
-    totalSIPDeductions += sip;
+    const current = g.currentAmount || 0;
+    const target = g.targetAmount || 1;
+
+    // If goal is already full and has no active inflow, do not take or add SIP
+    if (current >= target && sip === 0) {
+      return {
+        ...g,
+        effectiveMonthlySIP: 0,
+      };
+    }
+
+    // Cap addition so goal does not overflow target if it's a fixed-target milestone
+    const needed = Math.max(0, target - current);
+    const actualContribution = Math.min(sip, needed > 0 ? needed : sip);
+    totalSIPDeductions += actualContribution;
+
+    // If there is excess from this SIP because target was hit this month, return difference
+    const excess = sip - actualContribution;
+    if (excess > 0) {
+      liquidCash += excess; // spill excess cash directly back into bank cash!
+    }
+
     return {
       ...g,
-      effectiveMonthlySIP: sip,
-      currentAmount: (g.currentAmount || 0) + sip,
+      effectiveMonthlySIP: actualContribution,
+      currentAmount: current + actualContribution,
     };
   });
 
@@ -115,7 +136,6 @@ export function tickMonthlySimulation(state) {
   // 6. Service Loans
   let updatedLoans = (character.loans || []).map((l) => {
     const nextTenure = Math.max(0, l.tenureMonthsRemaining - 1);
-    // Principal amortization approximation
     const monthlyInterest = (l.principalRemaining * (l.interestRateAnnual / 12));
     const principalPaid = Math.max(0, l.emi - monthlyInterest);
     const nextPrincipal = nextTenure === 0 ? 0 : Math.max(0, Math.round(l.principalRemaining - principalPaid));
@@ -127,7 +147,6 @@ export function tickMonthlySimulation(state) {
     };
   }).filter((l) => l.principalRemaining > 0 && l.tenureMonthsRemaining > 0);
 
-  // Recalculate fixed loan EMIs after payoffs
   const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
 
   // 7. Check Milestones by Age
@@ -143,31 +162,31 @@ export function tickMonthlySimulation(state) {
       type: 'milestone',
       goal: pendingMilestone,
     };
-    // Mark as triggered so it doesn't repeatedly trigger every month
     updatedGoals = updatedGoals.map((g) =>
       g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
     );
   }
 
   // 8. Check Annual Vacation Cycle (Every 12 Months)
-  let vacationData = null;
+  // Preserves savedAmount for user decision options (loan / other fund / acquired only)
   if (isAnnualAnniversary && !activeModal) {
     const vacIndex = updatedGoals.findIndex((g) => g.id === 'goal_vacation');
     if (vacIndex >= 0) {
       const vac = updatedGoals[vacIndex];
-      const isSuccess = vac.currentAmount >= vac.targetAmount;
-      vacationData = {
-        wasSuccessful: isSuccess,
-        amountSpent: isSuccess ? vac.targetAmount : 0,
-        currentYear: Math.floor(nextMonthIndex / 12),
-      };
+      const isSuccess = (vac.currentAmount || 0) >= (vac.targetAmount || 1);
+      const shortfall = isSuccess ? 0 : Math.max(0, vac.targetAmount - (vac.currentAmount || 0));
 
-      // Reset vacation corpus for upcoming year
-      updatedGoals[vacIndex].currentAmount = 0;
       isPaused = true;
       activeModal = {
         type: 'vacation',
-        data: vacationData,
+        data: {
+          wasSuccessful: isSuccess,
+          savedAmount: vac.currentAmount || 0,
+          targetAmount: vac.targetAmount,
+          shortfall,
+          currentYear: Math.floor(nextMonthIndex / 12),
+          selectedTierOption: vac.selectedTierOption || 'domestic',
+        },
       };
     }
   }
@@ -194,7 +213,13 @@ export function tickMonthlySimulation(state) {
   }
 
   // 10. Check Retirement (Age 60)
-  const isRetirementReached = currentAge >= character.retirementAge;
+  const isRetirementReached = currentAge >= (character.retirementAge || 60);
+
+  // If retirement reached, dismiss intermediate modals and trigger scorecard
+  if (isRetirementReached) {
+    isPaused = true;
+    activeModal = null;
+  }
 
   // 11. Net Worth Snapshot
   const netWorth = calculateNetWorth(
@@ -234,7 +259,7 @@ export function tickMonthlySimulation(state) {
       currentAge,
       currentMonthOfYear: monthOfYear,
       isPaused: isRetirementReached ? true : isPaused,
-      activeModal,
+      activeModal: isRetirementReached ? null : activeModal,
       history: [...(simulation.history || []), newHistoryEntry],
     },
   };

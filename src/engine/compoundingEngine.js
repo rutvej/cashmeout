@@ -93,32 +93,74 @@ export function evaluateGoalFeasibility(goal, monthlySIP, instrumentId) {
 
 /**
  * Resolves the Cascading Waterfall SIP allocations.
- * - If a goal is completed/full, its SIP flows forward to redirectGoalId.
- * - If Emergency Fund drops below target, it recalls its base SIP with highest priority.
+ * - If a goal is completed/full (currentAmount >= targetAmount):
+ *   - It stops taking its SIP (effectiveMonthlySIP becomes 0).
+ *   - The SIP cascades downstream to redirectGoalId.
+ *   - If the downstream goal is ALSO full, it cascades down the redirection chain.
+ *   - If the entire chain is satisfied, the unused SIP is 0 so the cash stays in liquid surplus.
+ * - Emergency Fund auto-recall guarantee:
+ *   - If Emergency Fund drops below target, it recalls its base SIP with highest priority.
  */
 export function calculateEffectiveSIPs(goals) {
   const effective = {};
+  const goalMap = {};
+
   goals.forEach((g) => {
     effective[g.id] = g.baseMonthlySIP || 0;
+    goalMap[g.id] = g;
   });
 
   // Emergency Fund auto-recall guarantee
   const emergencyGoal = goals.find((g) => g.id === 'goal_emergency');
   const isEmergencyDepleted =
-    emergencyGoal && emergencyGoal.currentAmount < emergencyGoal.targetAmount;
+    emergencyGoal && (emergencyGoal.currentAmount || 0) < (emergencyGoal.targetAmount || 1);
 
+  // Helper function to find next incomplete goal in redirection chain
+  const findActiveRecipient = (startGoalId) => {
+    let currentId = startGoalId;
+    const visited = new Set();
+
+    while (currentId && !visited.has(currentId)) {
+      visited.add(currentId);
+      const targetGoal = goalMap[currentId];
+      if (!targetGoal) return null;
+
+      const isTargetFull = (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1);
+      // Emergency fund is only full when at 100%
+      if (currentId === 'goal_emergency' && isEmergencyDepleted) {
+        return currentId;
+      }
+
+      if (!isTargetFull) {
+        return currentId; // Found an active, incomplete goal!
+      }
+
+      // Target is full, continue down redirection chain
+      currentId = targetGoal.redirectGoalId;
+    }
+
+    return null; // All downstream goals in chain are full or none configured
+  };
+
+  // Process waterfall for each goal
   goals.forEach((goal) => {
-    const isFull = goal.currentAmount >= goal.targetAmount;
+    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1);
 
-    // Emergency fund only redirects if 100% full
+    // Emergency fund that is depleted cannot redirect its SIP
     if (goal.id === 'goal_emergency' && isEmergencyDepleted) {
       return;
     }
 
-    if (isFull && goal.redirectGoalId && effective[goal.redirectGoalId] !== undefined) {
+    if (isFull) {
       const outflow = effective[goal.id];
-      effective[goal.id] = 0;
-      effective[goal.redirectGoalId] += outflow;
+      effective[goal.id] = 0; // Stop funding completed goal!
+
+      if (outflow > 0 && goal.redirectGoalId) {
+        const activeRecipientId = findActiveRecipient(goal.redirectGoalId);
+        if (activeRecipientId && effective[activeRecipientId] !== undefined) {
+          effective[activeRecipientId] += outflow;
+        }
+      }
     }
   });
 

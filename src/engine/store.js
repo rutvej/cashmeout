@@ -104,6 +104,30 @@ export const useGameStore = create((set, get) => ({
       goals: state.goals.map((g) => (g.id === goalId ? { ...g, ...allocationUpdates } : g)),
     })),
 
+  addCustomGoal: ({ name, targetAmount, instrumentId = 'equity', icon = '💎' }) => {
+    const goalId = `goal_custom_${Date.now()}`;
+    const newGoal = {
+      id: goalId,
+      name: name || 'Wealth Multiplier Fund',
+      icon,
+      kind: 'milestone',
+      targetAmount: Number(targetAmount) || 2500000,
+      currentAmount: 0,
+      baseMonthlySIP: 0,
+      effectiveMonthlySIP: 0,
+      instrumentId: instrumentId || 'equity',
+      redirectGoalId: null,
+      isMandatory: false,
+      targetAge: 50,
+      description: 'Custom wealth creation milestone',
+      status: 'in_progress',
+    };
+    set((state) => ({
+      goals: [...state.goals, newGoal],
+    }));
+    return goalId;
+  },
+
   toggleInsurance: (type) =>
     set((state) => ({
       insurance: {
@@ -142,16 +166,80 @@ export const useGameStore = create((set, get) => ({
       simulation: { ...state.simulation, activeModal: null, isPaused: false },
     })),
 
-  executeVacationSelection: (option) => {
-    const amount = option === 'domestic' ? 50000 : 150000;
-    set((state) => ({
-      goals: state.goals.map((g) =>
-        g.id === 'goal_vacation'
-          ? { ...g, targetAmount: amount, selectedTierOption: option, currentAmount: 0 }
-          : g
-      ),
-      simulation: { ...state.simulation, activeModal: null, isPaused: false },
-    }));
+  // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only
+  resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic' }) => {
+    const { character, simulation, goals } = get();
+    const modalData = simulation.activeModal?.data || {};
+    const shortfall = modalData.shortfall || 0;
+    const nextAmount = nextYearTripOption === 'international' ? 150000 : 50000;
+
+    let updatedLoans = [...(character.loans || [])];
+    let updatedLiquidCash = character.liquidCash;
+    let updatedGoals = goals.map((g) => ({ ...g }));
+
+    if (shortfall > 0) {
+      if (resolutionType === 'loan') {
+        // Take a 12-month travel loan at 12% p.a.
+        const r = 0.12 / 12;
+        const emi = Math.round((shortfall * r * Math.pow(1 + r, 12)) / (Math.pow(1 + r, 12) - 1));
+        updatedLoans.push({
+          id: `loan_travel_${Date.now()}`,
+          name: 'Travel Vacation Loan',
+          principalRemaining: shortfall,
+          interestRateAnnual: 0.12,
+          tenureMonthsRemaining: 12,
+          emi,
+        });
+      } else if (resolutionType === 'other_fund') {
+        // Pay from bank liquid cash first; remainder from emergency fund
+        if (updatedLiquidCash >= shortfall) {
+          updatedLiquidCash -= shortfall;
+        } else {
+          const remainingFromEmergency = shortfall - updatedLiquidCash;
+          updatedLiquidCash = 0;
+          const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+          if (emgIndex >= 0) {
+            updatedGoals[emgIndex].currentAmount = Math.max(
+              0,
+              (updatedGoals[emgIndex].currentAmount || 0) - remainingFromEmergency
+            );
+            updatedGoals[emgIndex].status = 'refill_needed';
+          }
+        }
+      }
+      // resolutionType === 'acquired_only': no extra deductions, took budget trip
+    }
+
+    // Reset vacation fund for the upcoming year
+    updatedGoals = updatedGoals.map((g) =>
+      g.id === 'goal_vacation'
+        ? {
+            ...g,
+            targetAmount: nextAmount,
+            selectedTierOption: nextYearTripOption,
+            currentAmount: 0,
+          }
+        : g
+    );
+
+    const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+
+    set({
+      character: {
+        ...character,
+        liquidCash: updatedLiquidCash,
+        loans: updatedLoans,
+        totalLoanEMIs: nextTotalLoanEMIs,
+        totalMonthlyOutflow: character.totalFixedExpenses + nextTotalLoanEMIs + (get().insurance.health.isPurchased ? get().insurance.health.monthlyPremium : 0) + (get().insurance.termLife.isPurchased ? get().insurance.termLife.monthlyPremium : 0),
+        monthlySurplus: character.monthlyTakeHome - (character.totalFixedExpenses + nextTotalLoanEMIs + (get().insurance.health.isPurchased ? get().insurance.health.monthlyPremium : 0) + (get().insurance.termLife.isPurchased ? get().insurance.termLife.monthlyPremium : 0)),
+      },
+      goals: updatedGoals,
+      simulation: {
+        ...simulation,
+        activeModal: null,
+        isPaused: false,
+      },
+    });
   },
 
   prepayLoan: (loanId, amount) => {

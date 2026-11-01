@@ -8,16 +8,22 @@ export default {
     extend: {
       colors: {
         surface: {
-          0: '#030712',
-          1: '#0a0f1a',
-          2: '#111827',
-          3: '#1f2937',
+          0: '#F5F5F0',   // Warm ivory background
+          1: '#FFFFFF',   // Crisp white cards
+          2: '#F0EFEA',   // Subtle cream elevated
+          3: '#E2E1DA',   // Light border/divider
+          dark: '#0F172A',
+        },
+        brand: {
+          black: '#0F172A',
+          charcoal: '#334155',
+          muted: '#64748B',
         },
         accent: {
-          emerald: '#10b981',
-          gold: '#F5A623',
-          blue: '#3B82F6',
-          rose: '#EF4444',
+          emerald: '#059669',
+          gold: '#D97706',
+          blue: '#2563EB',
+          rose: '#DC2626',
         },
       },
       fontFamily: {
@@ -26,13 +32,12 @@ export default {
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       boxShadow: {
-        hard: '4px 4px 0px rgba(0,0,0,0.8)',
-        'hard-sm': '2px 2px 0px rgba(0,0,0,0.6)',
-        'hard-emerald': '4px 4px 0px rgba(16,185,129,0.3)',
-        'hard-gold': '4px 4px 0px rgba(245,166,35,0.3)',
-        glow: '0 0 20px rgba(16,185,129,0.15)',
-        'glow-gold': '0 0 20px rgba(245,166,35,0.15)',
-        'glow-blue': '0 0 20px rgba(59,130,246,0.15)',
+        hard: '4px 4px 0px #0F172A',
+        'hard-sm': '2px 2px 0px #0F172A',
+        'hard-lg': '6px 6px 0px #0F172A',
+        'hard-emerald': '4px 4px 0px #059669',
+        'hard-gold': '4px 4px 0px #D97706',
+        'hard-blue': '4px 4px 0px #2563EB',
       },
     },
   },

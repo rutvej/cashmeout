@@ -1,60 +1,198 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
-import { springPress, hardPress, backdropFade, sheetSlideUp } from '../../utils/motion.js';
+import { formatINR } from '../../utils/format.js';
+import { backdropFade, sheetSlideUp, springPress, hardPress } from '../../utils/motion.js';
 
 export default function VacationModal({ data }) {
-  const { executeVacationSelection } = useGameStore();
+  const { resolveVacationShortfall } = useGameStore();
+
   const wasSuccessful = data?.wasSuccessful;
+  const shortfall = data?.shortfall || 0;
+  const savedAmount = data?.savedAmount || 0;
+  const targetAmount = data?.targetAmount || 50000;
+  const currentYear = data?.currentYear || 1;
+
+  // Selected resolution option when shortfall > 0: 'loan' | 'other_fund' | 'acquired_only'
+  const [selectedResolution, setSelectedResolution] = useState('loan');
+  // Selected upcoming package: 'domestic' | 'international'
+  const [nextYearTrip, setNextYearTrip] = useState(data?.selectedTierOption || 'domestic');
+
+  const handleConfirm = () => {
+    resolveVacationShortfall({
+      resolutionType: wasSuccessful ? 'none' : selectedResolution,
+      nextYearTripOption: nextYearTrip,
+    });
+  };
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-surface-0/90 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
       {...backdropFade}
     >
       <motion.div
-        className="max-w-md w-full bg-surface-1 border border-surface-3 p-6 sm:p-8 text-center space-y-5"
+        className="card-neopop max-w-lg w-full p-6 sm:p-7 text-left space-y-5 bg-white text-slate-900"
         {...sheetSlideUp}
       >
-        <div className="text-4xl">✈️</div>
-
-        <div className="space-y-1">
-          <div className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-[0.2em]">
-            Year {data?.currentYear} Complete
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b-2 border-slate-900 pb-3">
+          <span className="text-4xl p-2 bg-blue-100 border-2 border-slate-900">✈️</span>
+          <div>
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+              Annual Vacation Milestone · Year {currentYear}
+            </span>
+            <h2 className="font-display text-2xl font-black text-slate-900">
+              {wasSuccessful ? 'Vacation Fully Funded! 🎉' : 'Vacation Fund Shortfall'}
+            </h2>
           </div>
-          <h2 className="font-display text-2xl font-black text-white">
-            {wasSuccessful ? 'Vacation Executed! 🎉' : 'Fund Shortfall'}
-          </h2>
-          <p className="text-xs text-slate-500 font-body leading-relaxed pt-1">
-            {wasSuccessful
-              ? 'Your vacation was 100% funded. You recharged and avoided burnout.'
-              : 'Partially funded — you enjoyed a cozy local staycation instead.'}
-          </p>
         </div>
 
-        <div className="p-4 bg-surface-0 border border-surface-3 space-y-3 text-left">
-          <div className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-[0.2em]">
-            Next Year's Trip
+        {/* Narrative */}
+        <p className="text-xs text-slate-700 leading-relaxed font-body">
+          {wasSuccessful
+            ? 'Congratulations! Your vacation corpus was 100% funded. You took time off to recharge your mental health, preventing career burnout.'
+            : `The vacation deadline has arrived, but your corpus is short by ${formatINR(shortfall)}. Choose how you wish to handle the shortfall below:`}
+        </p>
+
+        {/* Financial Numbers Bar */}
+        <div className="grid grid-cols-3 gap-2 p-3 bg-slate-100 border-2 border-slate-900 text-center font-mono">
+          <div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 block">Target Cost</span>
+            <span className="text-sm font-black text-slate-900">{formatINR(targetAmount)}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { id: 'domestic', label: 'Domestic', cost: '~₹50K/yr', sip: '₹4,200/mo' },
-              { id: 'international', label: 'International', cost: '~₹1.5L/yr', sip: '₹12,500/mo' },
-            ].map((opt) => (
-              <motion.button
-                key={opt.id}
+          <div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 block">Accumulated</span>
+            <span className="text-sm font-black text-emerald-700">{formatINR(savedAmount)}</span>
+          </div>
+          <div>
+            <span className="text-[9px] uppercase font-bold text-slate-500 block">Shortfall</span>
+            <span className={`text-sm font-black ${shortfall > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+              {shortfall > 0 ? formatINR(shortfall) : '₹0 (FULL)'}
+            </span>
+          </div>
+        </div>
+
+        {/* Shortfall Options (Requested by User) */}
+        {!wasSuccessful && shortfall > 0 && (
+          <div className="space-y-2">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
+              Select Shortfall Resolution:
+            </span>
+
+            <div className="space-y-2 text-xs">
+              {/* Option 1: Travel Loan */}
+              <button
                 type="button"
-                onClick={() => executeVacationSelection(opt.id)}
-                className="p-3 border border-surface-3 bg-surface-1 hover:bg-surface-2 hover:border-emerald-500/40 text-left transition-all"
-                {...springPress}
+                onClick={() => setSelectedResolution('loan')}
+                className={`w-full p-3 border-2 text-left transition-all ${
+                  selectedResolution === 'loan'
+                    ? 'bg-blue-50 border-blue-600 shadow-hard-sm'
+                    : 'bg-white border-slate-900 hover:bg-slate-50'
+                }`}
               >
-                <div className="font-body font-bold text-xs text-white">{opt.label}</div>
-                <div className="text-[10px] text-slate-500 font-mono">{opt.cost}</div>
-                <div className="text-[10px] text-emerald-400 font-mono font-bold mt-1">{opt.sip}</div>
-              </motion.button>
-            ))}
+                <div className="flex justify-between items-center font-bold">
+                  <span className="text-slate-900 flex items-center gap-1.5">
+                    <span>💳</span> Take a Travel Loan
+                  </span>
+                  <span className="font-mono text-blue-700">12 Mos Tenure @ 12% p.a.</span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1">
+                  Borrow the {formatINR(shortfall)} shortfall via personal travel loan. Adds a small monthly EMI to your cashflow. Full trip taken!
+                </p>
+              </button>
+
+              {/* Option 2: Pay from Other Funds / Bank Balance */}
+              <button
+                type="button"
+                onClick={() => setSelectedResolution('other_fund')}
+                className={`w-full p-3 border-2 text-left transition-all ${
+                  selectedResolution === 'other_fund'
+                    ? 'bg-blue-50 border-blue-600 shadow-hard-sm'
+                    : 'bg-white border-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex justify-between items-center font-bold">
+                  <span className="text-slate-900 flex items-center gap-1.5">
+                    <span>🛡️</span> Pay from Bank / Emergency Fund
+                  </span>
+                  <span className="font-mono text-emerald-700">One-Time Draw</span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1">
+                  Withdraw {formatINR(shortfall)} directly from your liquid bank cash and safety buffer. No loan debt incurred.
+                </p>
+              </button>
+
+              {/* Option 3: Only use what was acquired */}
+              <button
+                type="button"
+                onClick={() => setSelectedResolution('acquired_only')}
+                className={`w-full p-3 border-2 text-left transition-all ${
+                  selectedResolution === 'acquired_only'
+                    ? 'bg-blue-50 border-blue-600 shadow-hard-sm'
+                    : 'bg-white border-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex justify-between items-center font-bold">
+                  <span className="text-slate-900 flex items-center gap-1.5">
+                    <span>🎒</span> Budget Trip with Acquired Funds Only
+                  </span>
+                  <span className="font-mono text-slate-700">₹0 Extra Spent</span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1">
+                  Enjoy a cozy local staycation / road trip within your saved {formatINR(savedAmount)}. Zero extra borrowing or withdrawals.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Plan Next Year's Vacation */}
+        <div className="p-3.5 bg-slate-50 border-2 border-slate-900 space-y-2">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
+            Plan Upcoming Year Trip Package:
+          </span>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setNextYearTrip('domestic')}
+              className={`p-2.5 border-2 text-left transition-all ${
+                nextYearTrip === 'domestic'
+                  ? 'bg-blue-600 text-white border-slate-900 font-bold shadow-hard-sm'
+                  : 'bg-white border-slate-900 text-slate-900'
+              }`}
+            >
+              <div className="font-bold">Domestic Trip</div>
+              <div className={`text-[10px] font-mono ${nextYearTrip === 'domestic' ? 'text-blue-100' : 'text-slate-500'}`}>
+                Target: ~₹50,000 (~₹4.2k/mo)
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setNextYearTrip('international')}
+              className={`p-2.5 border-2 text-left transition-all ${
+                nextYearTrip === 'international'
+                  ? 'bg-blue-600 text-white border-slate-900 font-bold shadow-hard-sm'
+                  : 'bg-white border-slate-900 text-slate-900'
+              }`}
+            >
+              <div className="font-bold">Global Vacation</div>
+              <div className={`text-[10px] font-mono ${nextYearTrip === 'international' ? 'text-blue-100' : 'text-slate-500'}`}>
+                Target: ~₹1,50,000 (~₹12.5k/mo)
+              </div>
+            </button>
           </div>
         </div>
+
+        {/* CTA Button */}
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className="w-full py-3.5 px-6 bg-slate-900 text-white font-display font-black text-sm tracking-wider uppercase btn-press hover:bg-slate-800 transition-colors"
+        >
+          {wasSuccessful ? 'Celebrate & Continue Simulation ➔' : 'Confirm & Continue Simulation ➔'}
+        </button>
+
       </motion.div>
     </motion.div>
   );

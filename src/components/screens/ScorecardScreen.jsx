@@ -9,8 +9,6 @@ import {
   fadeInUp,
   scaleIn,
   popIn,
-  springPress,
-  hardPress,
 } from '../../utils/motion.js';
 
 /* ─── Animated Counter ─── */
@@ -30,7 +28,7 @@ function useAnimatedCounter(target, duration = 1500) {
   return value;
 }
 
-/* ─── Vertical Bar Meter ─── */
+/* ─── Vertical Pillar Bar Meter ─── */
 function PillarBar({ label, score, maxScore, delay = 0 }) {
   const pct = Math.round((score / maxScore) * 100);
   return (
@@ -40,8 +38,8 @@ function PillarBar({ label, score, maxScore, delay = 0 }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="text-[10px] font-mono font-bold text-emerald-400">{score}/{maxScore}</div>
-      <div className="w-10 h-32 bg-surface-0 border border-surface-3 relative overflow-hidden">
+      <div className="text-xs font-mono font-bold text-slate-900">{score}/{maxScore}</div>
+      <div className="w-12 h-32 bg-slate-100 border-2 border-slate-900 relative overflow-hidden">
         <motion.div
           className="absolute bottom-0 left-0 right-0 bg-emerald-500"
           initial={{ height: 0 }}
@@ -49,7 +47,7 @@ function PillarBar({ label, score, maxScore, delay = 0 }) {
           transition={{ delay: delay + 0.3, duration: 0.8, ease: 'easeOut' }}
         />
       </div>
-      <div className="text-[9px] font-mono text-slate-500 text-center leading-tight max-w-[60px]">
+      <div className="text-[10px] font-mono font-bold text-slate-700 text-center leading-tight max-w-[70px]">
         {label}
       </div>
     </motion.div>
@@ -58,7 +56,7 @@ function PillarBar({ label, score, maxScore, delay = 0 }) {
 
 export default function ScorecardScreen() {
   const store = useGameStore();
-  const { character, goals, simulation, navigateTo, resetGame, setConfig } = store;
+  const { character, goals, resetGame, setConfig } = store;
 
   if (!character) return null;
 
@@ -80,8 +78,8 @@ export default function ScorecardScreen() {
     criticalLesson,
   } = result;
 
-  const animatedScore = useAnimatedCounter(breakdown.totalScore, 2000);
-  const animatedNetWorth = useAnimatedCounter(totalNetWorth, 1800);
+  const animatedScore = useAnimatedCounter(breakdown.totalScore, 1800);
+  const animatedNetWorth = useAnimatedCounter(totalNetWorth, 1500);
 
   const handlePlayAgainSameSeed = () => {
     const seed = character.seed;
@@ -93,122 +91,118 @@ export default function ScorecardScreen() {
     resetGame();
   };
 
-  // Grade-specific styles
-  const gradeAccent = {
-    'A+': { bg: 'bg-emerald-500/10', border: 'border-emerald-400', text: 'text-emerald-300', glow: 'animate-glow' },
-    'A': { bg: 'bg-emerald-500/8', border: 'border-emerald-500/60', text: 'text-emerald-400', glow: '' },
-    'B': { bg: 'bg-amber-500/8', border: 'border-amber-500/60', text: 'text-amber-300', glow: '' },
-    'C': { bg: 'bg-orange-500/8', border: 'border-orange-500/60', text: 'text-orange-400', glow: '' },
-    'D': { bg: 'bg-rose-500/8', border: 'border-rose-500/60', text: 'text-rose-400', glow: '' },
-    'F': { bg: 'bg-rose-600/10', border: 'border-rose-600/60', text: 'text-rose-500', glow: '' },
-  };
-  const gs = gradeAccent[grade] || gradeAccent.B;
-
   return (
     <motion.div
-      className="min-h-screen bg-mesh noise-overlay relative flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8"
+      className="min-h-screen bg-mesh-light text-slate-900 flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8"
       {...pageSlideUp}
     >
       <motion.div
-        className="w-full max-w-4xl relative z-10 space-y-6"
+        className="w-full max-w-4xl space-y-6"
         variants={staggerContainer}
         initial="initial"
         animate="animate"
       >
         {/* ─── Header ─── */}
-        <motion.div
-          className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-surface-3 gap-2"
-          variants={fadeInUp}
-        >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b-2 border-slate-900 gap-2">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
-                Simulation Complete
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500">
+                Simulation Complete · Retirement Reached
               </span>
             </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-black text-white">
-              {character.name}'s Scorecard
+            <h1 className="font-display text-3xl sm:text-4xl font-black text-slate-900">
+              {character.name}'s Financial Life Scorecard
             </h1>
           </div>
-          <div className="text-[10px] font-mono text-slate-600 sm:text-right">
-            Age {character.retirementAge} · Seed <span className="text-emerald-400 font-bold">#{character.seed}</span>
+          <div className="text-xs font-mono font-bold text-slate-600 sm:text-right">
+            Age {character.retirementAge || 60} · Seed <span className="text-blue-700">#{character.seed}</span>
           </div>
-        </motion.div>
+        </div>
 
-        {/* ─── Grade Hero ─── */}
+        {/* ─── Grade Hero Banner (Light CRED NeoPOP) ─── */}
         <motion.div
-          className={`p-6 sm:p-8 border ${gs.border} ${gs.bg} ${gs.glow} flex flex-col sm:flex-row items-center justify-between gap-6`}
+          className="card-neopop p-6 sm:p-8 bg-white flex flex-col sm:flex-row items-center justify-between gap-6"
           variants={scaleIn}
         >
           <div className="flex items-center gap-6">
             {/* Grade Badge */}
             <motion.div
-              className={`w-24 h-24 border-2 ${gs.border} bg-surface-0 flex items-center justify-center font-display font-black text-5xl ${gs.text}`}
+              className="w-24 h-24 border-3 border-slate-900 bg-amber-400 text-slate-950 flex items-center justify-center font-display font-black text-5xl shadow-hard"
               {...popIn}
             >
               {grade}
             </motion.div>
 
             <div className="space-y-1">
-              <div className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
-                Financial Assessment
-              </div>
-              <h2 className="font-display text-2xl sm:text-3xl font-black text-white">{title}</h2>
-              <p className="text-xs text-slate-400 font-mono">
-                Score: <strong className="text-white">{animatedScore} / 100</strong>
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                Final Financial Assessment
+              </span>
+              <h2 className="font-display text-2xl sm:text-3xl font-black text-slate-900">{title}</h2>
+              <p className="text-xs font-mono text-slate-700">
+                Score: <strong className="text-slate-900 text-sm font-black">{animatedScore} / 100 Points</strong>
               </p>
             </div>
           </div>
 
-          <div className="text-center sm:text-right bg-surface-0 p-4 border border-surface-3 shrink-0">
-            <div className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-slate-600">FI/RE Status</div>
-            <div className={`text-sm font-mono font-black ${isFinanciallyIndependent ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {isFinanciallyIndependent ? 'SELF-SUSTAINING' : 'PARTIAL'}
+          <div className="text-center sm:text-right bg-slate-50 border-2 border-slate-900 p-4 shrink-0 font-mono">
+            <span className="text-[10px] uppercase font-bold text-slate-500 block">FI/RE Status</span>
+            <div className={`text-sm font-black ${isFinanciallyIndependent ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {isFinanciallyIndependent ? '100% SELF-SUSTAINING' : 'PARTIAL COVERAGE'}
             </div>
-            <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-              4% rule covers <strong className="text-white">{(fiRatio * 100).toFixed(0)}%</strong>
+            <div className="text-[11px] text-slate-600 mt-0.5">
+              4% rule covers <strong>{(fiRatio * 100).toFixed(0)}%</strong> of living costs
             </div>
           </div>
         </motion.div>
 
         {/* ─── Snapshot Metrics ─── */}
-        <motion.div className="grid grid-cols-1 sm:grid-cols-3 gap-3" variants={fadeInUp}>
-          {[
-            { label: 'Final Net Worth', value: formatINR(animatedNetWorth), sub: `Liquid: ${formatINR(liquidBankBalance)}`, color: 'text-white' },
-            { label: 'Passive Income', value: formatINR(monthlyPassiveIncome), sub: `Costs: ${formatINR(Math.round(annualLivingExpenses / 12))}/mo`, color: 'text-emerald-400' },
-            { label: 'Debt', value: outstandingDebt === 0 ? 'DEBT FREE' : formatINR(outstandingDebt), sub: outstandingDebt === 0 ? 'Zero liabilities' : 'Needs liquidation', color: outstandingDebt === 0 ? 'text-emerald-400' : 'text-rose-400' },
-          ].map((m) => (
-            <div key={m.label} className="bg-surface-1 border border-surface-3 p-4 space-y-1">
-              <div className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-slate-600">{m.label}</div>
-              <div className={`text-2xl font-mono font-black ${m.color}`}>{m.value}</div>
-              <div className="text-[10px] font-mono text-slate-600">{m.sub}</div>
-            </div>
-          ))}
-        </motion.div>
-
-        {/* ─── Pillar Breakdown (Vertical Bars) ─── */}
-        <motion.div className="bg-surface-1 border border-surface-3 p-5 space-y-4" variants={fadeInUp}>
-          <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400">
-            Score Pillars
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="card-neopop-sm bg-white p-4 space-y-1">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">Final Net Worth</span>
+            <div className="text-2xl font-mono font-black text-slate-900">{formatINR(animatedNetWorth)}</div>
+            <div className="text-[11px] font-mono text-slate-600">Liquid Cash: {formatINR(liquidBankBalance)}</div>
           </div>
-          <div className="flex items-end justify-center gap-8">
-            <PillarBar label="FI/RE" score={breakdown.financialIndependenceScore} maxScore={40} delay={0.1} />
+
+          <div className="card-neopop-sm bg-white p-4 space-y-1">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">Monthly Passive Income</span>
+            <div className="text-2xl font-mono font-black text-emerald-700">{formatINR(monthlyPassiveIncome)}</div>
+            <div className="text-[11px] font-mono text-slate-600">Living Costs: {formatINR(Math.round(annualLivingExpenses / 12))}/mo</div>
+          </div>
+
+          <div className="card-neopop-sm bg-white p-4 space-y-1">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">Debt Freedom</span>
+            <div className={`text-2xl font-mono font-black ${outstandingDebt === 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {outstandingDebt === 0 ? '₹0 (DEBT FREE)' : formatINR(outstandingDebt)}
+            </div>
+            <div className="text-[11px] font-mono text-slate-600">
+              {outstandingDebt === 0 ? 'Zero liabilities at retirement' : 'Requires liquidation'}
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Scoring Breakdown by Pillar ─── */}
+        <div className="card-neopop bg-white p-6 space-y-4">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+            Scoring Breakdown by Pillar
+          </span>
+          <div className="flex items-end justify-around py-2">
+            <PillarBar label="FI/RE 4%" score={breakdown.financialIndependenceScore} maxScore={40} delay={0.1} />
             <PillarBar label="Milestones" score={breakdown.milestoneCompletionScore} maxScore={30} delay={0.2} />
             <PillarBar label="Debt Free" score={breakdown.debtFreeScore} maxScore={15} delay={0.3} />
-            <PillarBar label="Safety" score={breakdown.safetyBufferScore} maxScore={15} delay={0.4} />
+            <PillarBar label="Safety Buffer" score={breakdown.safetyBufferScore} maxScore={15} delay={0.4} />
           </div>
-          <div className="text-center text-[10px] font-mono text-slate-500">
-            {goalsCompletedCount}/{totalGoalsCount} milestones achieved
+          <div className="text-center text-xs font-mono font-bold text-slate-600 border-t border-slate-200 pt-3">
+            {goalsCompletedCount} of {totalGoalsCount} Life Milestones Successfully Achieved
           </div>
-        </motion.div>
+        </div>
 
         {/* ─── Milestone Audit ─── */}
-        <motion.div className="space-y-3" variants={fadeInUp}>
-          <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-400">
-            Milestone Audit
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="space-y-2">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-600 block">
+            Life Milestones Audit
+          </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
             {goals.map((g) => {
               const current = g.currentAmount || 0;
               const target = g.targetAmount || 1;
@@ -217,15 +211,15 @@ export default function ScorecardScreen() {
               return (
                 <div
                   key={g.id}
-                  className="p-3 bg-surface-1 border border-surface-3 flex items-center justify-between"
+                  className="card-neopop-sm bg-white p-3 flex items-center justify-between"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-base">{g.icon}</span>
-                    <span className="font-body font-semibold text-xs text-white">{g.name}</span>
+                    <span className="font-sans font-bold text-slate-900">{g.name}</span>
                   </div>
-                  <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="text-slate-500">{formatINR(current)}</span>
-                    <span className={`font-bold ${isAchieved ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600">{formatINR(current)}</span>
+                    <span className={`font-bold ${isAchieved ? 'text-emerald-700' : 'text-rose-600'}`}>
                       {isAchieved ? '✓' : '✗'}
                     </span>
                   </div>
@@ -233,55 +227,45 @@ export default function ScorecardScreen() {
               );
             })}
           </div>
-        </motion.div>
+        </div>
 
         {/* ─── Insights ─── */}
-        <motion.div className="bg-surface-1 border border-surface-3 p-4 space-y-3 text-xs font-body" variants={fadeInUp}>
+        <div className="card-neopop-sm bg-slate-50 p-4 space-y-2 text-xs">
           <div className="flex items-start gap-2">
-            <span className="text-emerald-400">💡</span>
+            <span className="text-emerald-700">💡</span>
             <div>
-              <strong className="text-slate-200">Strength:</strong>{' '}
-              <span className="text-slate-500">{bestDecision}</span>
+              <strong className="text-slate-900 font-sans">Key Strength:</strong>{' '}
+              <span className="text-slate-700">{bestDecision}</span>
             </div>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-amber-400">⚠️</span>
+            <span className="text-amber-700">⚠️</span>
             <div>
-              <strong className="text-slate-200">Lesson:</strong>{' '}
-              <span className="text-slate-500">{criticalLesson}</span>
+              <strong className="text-slate-900 font-sans">Critical Lesson:</strong>{' '}
+              <span className="text-slate-700">{criticalLesson}</span>
             </div>
           </div>
-        </motion.div>
+        </div>
 
         {/* ─── Actions ─── */}
-        <motion.div className="pt-2 flex flex-col sm:flex-row gap-3 items-center" variants={fadeInUp}>
-          <motion.button
-            type="button"
-            onClick={() => navigateTo('main_game')}
-            className="w-full sm:w-auto px-6 py-3.5 border border-surface-3 text-slate-400 hover:text-white hover:border-slate-500 text-xs font-body font-semibold transition-colors"
-            {...springPress}
-          >
-            ← Review
-          </motion.button>
-
-          <motion.button
+        <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">
+          <button
             type="button"
             onClick={handlePlayAgainSameSeed}
-            className="w-full sm:flex-1 py-3.5 px-5 border border-surface-3 bg-surface-1 text-white font-body font-bold text-sm hover:bg-surface-2 transition-colors"
-            {...springPress}
+            className="w-full sm:flex-1 py-4 px-6 bg-white border-2 border-slate-900 font-mono font-bold text-xs uppercase btn-press text-slate-900"
           >
-            Replay Seed #{character.seed}
-          </motion.button>
+            Replay Life (Seed #{character.seed})
+          </button>
 
-          <motion.button
+          <button
             type="button"
             onClick={handleRollNewLife}
-            className="w-full sm:flex-1 py-4 px-6 bg-accent-gold text-surface-0 font-body font-black text-sm tracking-wider uppercase btn-press cursor-pointer hover:brightness-110 transition-all"
-            {...hardPress}
+            className="w-full sm:flex-1 py-4 px-6 bg-slate-900 text-white font-display font-black text-sm uppercase tracking-wider btn-press hover:bg-slate-800 transition-colors"
           >
-            Roll New Life →
-          </motion.button>
-        </motion.div>
+            Roll New Random Life ➔
+          </button>
+        </div>
+
       </motion.div>
     </motion.div>
   );
