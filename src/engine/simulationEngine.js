@@ -197,7 +197,7 @@ export function tickMonthlySimulation(state) {
   }
 
   // 8. Check Annual Vacation Cycle (Every 12 Months)
-  // Preserves savedAmount for user decision options (loan / other fund / acquired only)
+  // Supports automated mode ("dont show this card again and select default for vacation and continue without stopping")
   if (isAnnualAnniversary && !activeModal) {
     const vacIndex = updatedGoals.findIndex((g) => g.id === 'goal_vacation');
     if (vacIndex >= 0) {
@@ -205,18 +205,23 @@ export function tickMonthlySimulation(state) {
       const isSuccess = (vac.currentAmount || 0) >= (vac.targetAmount || 1);
       const shortfall = isSuccess ? 0 : Math.max(0, vac.targetAmount - (vac.currentAmount || 0));
 
-      isPaused = true;
-      activeModal = {
-        type: 'vacation',
-        data: {
-          wasSuccessful: isSuccess,
-          savedAmount: vac.currentAmount || 0,
-          targetAmount: vac.targetAmount,
-          shortfall,
-          currentYear: Math.floor(nextMonthIndex / 12),
-          selectedTierOption: vac.selectedTierOption || 'domestic',
-        },
-      };
+      if (simulation.autoVacation) {
+        // AUTOMATED MODE: Reset vacation corpus and continue running without pausing!
+        updatedGoals[vacIndex].currentAmount = 0;
+      } else {
+        isPaused = true;
+        activeModal = {
+          type: 'vacation',
+          data: {
+            wasSuccessful: isSuccess,
+            savedAmount: vac.currentAmount || 0,
+            targetAmount: vac.targetAmount,
+            shortfall,
+            currentYear: Math.floor(nextMonthIndex / 12),
+            selectedTierOption: vac.selectedTierOption || 'domestic',
+          },
+        };
+      }
     }
   }
 

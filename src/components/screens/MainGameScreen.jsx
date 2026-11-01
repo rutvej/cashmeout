@@ -62,6 +62,7 @@ export default function MainGameScreen() {
     tickMonth,
     prepayLoan,
     navigateTo,
+    toggleAutoVacation,
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState('goals');
@@ -116,7 +117,7 @@ export default function MainGameScreen() {
 
   return (
     <motion.div
-      className="min-h-screen bg-mesh-light text-slate-900 flex flex-col p-3 sm:p-5 lg:p-6"
+      className="min-h-screen bg-mesh-light text-slate-900 flex flex-col p-3 sm:p-5 lg:p-6 font-sans"
       {...pageTransition}
     >
       <div className="w-full max-w-5xl mx-auto space-y-4 flex-1">
@@ -177,8 +178,8 @@ export default function MainGameScreen() {
               </span>
             </div>
 
-            {/* Simulation Controls */}
-            <div className="flex items-center gap-2">
+            {/* Simulation Controls & Auto-Vacation */}
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 onClick={simulation.isPaused ? play : pause}
@@ -207,6 +208,20 @@ export default function MainGameScreen() {
                   </button>
                 ))}
               </div>
+
+              {/* Auto-Vacation Toggle Badge */}
+              <button
+                type="button"
+                onClick={() => toggleAutoVacation()}
+                title="Toggle automatic annual vacation without stopping the simulation"
+                className={`px-2.5 py-2 text-[10px] font-mono font-bold border-2 border-slate-900 btn-press-sm transition-colors ${
+                  simulation.autoVacation
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {simulation.autoVacation ? '✈️ AUTO-TRIP: ON' : '✈️ AUTO-TRIP: OFF'}
+              </button>
             </div>
           </div>
 
@@ -297,8 +312,8 @@ export default function MainGameScreen() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {goals.map((goal) => {
-                const current = goal.currentAmount || 0;
                 const target = goal.targetAmount || 1;
+                const current = Math.min(target, goal.currentAmount || 0);
                 const pct = Math.min(100, Math.round((current / target) * 100));
                 const inst = INSTRUMENTS[goal.instrumentId] || INSTRUMENTS.savings;
                 const effectiveSIP = goal.effectiveMonthlySIP || goal.baseMonthlySIP || 0;
@@ -370,7 +385,7 @@ export default function MainGameScreen() {
                       </div>
                       {goal.redirectGoalId && (
                         <span className="text-[10px] text-blue-700 font-bold">
-                          ↪ Redirect active
+                          {current >= target ? `↪ Redirected to ${goals.find(x => x.id === goal.redirectGoalId)?.name || 'Next'}` : '↪ Redirection set'}
                         </span>
                       )}
                     </div>

@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR } from '../../utils/format.js';
-import { backdropFade, sheetSlideUp, springPress, hardPress } from '../../utils/motion.js';
+import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function VacationModal({ data }) {
-  const { resolveVacationShortfall } = useGameStore();
+  const { resolveVacationShortfall, simulation } = useGameStore();
 
   const wasSuccessful = data?.wasSuccessful;
   const shortfall = data?.shortfall || 0;
@@ -14,20 +14,23 @@ export default function VacationModal({ data }) {
   const currentYear = data?.currentYear || 1;
 
   // Selected resolution option when shortfall > 0: 'loan' | 'other_fund' | 'acquired_only'
-  const [selectedResolution, setSelectedResolution] = useState('loan');
+  const [selectedResolution, setSelectedResolution] = useState('acquired_only');
   // Selected upcoming package: 'domestic' | 'international'
   const [nextYearTrip, setNextYearTrip] = useState(data?.selectedTierOption || 'domestic');
+  // Automated vacation toggle requested by user
+  const [dontShowAgain, setDontShowAgain] = useState(simulation?.autoVacation || false);
 
   const handleConfirm = () => {
     resolveVacationShortfall({
       resolutionType: wasSuccessful ? 'none' : selectedResolution,
       nextYearTripOption: nextYearTrip,
+      autoVacation: dontShowAgain,
     });
   };
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans"
       {...backdropFade}
     >
       <motion.div
@@ -72,7 +75,7 @@ export default function VacationModal({ data }) {
           </div>
         </div>
 
-        {/* Shortfall Options (Requested by User) */}
+        {/* Shortfall Options */}
         {!wasSuccessful && shortfall > 0 && (
           <div className="space-y-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
@@ -80,28 +83,28 @@ export default function VacationModal({ data }) {
             </span>
 
             <div className="space-y-2 text-xs">
-              {/* Option 1: Travel Loan */}
+              {/* Option 1: Budget trip with acquired funds */}
               <button
                 type="button"
-                onClick={() => setSelectedResolution('loan')}
+                onClick={() => setSelectedResolution('acquired_only')}
                 className={`w-full p-3 border-2 text-left transition-all ${
-                  selectedResolution === 'loan'
+                  selectedResolution === 'acquired_only'
                     ? 'bg-blue-50 border-blue-600 shadow-hard-sm'
                     : 'bg-white border-slate-900 hover:bg-slate-50'
                 }`}
               >
                 <div className="flex justify-between items-center font-bold">
                   <span className="text-slate-900 flex items-center gap-1.5">
-                    <span>💳</span> Take a Travel Loan
+                    <span>🎒</span> Budget Trip with Acquired Funds Only (Recommended)
                   </span>
-                  <span className="font-mono text-blue-700">12 Mos Tenure @ 12% p.a.</span>
+                  <span className="font-mono text-emerald-700">₹0 Extra Spent</span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  Borrow the {formatINR(shortfall)} shortfall via personal travel loan. Adds a small monthly EMI to your cashflow. Full trip taken!
+                  Enjoy a cozy local staycation / road trip within your saved {formatINR(savedAmount)}. Zero extra debt or savings withdrawals.
                 </p>
               </button>
 
-              {/* Option 2: Pay from Other Funds / Bank Balance */}
+              {/* Option 2: Pay from Bank / Emergency Fund */}
               <button
                 type="button"
                 onClick={() => setSelectedResolution('other_fund')}
@@ -115,31 +118,31 @@ export default function VacationModal({ data }) {
                   <span className="text-slate-900 flex items-center gap-1.5">
                     <span>🛡️</span> Pay from Bank / Emergency Fund
                   </span>
-                  <span className="font-mono text-emerald-700">One-Time Draw</span>
+                  <span className="font-mono text-blue-700">One-Time Draw</span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1">
                   Withdraw {formatINR(shortfall)} directly from your liquid bank cash and safety buffer. No loan debt incurred.
                 </p>
               </button>
 
-              {/* Option 3: Only use what was acquired */}
+              {/* Option 3: Travel Loan */}
               <button
                 type="button"
-                onClick={() => setSelectedResolution('acquired_only')}
+                onClick={() => setSelectedResolution('loan')}
                 className={`w-full p-3 border-2 text-left transition-all ${
-                  selectedResolution === 'acquired_only'
+                  selectedResolution === 'loan'
                     ? 'bg-blue-50 border-blue-600 shadow-hard-sm'
                     : 'bg-white border-slate-900 hover:bg-slate-50'
                 }`}
               >
                 <div className="flex justify-between items-center font-bold">
                   <span className="text-slate-900 flex items-center gap-1.5">
-                    <span>🎒</span> Budget Trip with Acquired Funds Only
+                    <span>💳</span> Take a Travel Loan
                   </span>
-                  <span className="font-mono text-slate-700">₹0 Extra Spent</span>
+                  <span className="font-mono text-rose-700">12 Mos @ 12% p.a.</span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  Enjoy a cozy local staycation / road trip within your saved {formatINR(savedAmount)}. Zero extra borrowing or withdrawals.
+                  Borrow the {formatINR(shortfall)} shortfall via personal travel loan. Adds a small monthly EMI to your cashflow. Full trip taken!
                 </p>
               </button>
             </div>
@@ -184,13 +187,30 @@ export default function VacationModal({ data }) {
           </div>
         </div>
 
+        {/* ─── Automation Toggle (Requested by User) ─── */}
+        <div className="p-3 bg-amber-50 border-2 border-amber-600 flex items-start gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            id="dontShowVacation"
+            checked={dontShowAgain}
+            onChange={(e) => setDontShowAgain(e.target.checked)}
+            className="w-4 h-4 mt-0.5 accent-slate-900 cursor-pointer"
+          />
+          <label htmlFor="dontShowVacation" className="text-xs font-bold text-amber-950 cursor-pointer select-none">
+            Don't show this card again
+            <span className="block font-normal text-[11px] text-amber-900 mt-0.5">
+              Automatically take annual vacations with default domestic package and continue simulation without stopping.
+            </span>
+          </label>
+        </div>
+
         {/* CTA Button */}
         <button
           type="button"
           onClick={handleConfirm}
           className="w-full py-3.5 px-6 bg-slate-900 text-white font-display font-black text-sm tracking-wider uppercase btn-press hover:bg-slate-800 transition-colors"
         >
-          {wasSuccessful ? 'Celebrate & Continue Simulation ➔' : 'Confirm & Continue Simulation ➔'}
+          {wasSuccessful ? 'Celebrate & Continue Simulation ➔' : 'Confirm Decision & Continue ➔'}
         </button>
 
       </motion.div>

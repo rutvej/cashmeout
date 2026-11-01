@@ -51,6 +51,7 @@ export const useGameStore = create((set, get) => ({
     isPaused: true,
     gameSpeed: 1, // 1 | 2 | 5
     activeModal: null, // null | { type, ... }
+    autoVacation: false, // automated annual vacation without pausing
     history: [],
   },
 
@@ -80,6 +81,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: true,
         gameSpeed: 1,
         activeModal: null,
+        autoVacation: false,
         history: [
           {
             month: 0,
@@ -155,6 +157,14 @@ export const useGameStore = create((set, get) => ({
       simulation: { ...state.simulation, gameSpeed },
     })),
 
+  toggleAutoVacation: (enabled) =>
+    set((state) => ({
+      simulation: {
+        ...state.simulation,
+        autoVacation: typeof enabled === 'boolean' ? enabled : !state.simulation.autoVacation,
+      },
+    })),
+
   tickMonth: () => {
     const currentState = get();
     const nextState = tickMonthlySimulation(currentState);
@@ -166,9 +176,9 @@ export const useGameStore = create((set, get) => ({
       simulation: { ...state.simulation, activeModal: null, isPaused: false },
     })),
 
-  // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only
-  resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic' }) => {
-    const { character, simulation, goals } = get();
+  // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only + Auto-vacation toggle
+  resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic', autoVacation = false }) => {
+    const { character, simulation, goals, insurance } = get();
     const modalData = simulation.activeModal?.data || {};
     const shortfall = modalData.shortfall || 0;
     const nextAmount = nextYearTripOption === 'international' ? 150000 : 50000;
@@ -210,7 +220,7 @@ export const useGameStore = create((set, get) => ({
       // resolutionType === 'acquired_only': no extra deductions, took budget trip
     }
 
-    // Reset vacation fund for the upcoming year
+    // Reset vacation fund for upcoming year
     updatedGoals = updatedGoals.map((g) =>
       g.id === 'goal_vacation'
         ? {
@@ -223,6 +233,10 @@ export const useGameStore = create((set, get) => ({
     );
 
     const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+    const totalInsurance =
+      (insurance.health.isPurchased ? insurance.health.monthlyPremium : 0) +
+      (insurance.termLife.isPurchased ? insurance.termLife.monthlyPremium : 0);
+    const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance;
 
     set({
       character: {
@@ -230,8 +244,131 @@ export const useGameStore = create((set, get) => ({
         liquidCash: updatedLiquidCash,
         loans: updatedLoans,
         totalLoanEMIs: nextTotalLoanEMIs,
-        totalMonthlyOutflow: character.totalFixedExpenses + nextTotalLoanEMIs + (get().insurance.health.isPurchased ? get().insurance.health.monthlyPremium : 0) + (get().insurance.termLife.isPurchased ? get().insurance.termLife.monthlyPremium : 0),
-        monthlySurplus: character.monthlyTakeHome - (character.totalFixedExpenses + nextTotalLoanEMIs + (get().insurance.health.isPurchased ? get().insurance.health.monthlyPremium : 0) + (get().insurance.termLife.isPurchased ? get().insurance.termLife.monthlyPremium : 0)),
+        totalMonthlyOutflow: nextTotalMonthlyOutflow,
+        monthlySurplus: character.monthlyTakeHome - nextTotalMonthlyOutflow,
+      },
+      goals: updatedGoals,
+      simulation: {
+        ...simulation,
+        autoVacation: autoVacation || simulation.autoVacation,
+        activeModal: null,
+        isPaused: false,
+      },
+    });
+  },
+
+  // Milestone resolution: Postpone Event / Other Fund / Take a Loan
+  resolveMilestoneShortfall: ({ goalId, resolutionType, postponeYears = 2 }) => {
+    const { character, simulation, goals, insurance } = get();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) {
+      set((state) => ({ simulation: { ...state.simulation, activeModal: null, isPaused: false } }));
+      return;
+    }
+
+    const current = goal.currentAmount || 0;
+    const target = goal.targetAmount || 1;
+    const shortfall = Math.max(0, target - current);
+
+    let updatedLoans = [...(character.loans || [])];
+    let updatedLiquidCash = character.liquidCash;
+    let updatedGoals = goals.map((g) => ({ ...g }));
+    const currentAge = simulation.currentAge;
+
+    if (resolutionType === 'postpone') {
+      // Postpone milestone by postponeYears (e.g. +2 years)
+      const nextTargetAge = currentAge + postponeYears;
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              targetAge: nextTargetAge,
+              targetMonthsRemaining: postponeYears * 12,
+              milestoneTriggered: false, // allow re-triggering at new age
+            }
+          : g
+      );
+    } else if (resolutionType === 'other_fund') {
+      // Pay shortfall from bank liquid cash first; remainder from emergency fund
+      if (updatedLiquidCash >= shortfall) {
+        updatedLiquidCash -= shortfall;
+      } else {
+        const remainingFromEmergency = shortfall - updatedLiquidCash;
+        updatedLiquidCash = 0;
+        const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+        if (emgIndex >= 0) {
+          updatedGoals[emgIndex].currentAmount = Math.max(
+            0,
+            (updatedGoals[emgIndex].currentAmount || 0) - remainingFromEmergency
+          );
+          updatedGoals[emgIndex].status = 'refill_needed';
+        }
+      }
+      // Milestone is 100% completed
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              currentAmount: target,
+              status: 'completed',
+              milestoneTriggered: true,
+            }
+          : g
+      );
+    } else if (resolutionType === 'loan') {
+      // Finance shortfall via loan
+      let tenureMonths = 36;
+      let interestRate = 0.12;
+      let loanName = `${goal.name} Personal Loan`;
+
+      if (goal.id === 'goal_car') {
+        tenureMonths = 48;
+        interestRate = 0.095;
+        loanName = 'Auto / Car Loan';
+      } else if (goal.id === 'goal_home') {
+        tenureMonths = 180;
+        interestRate = 0.085;
+        loanName = 'Home Mortgage Loan';
+      }
+
+      const r = interestRate / 12;
+      const emi = Math.round((shortfall * r * Math.pow(1 + r, tenureMonths)) / (Math.pow(1 + r, tenureMonths) - 1));
+      updatedLoans.push({
+        id: `loan_${goal.id}_${Date.now()}`,
+        name: loanName,
+        principalRemaining: shortfall,
+        interestRateAnnual: interestRate,
+        tenureMonthsRemaining: tenureMonths,
+        emi,
+      });
+
+      // Milestone is 100% completed
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              currentAmount: target,
+              status: 'completed',
+              milestoneTriggered: true,
+            }
+          : g
+      );
+    }
+
+    const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+    const totalInsurance =
+      (insurance.health.isPurchased ? insurance.health.monthlyPremium : 0) +
+      (insurance.termLife.isPurchased ? insurance.termLife.monthlyPremium : 0);
+    const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance;
+
+    set({
+      character: {
+        ...character,
+        liquidCash: updatedLiquidCash,
+        loans: updatedLoans,
+        totalLoanEMIs: nextTotalLoanEMIs,
+        totalMonthlyOutflow: nextTotalMonthlyOutflow,
+        monthlySurplus: character.monthlyTakeHome - nextTotalMonthlyOutflow,
       },
       goals: updatedGoals,
       simulation: {
@@ -287,6 +424,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: true,
         gameSpeed: 1,
         activeModal: null,
+        autoVacation: false,
         history: [],
       },
     }),
