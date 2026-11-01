@@ -63,7 +63,7 @@ export function tickMonthlySimulation(state) {
       if (emgIndex >= 0) {
         updatedGoals[emgIndex].currentAmount = Math.max(
           0,
-          updatedGoals[emgIndex].currentAmount - remainingDeficit
+          (updatedGoals[emgIndex].currentAmount || 0) - remainingDeficit
         );
         updatedGoals[emgIndex].status = 'refill_needed';
       }
@@ -71,38 +71,44 @@ export function tickMonthlySimulation(state) {
     monthlySurplus = 0;
   }
 
-  // 4. Distribute Waterfall SIPs (prevent overflowing full goals)
+  // 4. Distribute Waterfall SIPs (Strictly Prevent Overflowing Full Goals)
   const effectiveSIPs = calculateEffectiveSIPs(updatedGoals);
   let totalSIPDeductions = 0;
 
   updatedGoals = updatedGoals.map((g) => {
     const sip = effectiveSIPs[g.id] || 0;
-    const current = g.currentAmount || 0;
+    let current = g.currentAmount || 0;
     const target = g.targetAmount || 1;
 
-    // If goal is already full and has no active inflow, do not take or add SIP
-    if (current >= target && sip === 0) {
+    // Strict cap: If goal is already at or above target, ensure currentAmount does not exceed target
+    // and sweep any legacy excess into liquid bank cash!
+    if (current >= target) {
+      const legacyExcess = current - target;
+      if (legacyExcess > 0) {
+        liquidCash += legacyExcess;
+      }
       return {
         ...g,
+        currentAmount: target,
         effectiveMonthlySIP: 0,
       };
     }
 
-    // Cap addition so goal does not overflow target if it's a fixed-target milestone
+    // Goal still needs funds: only take what is needed up to targetAmount
     const needed = Math.max(0, target - current);
-    const actualContribution = Math.min(sip, needed > 0 ? needed : sip);
+    const actualContribution = Math.min(sip, needed);
     totalSIPDeductions += actualContribution;
 
-    // If there is excess from this SIP because target was hit this month, return difference
+    // If target was reached with a partial amount from this SIP, spill remainder into bank cash
     const excess = sip - actualContribution;
     if (excess > 0) {
-      liquidCash += excess; // spill excess cash directly back into bank cash!
+      liquidCash += excess;
     }
 
     return {
       ...g,
       effectiveMonthlySIP: actualContribution,
-      currentAmount: current + actualContribution,
+      currentAmount: Math.min(target, current + actualContribution),
     };
   });
 
@@ -110,20 +116,43 @@ export function tickMonthlySimulation(state) {
   const leftoverSurplus = Math.max(0, monthlySurplus - totalSIPDeductions);
   liquidCash += leftoverSurplus;
 
-  // 5. Compound Investments with Monthly Rates
+  // 5. Compound Investments with Monthly Rates (Strict Cap on Emergency Fund & Fixed Goals)
   updatedGoals = updatedGoals.map((g) => {
     const inst = INSTRUMENTS[g.instrumentId] || INSTRUMENTS.savings;
     const monthlyRate = inst.monthlyRate;
     const balance = g.currentAmount || 0;
+    const target = g.targetAmount || 1;
     const growth = Math.round(balance * monthlyRate);
-    const newBalance = balance + growth;
 
-    // Check if goal reached target
+    let newBalance = balance + growth;
+    let excessGrowth = 0;
     let status = g.status;
+
+    // Strict non-overflow check for Emergency Fund and capped goals:
+    // Once emergency fund or a capped goal is at target, interest yield must NOT inflate the fund!
+    // It is swept directly into the player's bank cash as passive income.
+    const isFixedCap = g.id === 'goal_emergency' || g.id === 'goal_vacation' || (g.kind === 'milestone' && balance >= target);
+
+    if (isFixedCap) {
+      if (balance >= target) {
+        // Already full: keep at exact target; all interest goes to bank cash
+        excessGrowth = growth;
+        newBalance = target;
+      } else if (newBalance > target) {
+        // Crossed target this month: cap at target; spill excess interest to bank cash
+        excessGrowth = newBalance - target;
+        newBalance = target;
+      }
+    }
+
     if (g.id === 'goal_emergency') {
-      status = newBalance >= g.targetAmount ? 'buffer_full' : 'in_progress';
-    } else if (newBalance >= g.targetAmount && status !== 'completed') {
+      status = newBalance >= target ? 'buffer_full' : 'in_progress';
+    } else if (newBalance >= target) {
       status = 'completed';
+    }
+
+    if (excessGrowth > 0) {
+      liquidCash += excessGrowth;
     }
 
     return {
