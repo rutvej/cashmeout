@@ -429,3 +429,7 @@ export const useGameStore = create((set, get) => ({
       },
     }),
 }));
+
+if (typeof window !== 'undefined') {
+  window.__GAME_STORE__ = useGameStore;
+}

@@ -28,9 +28,9 @@ function useAnimatedCounter(target, duration = 1200) {
 
 function StatRow({ label, value, color = 'text-slate-900' }) {
   return (
-    <div className="flex justify-between items-baseline py-1.5 border-b border-slate-200 text-xs">
-      <span className="text-slate-600 font-sans">{label}</span>
-      <span className={`font-mono font-bold ${color}`}>{value}</span>
+    <div className="flex justify-between items-baseline py-1 sm:py-1.5 border-b border-slate-200 text-xs gap-2">
+      <span className="text-slate-600 font-sans truncate">{label}</span>
+      <span className={`font-mono font-bold shrink-0 ${color}`}>{value}</span>
     </div>
   );
 }
@@ -81,20 +81,20 @@ export default function SpawnRevealScreen() {
 
   return (
     <motion.div
-      className="min-h-screen bg-mesh-light text-slate-900 relative flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8"
+      className="min-h-screen bg-mesh-light text-slate-900 relative flex flex-col justify-center items-center p-3 sm:p-6 lg:p-8 overflow-x-hidden"
       {...pageSlideUp}
     >
       <motion.div
-        className="w-full max-w-3xl space-y-6"
+        className="w-full max-w-3xl space-y-3.5 sm:space-y-6"
         variants={staggerContainer}
         initial="initial"
         animate="animate"
       >
         {/* ─── Header ─── */}
-        <div className="flex items-center justify-between pb-3 border-b-2 border-slate-900">
+        <div className="flex items-center justify-between pb-2 sm:pb-3 border-b-2 border-slate-900">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-600">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-600">
               Character Profile Revealed
             </span>
           </div>
@@ -105,36 +105,36 @@ export default function SpawnRevealScreen() {
 
         {/* ─── Identity Card ─── */}
         <motion.div
-          className="card-neopop p-6 flex flex-col sm:flex-row items-start sm:items-center gap-5 bg-white"
+          className="card-neopop p-3.5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 bg-white"
           variants={scaleIn}
         >
-          <div className="w-20 h-20 bg-blue-600 border-2 border-slate-900 flex items-center justify-center text-white font-display font-black text-3xl shadow-hard shrink-0">
+          <div className="w-14 h-14 sm:w-20 sm:h-20 bg-blue-600 border-2 border-slate-900 flex items-center justify-center text-white font-display font-black text-2xl sm:text-3xl shadow-hard shrink-0">
             {initials}
           </div>
 
-          <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h2 className="font-display text-3xl font-black text-slate-900">{name}</h2>
-              <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-900 text-[10px] font-mono font-bold text-slate-800">
+          <div className="flex-1 space-y-0.5 sm:space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-display text-xl sm:text-3xl font-black text-slate-900">{name}</h2>
+              <span className="px-2 py-0.5 bg-slate-100 border border-slate-900 text-[9px] sm:text-[10px] font-mono font-bold text-slate-800">
                 Age {age}
               </span>
-              <span className="px-2.5 py-0.5 bg-slate-100 border border-slate-900 text-[10px] font-mono font-bold text-slate-800">
+              <span className="px-2 py-0.5 bg-slate-100 border border-slate-900 text-[9px] sm:text-[10px] font-mono font-bold text-slate-800">
                 📍 {city}
               </span>
             </div>
-            <div className="text-blue-700 font-bold text-sm font-sans">{jobTitle}</div>
-            <p className="text-xs text-slate-600 italic font-body pt-0.5">
+            <div className="text-blue-700 font-bold text-xs sm:text-sm font-sans">{jobTitle}</div>
+            <p className="text-[11px] sm:text-xs text-slate-600 italic font-body pt-0.5">
               "{primaryDream}"
             </p>
           </div>
         </motion.div>
 
         {/* ─── Inflow vs Outflow Columns ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
           
           {/* Monthly Inflow */}
-          <div className="card-neopop-sm p-5 space-y-2 bg-white">
-            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-900">
+          <div className="card-neopop-sm p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bg-white">
+            <div className="flex items-center justify-between pb-1.5 border-b-2 border-slate-900">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700">
                 Monthly Inflow
               </span>
@@ -147,16 +147,16 @@ export default function SpawnRevealScreen() {
             <StatRow label="Taxes & PF Deductions" value={`- ${formatINR(taxAndPFDeductions)}`} color="text-rose-600" />
 
             <div className="pt-2 flex justify-between items-baseline border-t-2 border-slate-900">
-              <span className="font-bold text-slate-900 text-sm">Take-Home Pay</span>
-              <span className="text-2xl font-mono font-black text-emerald-700">
+              <span className="font-bold text-slate-900 text-xs sm:text-sm">Take-Home Pay</span>
+              <span className="text-xl sm:text-2xl font-mono font-black text-emerald-700">
                 {formatINR(animatedTakeHome)}
               </span>
             </div>
           </div>
 
           {/* Monthly Outflow */}
-          <div className="card-neopop-sm p-5 space-y-2 bg-white">
-            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-900">
+          <div className="card-neopop-sm p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bg-white">
+            <div className="flex items-center justify-between pb-1.5 border-b-2 border-slate-900">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700">
                 Monthly Outflow
               </span>
@@ -177,8 +177,8 @@ export default function SpawnRevealScreen() {
             )}
 
             <div className="pt-2 flex justify-between items-baseline border-t-2 border-slate-900">
-              <span className="font-bold text-slate-900 text-sm">Total Outflow</span>
-              <span className="text-lg font-mono font-bold text-slate-900">
+              <span className="font-bold text-slate-900 text-xs sm:text-sm">Total Outflow</span>
+              <span className="text-base sm:text-lg font-mono font-bold text-slate-900">
                 {formatINR(totalMonthlyOutflow)}
               </span>
             </div>
@@ -188,11 +188,11 @@ export default function SpawnRevealScreen() {
 
         {/* ─── Loan Notice ─── */}
         {loans.length > 0 && (
-          <div className="card-neopop-sm p-4 bg-amber-50 border-2 border-slate-900 flex items-start gap-3">
-            <span className="text-2xl mt-0.5">🎓</span>
+          <div className="card-neopop-sm p-3 sm:p-4 bg-amber-50 border-2 border-slate-900 flex items-start gap-2.5">
+            <span className="text-xl sm:text-2xl mt-0.5">🎓</span>
             <div className="space-y-0.5 flex-1 text-xs">
-              <div className="font-bold text-amber-950 text-sm">{loans[0].name} Active</div>
-              <p className="text-slate-700">
+              <div className="font-bold text-amber-950 text-xs sm:text-sm">{loans[0].name} Active</div>
+              <p className="text-slate-700 text-[11px] sm:text-xs">
                 Principal remaining:{' '}
                 <strong className="text-slate-900 font-mono">{formatINR(loans[0].principalRemaining)}</strong>{' '}
                 at <strong className="text-slate-900">{formatPercent(loans[0].interestRateAnnual)}</strong>{' '}
@@ -204,42 +204,44 @@ export default function SpawnRevealScreen() {
 
         {/* ─── Cashflow Surplus Banner ─── */}
         <motion.div
-          className="card-neopop p-6 bg-white border-2 border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-5"
+          className="card-neopop p-4 sm:p-6 bg-white border-2 border-slate-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-5"
           variants={scaleIn}
         >
-          <div className="space-y-1 text-center sm:text-left">
+          <div className="space-y-0.5 sm:space-y-1 text-left">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
               Net Monthly Surplus (Investable)
             </span>
-            <div className="text-4xl sm:text-5xl font-mono font-black text-emerald-700">
+            <div className="text-3xl sm:text-5xl font-mono font-black text-emerald-700">
               {formatINR(animatedSurplus)}
-              <span className="text-sm font-normal text-slate-500 ml-2 font-sans">/ mo</span>
+              <span className="text-xs sm:text-sm font-normal text-slate-500 ml-1.5 font-sans">/ mo</span>
             </div>
-            <p className="text-xs text-slate-600 pt-0.5">
+            <p className="text-[11px] sm:text-xs text-slate-600 pt-0.5">
               Available cash after all living costs and debt obligations — ready to fund life goals.
             </p>
           </div>
 
-          <div className="text-center sm:text-right bg-slate-50 border-2 border-slate-900 p-4 shrink-0 font-mono">
-            <span className="text-[9px] uppercase font-bold text-slate-500 block">Liquid Buffer</span>
-            <div className="text-xl font-black text-slate-900">{formatINR(liquidCash)}</div>
-            <div className="text-[10px] text-slate-500">Bank baseline</div>
+          <div className="w-full sm:w-auto text-left sm:text-right bg-slate-50 border-2 border-slate-900 p-2.5 sm:p-4 shrink-0 font-mono flex sm:flex-col justify-between items-center sm:items-end">
+            <div>
+              <span className="text-[9px] uppercase font-bold text-slate-500 block">Liquid Buffer</span>
+              <div className="text-lg sm:text-xl font-black text-slate-900">{formatINR(liquidCash)}</div>
+            </div>
+            <div className="text-[10px] text-slate-500 hidden sm:block">Bank baseline</div>
           </div>
         </motion.div>
 
         {/* ─── Action Buttons ─── */}
-        <div className="pt-2 flex flex-col sm:flex-row gap-3 items-center">
+        <div className="pt-1 sm:pt-2 flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-center">
           <button
             type="button"
             onClick={resetGame}
-            className="w-full sm:w-auto px-6 py-3.5 bg-white border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs uppercase btn-press hover:bg-slate-50 transition-colors"
+            className="w-full sm:w-auto px-5 py-3 sm:py-3.5 bg-white border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs uppercase btn-press hover:bg-slate-50 transition-colors"
           >
             ← Back / Reroll
           </button>
           <button
             type="button"
             onClick={() => navigateTo('goal_setup')}
-            className="w-full flex-1 py-4 px-8 bg-slate-900 text-white font-display font-black text-base uppercase tracking-wider btn-press hover:bg-slate-800 transition-colors cursor-pointer"
+            className="w-full flex-1 py-3.5 sm:py-4 px-6 sm:px-8 bg-slate-900 text-white font-display font-black text-sm sm:text-base uppercase tracking-wider btn-press hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <span>Continue to Financial Goals</span>
             <span className="ml-2">➔</span>

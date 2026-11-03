@@ -9,14 +9,14 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
 
   return (
     <motion.div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
       {...backdropFade}
     >
       <motion.div
-        className="card-neopop max-w-md w-full p-6 sm:p-7 text-center space-y-5 bg-white text-slate-900"
+        className="card-neopop max-w-md w-full max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-7 text-center space-y-3.5 sm:space-y-5 bg-white text-slate-900"
         {...sheetSlideUp}
       >
-        <div className="w-16 h-16 mx-auto bg-emerald-100 border-2 border-slate-900 flex items-center justify-center text-3xl">
+        <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto bg-emerald-100 border-2 border-slate-900 flex items-center justify-center text-2xl sm:text-3xl">
           📈
         </div>
 
