@@ -26,6 +26,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
     addCustomGoal,
     navigateTo,
     play,
+    closeModal,
   } = useGameStore();
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -121,12 +122,13 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const handleStartGame = () => {
     if (isOverAllocated) return;
+    closeModal();
     if (isModal && onClose) {
       onClose();
     } else {
       navigateTo('main_game');
-      play();
     }
+    play();
   };
 
   // Projection math for active goal
@@ -194,6 +196,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
               <button
                 type="button"
                 onClick={() => {
+                  closeModal();
                   if (isModal && onClose) onClose();
                   else navigateTo('main_game');
                 }}

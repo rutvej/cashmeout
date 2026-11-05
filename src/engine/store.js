@@ -51,6 +51,7 @@ export const useGameStore = create((set, get) => ({
     isPaused: true,
     gameSpeed: 1, // 1 | 2 | 5
     activeModal: null, // null | { type, ... }
+    modalQueue: [],
     autoVacation: false, // automated annual vacation without pausing
     history: [],
   },
@@ -81,6 +82,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: true,
         gameSpeed: 1,
         activeModal: null,
+        modalQueue: [],
         autoVacation: false,
         history: [
           {
@@ -172,9 +174,18 @@ export const useGameStore = create((set, get) => ({
   },
 
   closeModal: () =>
-    set((state) => ({
-      simulation: { ...state.simulation, activeModal: null, isPaused: false },
-    })),
+    set((state) => {
+      const queue = state.simulation.modalQueue || [];
+      if (queue.length > 0) {
+        const [nextModal, ...rest] = queue;
+        return {
+          simulation: { ...state.simulation, activeModal: nextModal, modalQueue: rest, isPaused: true },
+        };
+      }
+      return {
+        simulation: { ...state.simulation, activeModal: null, isPaused: false },
+      };
+    }),
 
   // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only + Auto-vacation toggle
   resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic', autoVacation = false }) => {
@@ -238,6 +249,11 @@ export const useGameStore = create((set, get) => ({
       (insurance.termLife.isPurchased ? insurance.termLife.monthlyPremium : 0);
     const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance;
 
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
     set({
       character: {
         ...character,
@@ -251,8 +267,9 @@ export const useGameStore = create((set, get) => ({
       simulation: {
         ...simulation,
         autoVacation: autoVacation || simulation.autoVacation,
-        activeModal: null,
-        isPaused: false,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
       },
     });
   },
@@ -262,7 +279,7 @@ export const useGameStore = create((set, get) => ({
     const { character, simulation, goals, insurance } = get();
     const goal = goals.find((g) => g.id === goalId);
     if (!goal) {
-      set((state) => ({ simulation: { ...state.simulation, activeModal: null, isPaused: false } }));
+      get().closeModal();
       return;
     }
 
@@ -361,6 +378,11 @@ export const useGameStore = create((set, get) => ({
       (insurance.termLife.isPurchased ? insurance.termLife.monthlyPremium : 0);
     const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance;
 
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
     set({
       character: {
         ...character,
@@ -373,8 +395,9 @@ export const useGameStore = create((set, get) => ({
       goals: updatedGoals,
       simulation: {
         ...simulation,
-        activeModal: null,
-        isPaused: false,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
       },
     });
   },
@@ -424,6 +447,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: true,
         gameSpeed: 1,
         activeModal: null,
+        modalQueue: [],
         autoVacation: false,
         history: [],
       },

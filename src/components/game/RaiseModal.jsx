@@ -5,7 +5,20 @@ import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function RaiseModal({ data, onAdjustAllocations }) {
-  const { closeModal } = useGameStore();
+  const { closeModal, play } = useGameStore();
+
+  const handleAllocate = () => {
+    // Dismiss the raise modal while keeping simulation paused for allocation adjustments
+    useGameStore.setState((state) => ({
+      simulation: { ...state.simulation, activeModal: null, isPaused: true },
+    }));
+    onAdjustAllocations();
+  };
+
+  const handleKeepInBank = () => {
+    closeModal();
+    play();
+  };
 
   return (
     <motion.div
@@ -53,17 +66,17 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
         <div className="space-y-2 pt-2">
           <button
             type="button"
-            onClick={onAdjustAllocations}
+            onClick={handleAllocate}
             className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-display font-black text-sm tracking-wider uppercase btn-press cursor-pointer transition-colors"
           >
             Allocate Extra Surplus ➔
           </button>
           <button
             type="button"
-            onClick={closeModal}
+            onClick={handleKeepInBank}
             className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs btn-press-sm transition-colors"
           >
-            Keep in Liquid Bank Cash
+            Keep in Liquid Bank Cash & Resume ▶
           </button>
         </div>
       </motion.div>

@@ -49,6 +49,7 @@ export function tickMonthlySimulation(state) {
   let updatedGoals = goals.map((g) => ({ ...g }));
   let activeModal = simulation.activeModal;
   let isPaused = simulation.isPaused;
+  let modalQueue = [...(simulation.modalQueue || [])];
 
   // Deficit handling (if outflow > takeHome)
   if (monthlySurplus < 0) {
@@ -187,10 +188,15 @@ export function tickMonthlySimulation(state) {
   if (reachedMilestones.length > 0) {
     pendingMilestone = reachedMilestones[0];
     isPaused = true;
-    activeModal = {
+    const milestoneModal = {
       type: 'milestone',
       goal: pendingMilestone,
     };
+    if (!activeModal) {
+      activeModal = milestoneModal;
+    } else {
+      modalQueue.push(milestoneModal);
+    }
     updatedGoals = updatedGoals.map((g) =>
       g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
     );
@@ -198,7 +204,7 @@ export function tickMonthlySimulation(state) {
 
   // 8. Check Annual Vacation Cycle (Every 12 Months)
   // Supports automated mode ("dont show this card again and select default for vacation and continue without stopping")
-  if (isAnnualAnniversary && !activeModal) {
+  if (isAnnualAnniversary) {
     const vacIndex = updatedGoals.findIndex((g) => g.id === 'goal_vacation');
     if (vacIndex >= 0) {
       const vac = updatedGoals[vacIndex];
@@ -210,7 +216,7 @@ export function tickMonthlySimulation(state) {
         updatedGoals[vacIndex].currentAmount = 0;
       } else {
         isPaused = true;
-        activeModal = {
+        const vacationModal = {
           type: 'vacation',
           data: {
             wasSuccessful: isSuccess,
@@ -221,6 +227,11 @@ export function tickMonthlySimulation(state) {
             selectedTierOption: vac.selectedTierOption || 'domestic',
           },
         };
+        if (!activeModal) {
+          activeModal = vacationModal;
+        } else {
+          modalQueue.push(vacationModal);
+        }
       }
     }
   }
@@ -228,7 +239,7 @@ export function tickMonthlySimulation(state) {
   // 9. Check Annual Salary Appraisal (+5% to +7%)
   let updatedTakeHome = takeHome;
   let updatedGross = character.grossMonthlySalary;
-  if (isAnnualAnniversary && !activeModal) {
+  if (isAnnualAnniversary) {
     const hikeRate = 0.06; // 6% average annual hike
     updatedGross = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
     const taxRate = updatedGross * 12 > 700000 ? 0.12 : 0.06;
@@ -237,13 +248,18 @@ export function tickMonthlySimulation(state) {
     const deltaSurplus = updatedTakeHome - takeHome;
 
     isPaused = true;
-    activeModal = {
+    const raiseModal = {
       type: 'raise',
       hikeRate,
       oldTakeHome: takeHome,
       newTakeHome: updatedTakeHome,
       deltaSurplus,
     };
+    if (!activeModal) {
+      activeModal = raiseModal;
+    } else {
+      modalQueue.push(raiseModal);
+    }
   }
 
   // 10. Check Retirement (Age 60)
@@ -253,6 +269,7 @@ export function tickMonthlySimulation(state) {
   if (isRetirementReached) {
     isPaused = true;
     activeModal = null;
+    modalQueue = [];
   }
 
   // 11. Net Worth Snapshot
@@ -294,6 +311,7 @@ export function tickMonthlySimulation(state) {
       currentMonthOfYear: monthOfYear,
       isPaused: isRetirementReached ? true : isPaused,
       activeModal: isRetirementReached ? null : activeModal,
+      modalQueue: isRetirementReached ? [] : modalQueue,
       history: [...(simulation.history || []), newHistoryEntry],
     },
   };
