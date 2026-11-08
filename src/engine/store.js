@@ -187,6 +187,21 @@ export const useGameStore = create((set, get) => ({
       };
     }),
 
+  // Phase 1: Acknowledge shock event and resume (or move to next queued modal)
+  acknowledgeShock: () =>
+    set((state) => {
+      const queue = state.simulation.modalQueue || [];
+      if (queue.length > 0) {
+        const [nextModal, ...rest] = queue;
+        return {
+          simulation: { ...state.simulation, activeModal: nextModal, modalQueue: rest, isPaused: true },
+        };
+      }
+      return {
+        simulation: { ...state.simulation, activeModal: null, isPaused: false },
+      };
+    }),
+
   // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only + Auto-vacation toggle
   resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic', autoVacation = false }) => {
     const { character, simulation, goals, insurance } = get();

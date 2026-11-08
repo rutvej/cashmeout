@@ -8,6 +8,7 @@ import FinancialSetupScreen from './FinancialSetupScreen.jsx';
 import VacationModal from '../game/VacationModal.jsx';
 import RaiseModal from '../game/RaiseModal.jsx';
 import MilestoneModal from '../game/MilestoneModal.jsx';
+import ShockModal from '../game/ShockModal.jsx';
 import {
   pageTransition,
   staggerContainer,
@@ -171,8 +172,13 @@ export default function MainGameScreen() {
                   </div>
                 </div>
                 <div>
-                  <div className="font-display font-black text-slate-900 text-sm sm:text-base leading-tight">
-                    Age {simulation.currentAge}
+                  <div className="font-display font-black text-slate-900 text-sm sm:text-base leading-tight flex items-center gap-1.5 flex-wrap">
+                    <span>Age {simulation.currentAge}</span>
+                    {character.employmentStatus === 'unemployed' && (
+                      <span className="px-1.5 py-0.5 bg-rose-100 border border-slate-900 text-rose-900 text-[9px] sm:text-[10px] font-mono font-bold animate-pulse inline-block">
+                        ⚠️ Layoff: {character.unemploymentMonthsRemaining} mos left
+                      </span>
+                    )}
                   </div>
                   <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-500">
                     Y{currentYear} · M{currentMonthInYear} · Target {retirementAge}
@@ -257,7 +263,14 @@ export default function MainGameScreen() {
         <div className="card-neopop-sm bg-white p-2.5 sm:p-3 grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono font-bold">
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Take-Home:</span>
-            <span className="text-emerald-700 font-black truncate">{formatINR(character.monthlyTakeHome)}</span>
+            {character.employmentStatus === 'unemployed' ? (
+              <span className="text-rose-600 font-black truncate flex items-center gap-1">
+                <span className="line-through">{formatINR(character.monthlyTakeHome)}</span>
+                <span className="text-[9px] bg-rose-100 text-rose-800 px-1 border border-rose-800">₹0</span>
+              </span>
+            ) : (
+              <span className="text-emerald-700 font-black truncate">{formatINR(character.monthlyTakeHome)}</span>
+            )}
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Expenses:</span>
@@ -376,13 +389,13 @@ export default function MainGameScreen() {
                       {/* Status Badges */}
                       <div className="shrink-0">
                         {goal.id === 'goal_emergency' && current >= target && (
-                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-emerald-100 border border-slate-900 text-emerald-900">
-                            🛡️ 100% BUFFER
+                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-emerald-100 border border-slate-900 text-emerald-900 flex items-center gap-1">
+                            <span>🟢</span> SHIELD INTACT (100%)
                           </span>
                         )}
                         {goal.id === 'goal_emergency' && current < target && (
-                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-amber-100 border border-slate-900 text-amber-900">
-                            ⚡ REFILL ACTIVE
+                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-amber-100 border border-slate-900 text-amber-900 animate-pulse flex items-center gap-1">
+                            <span>🟠</span> REFILL IN PROGRESS
                           </span>
                         )}
                         {goal.id !== 'goal_emergency' && current >= target && (
@@ -397,7 +410,11 @@ export default function MainGameScreen() {
                     <div className="space-y-0.5 sm:space-y-1">
                       <div className="flex justify-between text-[11px] sm:text-xs font-mono font-bold">
                         <span className="text-emerald-700">{formatINR(current)}</span>
-                        <span className="text-slate-600">{formatINR(target)} ({pct}%)</span>
+                        <span className="text-slate-600">
+                          {goal.id === 'goal_emergency'
+                            ? `Target: ${formatINR(target)} (6× outflows)`
+                            : `${formatINR(target)} (${pct}%)`}
+                        </span>
                       </div>
                       <div className="w-full h-1.5 sm:h-2 bg-slate-100 border border-slate-900 overflow-hidden">
                         <div
@@ -437,6 +454,7 @@ export default function MainGameScreen() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs">
               <div className="space-y-1.5 sm:space-y-2.5">
                 {[
+                  ['Status', character.employmentStatus === 'unemployed' ? `⚠️ Layoff (${character.unemploymentMonthsRemaining} mos left)` : '✅ Active'],
                   ['Job Title', character.jobTitle],
                   ['City & Tier', `${character.city} (${character.cityTier})`],
                   ['Field', character.careerField],
@@ -547,6 +565,12 @@ export default function MainGameScreen() {
       )}
       {simulation.activeModal?.type === 'milestone' && (
         <MilestoneModal goal={simulation.activeModal.goal} />
+      )}
+      {simulation.activeModal?.type === 'shock_event' && (
+        <ShockModal
+          data={simulation.activeModal}
+          onReviewAllocations={() => setIsAdjustingAllocations(true)}
+        />
       )}
 
       {/* ─── Allocation Adjustment Modal ─── */}
