@@ -188,6 +188,9 @@ export default function VacationModal({ data }) {
               </div>
             </button>
           </div>
+          <p className="text-[10px] sm:text-[11px] text-emerald-800 font-bold pt-0.5">
+            ✓ Monthly SIP will automatically align to {nextYearTrip === 'international' ? '₹12,500/mo' : '₹4,000/mo'} so next year's trip is 100% funded without shortfalls.
+          </p>
         </div>
 
         {/* ─── Automation Toggle (Requested by User) ─── */}

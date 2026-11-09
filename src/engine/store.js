@@ -246,7 +246,8 @@ export const useGameStore = create((set, get) => ({
       // resolutionType === 'acquired_only': no extra deductions, took budget trip
     }
 
-    // Reset vacation fund for upcoming year
+    // Reset vacation fund for upcoming year and auto-align baseMonthlySIP so shortfall doesn't repeat!
+    const neededVacationSIP = Math.round((nextAmount / 12) / 500) * 500;
     updatedGoals = updatedGoals.map((g) =>
       g.id === 'goal_vacation'
         ? {
@@ -254,6 +255,7 @@ export const useGameStore = create((set, get) => ({
             targetAmount: nextAmount,
             selectedTierOption: nextYearTripOption,
             currentAmount: 0,
+            baseMonthlySIP: Math.max(g.baseMonthlySIP || 0, neededVacationSIP),
           }
         : g
     );
