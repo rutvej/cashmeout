@@ -56,10 +56,28 @@ async function run() {
   await pctBtn.waitFor({ state: 'visible', timeout: 5000 });
   console.log('✓ Dual mode pill toggle buttons (₹ Amount / % Percentage) are visible');
 
-  // Verify Fixed Mode initial state
+  // Verify Fixed Mode initial state: Clean Slate starts at 0
   const rupeeInput = page.locator('input[type="number"][step="500"]').first();
   await rupeeInput.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ ₹ Rupee input with step="500" is visible in fixed mode');
+  const val = await rupeeInput.inputValue();
+  console.log(`✓ Clean Slate: Initial goal input value is "${val}" (starts at 0)`);
+
+  // Verify Strategy Hint button
+  const hintBtn = page.locator('button:has-text("Strategy Hint")').first();
+  await hintBtn.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ "💡 Strategy Hint" button is visible');
+  await hintBtn.click();
+  await page.waitForTimeout(300);
+
+  // Check Strategy Hint Modal
+  const hintModal = page.locator('text=/Strategy Hint/i').first();
+  await hintModal.waitFor({ state: 'visible', timeout: 5000 });
+  const applyRecommendedBtn = page.locator('button:has-text("Apply Recommended")').first();
+  await applyRecommendedBtn.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ Strategy Hint Modal is open with recommended SIP and strategic reassurance');
+  await applyRecommendedBtn.click();
+  await page.waitForTimeout(300);
+  console.log('✓ Applied recommended SIP from Strategy Hint modal');
 
   // Switch to Percentage Mode
   console.log('Switching to % Percentage mode...');
@@ -134,17 +152,24 @@ async function run() {
   await autoSplitBtn.waitFor({ state: 'visible', timeout: 5000 });
   console.log('✓ RaiseModal: "⚡ Auto-Split" action button is visible');
 
-  const retirementBtn = page.locator('button:has-text("100% to Retirement")').first();
-  await retirementBtn.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ RaiseModal: "🌴 100% to Retirement" action button is visible');
+  const bankCashBtn = page.locator('button:has-text("Keep in Bank Cash")').first();
+  await bankCashBtn.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ RaiseModal: "💵 Keep in Bank Cash" action button is visible');
 
   const customBtn = page.locator('button:has-text("Custom Rebalance")').first();
   await customBtn.waitFor({ state: 'visible', timeout: 5000 });
   console.log('✓ RaiseModal: "⚙️ Custom Rebalance" action button is visible');
 
-  const rememberCheckbox = page.locator('input[type="checkbox"]').first();
-  await rememberCheckbox.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ RaiseModal: "Remember choice" checkbox is visible');
+  const timerCheckbox = page.locator('input[type="checkbox"]').first();
+  await timerCheckbox.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ RaiseModal: Auto-select in 7s checkbox is visible');
+
+  // Toggle 7s timer on
+  await timerCheckbox.check();
+  await page.waitForTimeout(300);
+  const countdownBadge = page.locator('text=/⏱/').first();
+  await countdownBadge.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ RaiseModal: 7-second countdown badge & progress bar activated');
 
   // Screenshot of RaiseModal
   await page.screenshot({ path: 'tests/screenshot-raise-modal.png' });
@@ -159,8 +184,8 @@ async function run() {
   console.assert(!isModalOpen, 'RaiseModal should close on Auto-Split');
   console.log('✓ RaiseModal successfully closed and resumed simulation on Auto-Split');
 
-  // Trigger raise again and test "100% to Retirement"
-  console.log('Triggering raise again to test "100% to Retirement"...');
+  // Trigger raise again and test "Keep in Bank Cash"
+  console.log('Triggering raise again to test "Keep in Bank Cash"...');
   await page.evaluate(() => {
     const store = window.__GAME_STORE__;
     store.setState({
@@ -179,10 +204,10 @@ async function run() {
   });
   await page.waitForTimeout(500);
 
-  const retBtn = page.locator('button:has-text("100% to Retirement")').first();
-  await retBtn.click();
+  const cashBtn = page.locator('button:has-text("Keep in Bank Cash")').first();
+  await cashBtn.click();
   await page.waitForTimeout(500);
-  console.log('✓ "100% to Retirement" button successfully handled raise and resumed');
+  console.log('✓ "Keep in Bank Cash" button successfully kept SIPs and resumed');
 
   // Trigger raise again and test "Custom Rebalance"
   console.log('Triggering raise again to test "Custom Rebalance"...');

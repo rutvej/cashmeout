@@ -46,7 +46,8 @@ export const useGameStore = create((set, get) => ({
   // Phase 2: Surplus Allocation & Auto-Split Config
   surplusAllocation: {
     autoSplitOnRaise: false,
-    raiseRoutingStrategy: 'ask_every_time', // 'proportional_split' | 'all_to_retirement' | 'ask_every_time'
+    raiseRoutingStrategy: 'ask_every_time', // 'proportional_split' | 'bank_cash' | 'ask_every_time'
+    autoSplitTimerSeconds: 7,
     unallocatedPercent: 0,
   },
 
@@ -85,6 +86,7 @@ export const useGameStore = create((set, get) => ({
       surplusAllocation: {
         autoSplitOnRaise: false,
         raiseRoutingStrategy: 'ask_every_time',
+        autoSplitTimerSeconds: 7,
         unallocatedPercent: 0,
       },
       simulation: {
@@ -205,6 +207,15 @@ export const useGameStore = create((set, get) => ({
           };
         }
         return g;
+      });
+    } else if (strategy === 'bank_cash') {
+      // Keep existing SIPs unchanged, allowing extra surplus to flow to liquid bank cash
+      updatedGoals = updatedGoals.map((g) => {
+        const newPercent = currentSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / currentSurplus) * 100) : (g.allocationPercent || 0);
+        return {
+          ...g,
+          allocationPercent: newPercent,
+        };
       });
     } else if (strategy === 'all_to_retirement') {
       // Keeps all existing SIPs unchanged, funnels entire ΔS into goal_retirement
@@ -599,6 +610,7 @@ export const useGameStore = create((set, get) => ({
       surplusAllocation: {
         autoSplitOnRaise: false,
         raiseRoutingStrategy: 'ask_every_time',
+        autoSplitTimerSeconds: 7,
         unallocatedPercent: 0,
       },
       simulation: {

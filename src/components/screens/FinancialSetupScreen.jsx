@@ -33,6 +33,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [skippedGoals, setSkippedGoals] = useState(new Set());
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
+  const [showHintModal, setShowHintModal] = useState(false);
   const [newGoalName, setNewGoalName] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('2500000');
   const [newGoalInstrument, setNewGoalInstrument] = useState('equity');
@@ -171,6 +172,22 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const targetAge = currentGoal?.targetAge || (simulation.currentAge + Math.ceil(monthsAway / 12));
   const isEmergency = currentGoal?.id === 'goal_emergency';
   const isGoalFull = currentAmount >= targetAmount;
+
+  // Recommended monthly SIP to achieve target by deadline based on compounding math
+  const recommendedSIP = useMemo(() => {
+    if (!currentGoal) return 0;
+    const r = (currentInst?.annualRate || 0.04) / 12;
+    const n = Math.max(1, monthsAway);
+    const pv = currentAmount || 0;
+    const fv = targetAmount || 0;
+    if (r <= 0) {
+      return Math.round((Math.max(0, fv - pv) / n) / 500) * 500;
+    }
+    const compoundPV = pv * Math.pow(1 + r, n);
+    const netNeeded = Math.max(0, fv - compoundPV);
+    const pmt = netNeeded * (r / (Math.pow(1 + r, n) - 1));
+    return Math.max(500, Math.round(pmt / 500) * 500);
+  }, [currentGoal, currentInst, monthsAway, currentAmount, targetAmount]);
 
   const feasibility = evaluateGoalFeasibility(currentGoal, currentSIP, currentInst.id);
 
@@ -413,6 +430,14 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                       ⚡ PRIORITY RECALL
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setShowHintModal(true)}
+                    className="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 bg-blue-100 hover:bg-blue-200 text-blue-900 border border-slate-900 flex items-center gap-1 btn-press-sm cursor-pointer shadow-hard-xs transition-colors"
+                  >
+                    <span>💡</span>
+                    <span>Strategy Hint</span>
+                  </button>
                 </div>
               </div>
 
@@ -742,23 +767,39 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
               </div>
 
               {/* Feasibility Signal Banner */}
-              <div className={`p-2 sm:p-2.5 border-2 text-xs font-bold ${
-                feasibility.status === 'on_track'
-                  ? 'bg-emerald-50 border-emerald-600 text-emerald-900'
-                  : feasibility.status === 'borderline'
-                  ? 'bg-amber-50 border-amber-600 text-amber-900'
-                  : 'bg-rose-50 border-rose-600 text-rose-900'
-              }`}>
-                {feasibility.status === 'on_track' && (
-                  <span>🟢 On Track — projected to accumulate {formatINR(feasibility.projectedAmount)} by deadline!</span>
-                )}
-                {feasibility.status === 'borderline' && (
-                  <span>🟡 Borderline — short by {formatINR(feasibility.shortfall)}. Consider increasing SIP.</span>
-                )}
-                {feasibility.status === 'underfunded' && (
-                  <span>🔴 Underfunded — short by {formatINR(feasibility.shortfall)}. Allocate higher SIP or higher-yield asset.</span>
-                )}
-              </div>
+              {currentSIP === 0 ? (
+                <div className="p-2 sm:p-2.5 bg-slate-100 border-2 border-slate-900 text-slate-800 text-xs font-mono font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>🌱</span>
+                    <span>Phase-in Target — Unallocated yet. Tap presets or [Strategy Hint] for plan</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowHintModal(true)}
+                    className="text-[10px] text-blue-700 underline font-bold hover:text-blue-900"
+                  >
+                    View Strategy ➔
+                  </button>
+                </div>
+              ) : (
+                <div className={`p-2 sm:p-2.5 border-2 text-xs font-bold ${
+                  feasibility.status === 'on_track'
+                    ? 'bg-emerald-50 border-emerald-600 text-emerald-900'
+                    : feasibility.status === 'borderline'
+                    ? 'bg-amber-50 border-amber-600 text-amber-900'
+                    : 'bg-rose-50 border-rose-600 text-rose-900'
+                }`}>
+                  {feasibility.status === 'on_track' && (
+                    <span>🟢 On Track — projected to accumulate {formatINR(feasibility.projectedAmount)} by deadline!</span>
+                  )}
+                  {feasibility.status === 'borderline' && (
+                    <span>🟡 Borderline — short by {formatINR(feasibility.shortfall)}. Consider increasing SIP.</span>
+                  )}
+                  {feasibility.status === 'underfunded' && (
+                    <span>🔴 Underfunded — short by {formatINR(feasibility.shortfall)}. Scale up with future raises or waterfall!</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Cascading Waterfall Redirection Selector (Fixed-₹) or Auto-Redistribution Info (Percentage-%) */}
@@ -951,6 +992,115 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                 className="flex-1 py-2.5 bg-blue-600 text-white border-2 border-slate-900 font-mono text-xs font-bold btn-press-sm"
               >
                 Create Goal ➔
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Goal Strategy & Educational Guidance Modal ─── */}
+      {showHintModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="card-neopop max-w-lg w-full p-4 sm:p-6 space-y-4 bg-white text-slate-900 max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{currentGoal?.icon}</span>
+                <div>
+                  <h3 className="font-display font-black text-lg sm:text-xl text-slate-900">
+                    {currentGoal?.name} — Strategy Hint
+                  </h3>
+                  <span className="text-[10px] font-mono font-bold text-slate-500 uppercase">
+                    Target: {formatINR(targetAmount)} ({monthsAway} months away)
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHintModal(false)}
+                className="font-mono text-lg font-black text-slate-500 hover:text-slate-900 px-2 py-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Recommended Target Pill */}
+            <div className="p-3 bg-blue-50 border-2 border-blue-600 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-blue-900 block">
+                  Recommended Monthly SIP (On-Time Target)
+                </span>
+                <span className="font-mono font-black text-xl text-blue-950">
+                  {formatINR(recommendedSIP)}/mo
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSIPChange(recommendedSIP);
+                  setShowHintModal(false);
+                }}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-mono font-bold text-xs border-2 border-slate-900 btn-press-sm"
+              >
+                Apply Recommended ➔
+              </button>
+            </div>
+
+            {/* Strategic Reassurance Section */}
+            <div className="space-y-2.5 text-xs">
+              <h4 className="font-mono font-bold uppercase tracking-wider text-slate-700 text-[11px]">
+                Why it's completely okay if you can't fund this full amount yet:
+              </h4>
+
+              <div className="p-2.5 bg-slate-50 border-2 border-slate-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                  <span>📈</span>
+                  <span>1. Annual Salary Appraisals</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Your salary grows with annual appraisals (5–7%+) every single year. When surplus expands, <strong>Auto-Split</strong> will scale up this goal's contributions automatically without you needing to do manual math.
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border-2 border-slate-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                  <span>↪️</span>
+                  <span>2. Cascading Waterfall & Auto-Redistribution</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Shorter-term goals (like your Emergency Fund or Vacation) finish early! When they hit 100%, their freed surplus automatically redirects or scales into your active remaining goals.
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 border-2 border-slate-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                  <span>⏳</span>
+                  <span>3. Long-Term Compounding</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  In {currentInst.name} (yielding {(currentInst.annualRate * 100).toFixed(1)}% p.a.), even small early contributions multiply exponentially as time progresses.
+                </p>
+              </div>
+
+              {isEmergency && (
+                <div className="p-2.5 bg-amber-50 border-2 border-amber-600 space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                    <span>🛡️</span>
+                    <span>Safety First Recommendation</span>
+                  </div>
+                  <p className="text-[11px] text-amber-900 leading-relaxed">
+                    We recommend funding your 6-month Emergency Safety buffer first so sudden medical emergencies or shocks don't derail your other life goals.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowHintModal(false)}
+                className="w-full py-2.5 bg-slate-900 text-white font-mono font-bold text-xs uppercase btn-press hover:bg-slate-800"
+              >
+                Got It, Let's Plan! ✓
               </button>
             </div>
           </div>

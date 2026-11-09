@@ -334,53 +334,18 @@ export function tickMonthlySimulation(state) {
       const deltaSurplus = newRaisedTakeHome - baseTakeHome;
       baseTakeHome = newRaisedTakeHome;
 
-      const autoSplitOnRaise = state.surplusAllocation?.autoSplitOnRaise;
-      const strategy = state.surplusAllocation?.raiseRoutingStrategy;
-
-      if (autoSplitOnRaise && strategy === 'proportional_split') {
-        // Auto-split proportionally across active goals without pausing
-        const newSurplus = Math.max(0, newRaisedTakeHome - totalMonthlyOutflow);
-        updatedGoals = updatedGoals.map((g) => {
-          const isFull = (g.currentAmount || 0) >= (g.targetAmount || 1);
-          if (isFull) return g;
-          const weight = g.allocationPercent || (character.monthlySurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / character.monthlySurplus) * 100) : 0);
-          if (weight > 0 && newSurplus > 0) {
-            const newSIP = Math.round(((weight / 100) * newSurplus) / 500) * 500;
-            return { ...g, baseMonthlySIP: newSIP, allocationPercent: weight };
-          }
-          return g;
-        });
-      } else if (autoSplitOnRaise && strategy === 'all_to_retirement') {
-        // 100% of raise delta directly to retirement without pausing
-        const newSurplus = Math.max(0, newRaisedTakeHome - totalMonthlyOutflow);
-        updatedGoals = updatedGoals.map((g) => {
-          if (g.id === 'goal_retirement') {
-            const newSIP = (g.baseMonthlySIP || 0) + deltaSurplus;
-            return {
-              ...g,
-              baseMonthlySIP: newSIP,
-              allocationPercent: newSurplus > 0 ? Math.round((newSIP / newSurplus) * 100) : (g.allocationPercent || 0),
-            };
-          }
-          return {
-            ...g,
-            allocationPercent: newSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / newSurplus) * 100) : (g.allocationPercent || 0),
-          };
-        });
+      isPaused = true;
+      const raiseModal = {
+        type: 'raise',
+        hikeRate,
+        oldTakeHome: character.monthlyTakeHome,
+        newTakeHome: newRaisedTakeHome,
+        deltaSurplus,
+      };
+      if (!activeModal) {
+        activeModal = raiseModal;
       } else {
-        isPaused = true;
-        const raiseModal = {
-          type: 'raise',
-          hikeRate,
-          oldTakeHome: character.monthlyTakeHome,
-          newTakeHome: newRaisedTakeHome,
-          deltaSurplus,
-        };
-        if (!activeModal) {
-          activeModal = raiseModal;
-        } else {
-          modalQueue.push(raiseModal);
-        }
+        modalQueue.push(raiseModal);
       }
     }
   }

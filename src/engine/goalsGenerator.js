@@ -67,18 +67,6 @@ export function generateInitialGoals(character) {
   const retirementTargetAge = 60;
   const retirementTarget = Math.round((character.totalFixedExpenses * 300) / 50000) * 50000;
 
-  // Intelligent baseline SIP distribution (fits starting surplus minus default health insurance)
-  const defaultInsurancePremium = 800; // Comprehensive health insurance default
-  const investableSurplus = Math.max(0, character.monthlySurplus - defaultInsurancePremium);
-  const emergencySIP = Math.min(Math.round((investableSurplus * 0.35) / 500) * 500, Math.round(emergencyTarget / 24));
-  const vacationSIP = Math.min(Math.round(vacationTarget / 12 / 500) * 500, Math.max(0, investableSurplus - emergencySIP));
-  const remainingSurplus = Math.max(0, investableSurplus - emergencySIP - vacationSIP);
-  const retirementSIP = Math.round((remainingSurplus * 0.5) / 500) * 500;
-  const carSIP = Math.max(0, remainingSurplus - retirementSIP);
-
-  const surplus = character.monthlySurplus || 1;
-  const calcPercent = (sip) => (character.monthlySurplus > 0 ? Math.round(((sip || 0) / surplus) * 100) : 0);
-
   return [
     {
       id: 'goal_emergency',
@@ -92,8 +80,8 @@ export function generateInitialGoals(character) {
       targetMonthsRemaining: (startAge + 2 - startAge) * 12,
       recurrenceIntervalMonths: 0,
       allocationMode: 'fixed',
-      allocationPercent: calcPercent(emergencySIP),
-      baseMonthlySIP: emergencySIP,
+      allocationPercent: 0,
+      baseMonthlySIP: 0,
       instrumentId: 'savings',
       redirectGoalId: 'goal_car',
       isRefillPriority: true,
@@ -116,8 +104,8 @@ export function generateInitialGoals(character) {
       recurrenceIntervalMonths: 12,
       selectedTierOption: defaultTripOption,
       allocationMode: 'fixed',
-      allocationPercent: calcPercent(vacationSIP),
-      baseMonthlySIP: vacationSIP,
+      allocationPercent: 0,
+      baseMonthlySIP: 0,
       instrumentId: 'savings',
       redirectGoalId: 'goal_car',
       isMandatory: false,
@@ -137,8 +125,8 @@ export function generateInitialGoals(character) {
       targetAge: carTargetAge,
       targetMonthsRemaining: (carTargetAge - startAge) * 12,
       allocationMode: 'fixed',
-      allocationPercent: calcPercent(Math.max(0, carSIP)),
-      baseMonthlySIP: Math.max(0, carSIP),
+      allocationPercent: 0,
+      baseMonthlySIP: 0,
       instrumentId: 'fd',
       redirectGoalId: 'goal_marriage',
       isMandatory: false,
@@ -221,8 +209,8 @@ export function generateInitialGoals(character) {
       targetAge: retirementTargetAge,
       targetMonthsRemaining: (retirementTargetAge - startAge) * 12,
       allocationMode: 'fixed',
-      allocationPercent: calcPercent(Math.max(0, retirementSIP)),
-      baseMonthlySIP: Math.max(0, retirementSIP),
+      allocationPercent: 0,
+      baseMonthlySIP: 0,
       instrumentId: 'equity',
       redirectGoalId: null, // Ultimate sink
       isMandatory: true,

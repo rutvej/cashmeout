@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR } from '../../utils/format.js';
@@ -6,22 +6,28 @@ import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function RaiseModal({ data, onAdjustAllocations }) {
   const { closeModal, pause, applyRaiseStrategy, setSurplusAllocation, surplusAllocation } = useGameStore();
-  const [autoApplyFuture, setAutoApplyFuture] = useState(surplusAllocation?.autoSplitOnRaise || false);
+
+  const isAutoSplitPreferred = surplusAllocation?.autoSplitOnRaise || false;
+  const timerDuration = surplusAllocation?.autoSplitTimerSeconds || 7;
+
+  const [autoTimerEnabled, setAutoTimerEnabled] = useState(isAutoSplitPreferred);
+  const [secondsLeft, setSecondsLeft] = useState(isAutoSplitPreferred ? timerDuration : null);
+  const [isTimerPaused, setIsTimerPaused] = useState(false);
 
   const delta = data?.deltaSurplus || 0;
 
   const handleAutoSplit = () => {
-    if (autoApplyFuture) {
+    if (autoTimerEnabled) {
       setSurplusAllocation({ autoSplitOnRaise: true, raiseRoutingStrategy: 'proportional_split' });
     }
     applyRaiseStrategy('proportional_split');
   };
 
-  const handleRetirement = () => {
-    if (autoApplyFuture) {
-      setSurplusAllocation({ autoSplitOnRaise: true, raiseRoutingStrategy: 'all_to_retirement' });
+  const handleKeepInBank = () => {
+    if (autoTimerEnabled) {
+      setSurplusAllocation({ autoSplitOnRaise: false });
     }
-    applyRaiseStrategy('all_to_retirement');
+    applyRaiseStrategy('bank_cash');
   };
 
   const handleCustom = () => {
@@ -29,6 +35,33 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
     pause();
     onAdjustAllocations();
   };
+
+  const toggleAutoTimerPreference = (enabled) => {
+    setAutoTimerEnabled(enabled);
+    setSurplusAllocation({ autoSplitOnRaise: enabled, raiseRoutingStrategy: 'proportional_split' });
+    if (enabled) {
+      setSecondsLeft(timerDuration);
+      setIsTimerPaused(false);
+    } else {
+      setSecondsLeft(null);
+    }
+  };
+
+  // 7-second countdown auto-timer for Auto-Split
+  useEffect(() => {
+    if (!autoTimerEnabled || isTimerPaused || secondsLeft === null) return;
+
+    if (secondsLeft <= 0) {
+      handleAutoSplit();
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSecondsLeft((s) => (s !== null ? s - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [autoTimerEnabled, isTimerPaused, secondsLeft]);
 
   return (
     <motion.div
@@ -73,39 +106,70 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
           </div>
         </div>
 
-        {/* 3 One-Click Actions */}
+        {/* 3 Actions */}
         <div className="space-y-2 pt-1 text-left">
-          {/* Action 1: Auto-Split */}
-          <button
-            type="button"
-            onClick={handleAutoSplit}
-            className="w-full p-3 bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-slate-900 font-sans font-bold btn-press cursor-pointer transition-colors block text-left"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-display font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
-                ⚡ Auto-Split (+{formatINR(delta)})
-              </span>
-              <span className="text-[10px] font-mono bg-emerald-700 px-1.5 py-0.5 rounded text-white">INSTANT ▶</span>
-            </div>
-            <p className="text-[11px] font-normal text-emerald-100 mt-1">
-              Scales all active goal SIPs proportionally by their current % weights.
-            </p>
-          </button>
+          {/* Action 1: Auto-Split with 7s Countdown Timer */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleAutoSplit}
+              className="w-full p-3 bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-slate-900 font-sans font-bold btn-press cursor-pointer transition-colors block text-left"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-display font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
+                  ⚡ Auto-Split (+{formatINR(delta)})
+                </span>
+                {autoTimerEnabled && secondsLeft !== null ? (
+                  <span className="text-[10px] font-mono bg-emerald-800 px-2 py-0.5 rounded text-white flex items-center gap-1">
+                    <span>⏱ {secondsLeft}s</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono bg-emerald-700 px-1.5 py-0.5 rounded text-white">INSTANT ▶</span>
+                )}
+              </div>
+              <p className="text-[11px] font-normal text-emerald-100 mt-1">
+                Scales all active goal SIPs proportionally by their current % weights.
+              </p>
 
-          {/* Action 2: 100% to Retirement */}
+              {/* Visual Countdown Progress Bar when timer active */}
+              {autoTimerEnabled && secondsLeft !== null && (
+                <div className="w-full h-1.5 bg-emerald-800/80 mt-2 overflow-hidden rounded-full">
+                  <div
+                    className="h-full bg-amber-300 transition-all duration-1000 ease-linear"
+                    style={{ width: `${Math.max(0, (secondsLeft / timerDuration) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </button>
+
+            {/* Timer Pause / Resume button if active */}
+            {autoTimerEnabled && secondsLeft !== null && (
+              <div className="flex justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsTimerPaused(!isTimerPaused)}
+                  className="text-[10px] font-mono text-slate-500 hover:text-slate-900 underline cursor-pointer"
+                >
+                  {isTimerPaused ? '▶ Resume 7s timer' : '⏸ Pause countdown'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Action 2: Keep in Liquid Bank Cash & Resume */}
           <button
             type="button"
-            onClick={handleRetirement}
-            className="w-full p-3 bg-blue-600 hover:bg-blue-700 text-white border-2 border-slate-900 font-sans font-bold btn-press cursor-pointer transition-colors block text-left"
+            onClick={handleKeepInBank}
+            className="w-full p-3 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-900 font-sans font-bold btn-press-sm cursor-pointer transition-colors block text-left"
           >
             <div className="flex items-center justify-between">
               <span className="font-display font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
-                🌴 100% to Retirement
+                💵 Keep in Bank Cash (+{formatINR(delta)})
               </span>
-              <span className="text-[10px] font-mono bg-blue-700 px-1.5 py-0.5 rounded text-white">INSTANT ▶</span>
+              <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 text-slate-800">RESUME ▶</span>
             </div>
-            <p className="text-[11px] font-normal text-blue-100 mt-1">
-              Keeps existing SIPs unchanged, funnels entire +{formatINR(delta)} into FI/RE equity compounding.
+            <p className="text-[11px] font-normal text-slate-600 mt-1">
+              Keeps existing SIPs unchanged. The entire extra +{formatINR(delta)} flows into your liquid bank savings every month.
             </p>
           </button>
 
@@ -113,7 +177,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
           <button
             type="button"
             onClick={handleCustom}
-            className="w-full p-3 bg-white hover:bg-slate-100 text-slate-900 border-2 border-slate-900 font-sans font-bold btn-press-sm cursor-pointer transition-colors block text-left"
+            className="w-full p-3 bg-white hover:bg-slate-50 text-slate-900 border-2 border-slate-900 font-sans font-bold btn-press-sm cursor-pointer transition-colors block text-left"
           >
             <div className="flex items-center justify-between">
               <span className="font-display font-black text-sm uppercase tracking-wider flex items-center gap-1.5">
@@ -122,20 +186,22 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
               <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 text-slate-800">PAUSE ⏸</span>
             </div>
             <p className="text-[11px] font-normal text-slate-600 mt-1">
-              Pauses simulation and opens the Allocation Sheet for interactive adjustments.
+              Pauses simulation and opens the Allocation Sheet for manual adjustment.
             </p>
           </button>
         </div>
 
-        {/* Future Auto-Split Checkbox */}
+        {/* 7-Second Auto-Select Preference Checkbox */}
         <label className="flex items-center justify-center gap-2 pt-1 text-xs text-slate-600 cursor-pointer select-none">
           <input
             type="checkbox"
-            checked={autoApplyFuture}
-            onChange={(e) => setAutoApplyFuture(e.target.checked)}
+            checked={autoTimerEnabled}
+            onChange={(e) => toggleAutoTimerPreference(e.target.checked)}
             className="accent-slate-900 h-4 w-4 rounded cursor-pointer"
           />
-          <span className="text-[11px] font-mono">Remember choice for future annual raises</span>
+          <span className="text-[11px] font-mono">
+            Auto-select Auto-Split in 7s on future raises (still shows appraisal screen)
+          </span>
         </label>
       </motion.div>
     </motion.div>
