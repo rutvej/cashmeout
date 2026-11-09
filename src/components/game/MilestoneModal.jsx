@@ -5,15 +5,28 @@ import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function MilestoneModal({ goal }) {
-  const { resolveMilestoneShortfall, closeModal, character, simulation } = useGameStore();
+  const { resolveMilestoneShortfall, closeModal, character, simulation, goals } = useGameStore();
 
   const current = goal?.currentAmount || 0;
   const target = goal?.targetAmount || 1;
   const isFunded = current >= target;
   const shortfall = Math.max(0, target - current);
 
+  // Safety buffer calculation for shortfall preview
+  const emergencyGoal = (goals || []).find((g) => g.id === 'goal_emergency');
+  const liquidCashAvailable = character?.liquidCash || 0;
+  const emergencyAvailable = emergencyGoal?.currentAmount || 0;
+  const totalBufferAvailable = liquidCashAvailable + emergencyAvailable;
+  const deductCash = Math.min(liquidCashAvailable, shortfall);
+  const neededFromEmergency = Math.max(0, shortfall - deductCash);
+  const deductEmergency = Math.min(emergencyAvailable, neededFromEmergency);
+  const remainingEmergencyAfter = emergencyAvailable - deductEmergency;
+  const isBufferSufficient = totalBufferAvailable >= shortfall;
+
   // Resolution option for shortfall: 'postpone' | 'other_fund' | 'loan'
-  const [selectedResolution, setSelectedResolution] = useState('postpone');
+  const [selectedResolution, setSelectedResolution] = useState(
+    isBufferSufficient ? 'other_fund' : 'postpone'
+  );
   const [postponeYears, setPostponeYears] = useState(2);
 
   // Compute estimated loan terms for preview
@@ -127,7 +140,7 @@ export default function MilestoneModal({ goal }) {
                 </p>
               </button>
 
-              {/* Option 2: Borrow / Pay from Other Funds */}
+              {/* Option 2: Pay from Bank & Emergency Buffer */}
               <button
                 type="button"
                 onClick={() => setSelectedResolution('other_fund')}
@@ -140,13 +153,21 @@ export default function MilestoneModal({ goal }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between font-bold gap-1">
                   <span className="text-slate-900 flex items-center gap-1.5 min-w-0">
                     <span className="shrink-0">🛡️</span>
-                    <span className="truncate">Pay from Bank & Emergency Buffer</span>
+                    <span className="truncate">Pay from Bank Cash & Emergency Buffer</span>
                   </span>
-                  <span className="font-mono text-emerald-700 shrink-0 text-[11px] sm:text-xs">One-Time Draw</span>
+                  <span className={`font-mono shrink-0 text-[11px] sm:text-xs ${isBufferSufficient ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {isBufferSufficient ? 'Covered by Buffer' : 'Buffer Shortfall'}
+                  </span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Pay {formatINR(shortfall)} directly from your bank cash and safety buffer. Milestone completes immediately with ₹0 debt!
-                </p>
+                {isBufferSufficient ? (
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Deducts {formatINR(deductCash)} from bank cash and {formatINR(deductEmergency)} from emergency buffer. Leaves <strong className="text-slate-800">{formatINR(remainingEmergencyAfter)}</strong> in emergency buffer. Milestone completes debt-free!
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-amber-800 font-bold mt-1">
+                    ⚠️ Total buffer available is {formatINR(totalBufferAvailable)} (Bank: {formatINR(liquidCashAvailable)}, Emergency: {formatINR(emergencyAvailable)}), which cannot fully cover the {formatINR(shortfall)} shortfall. Option 1 (Postpone) or Option 3 (Loan) is recommended!
+                  </p>
+                )}
               </button>
 
               {/* Option 3: Take a Loan */}

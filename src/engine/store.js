@@ -322,17 +322,17 @@ export const useGameStore = create((set, get) => ({
       );
     } else if (resolutionType === 'other_fund') {
       // Pay shortfall from bank liquid cash first; remainder from emergency fund
-      if (updatedLiquidCash >= shortfall) {
-        updatedLiquidCash -= shortfall;
-      } else {
-        const remainingFromEmergency = shortfall - updatedLiquidCash;
-        updatedLiquidCash = 0;
-        const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
-        if (emgIndex >= 0) {
-          updatedGoals[emgIndex].currentAmount = Math.max(
-            0,
-            (updatedGoals[emgIndex].currentAmount || 0) - remainingFromEmergency
-          );
+      const drawnFromCash = Math.min(updatedLiquidCash, shortfall);
+      updatedLiquidCash -= drawnFromCash;
+      const remainingShortfall = shortfall - drawnFromCash;
+
+      let drawnFromEmergency = 0;
+      const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+      if (emgIndex >= 0 && remainingShortfall > 0) {
+        const emgBal = updatedGoals[emgIndex].currentAmount || 0;
+        drawnFromEmergency = Math.min(emgBal, remainingShortfall);
+        updatedGoals[emgIndex].currentAmount = Math.max(0, emgBal - drawnFromEmergency);
+        if (drawnFromEmergency > 0) {
           updatedGoals[emgIndex].status = 'refill_needed';
         }
       }

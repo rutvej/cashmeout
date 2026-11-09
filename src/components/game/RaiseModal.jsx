@@ -5,19 +5,16 @@ import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function RaiseModal({ data, onAdjustAllocations }) {
-  const { closeModal, play } = useGameStore();
+  const { closeModal, pause } = useGameStore();
 
   const handleAllocate = () => {
-    // Dismiss the raise modal while keeping simulation paused for allocation adjustments
-    useGameStore.setState((state) => ({
-      simulation: { ...state.simulation, activeModal: null, isPaused: true },
-    }));
+    closeModal();
+    pause();
     onAdjustAllocations();
   };
 
   const handleKeepInBank = () => {
     closeModal();
-    play();
   };
 
   return (

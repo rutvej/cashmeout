@@ -195,6 +195,7 @@ export function tickMonthlySimulation(state) {
   let unemploymentMonthsRemaining = character.unemploymentMonthsRemaining || 0;
   let preLayoffTakeHome = character.preLayoffTakeHome ?? null;
   let lastShockMonthIndex = character.lastShockMonthIndex ?? -18;
+  let lastJobLossMonthIndex = character.lastJobLossMonthIndex ?? null;
 
   if (employmentStatus === 'unemployed') {
     if (unemploymentMonthsRemaining > 0) {
@@ -216,34 +217,6 @@ export function tickMonthlySimulation(state) {
     const inflationRng = createPRNG(`${character.seed}_inflation_${nextMonthIndex}`);
     const inflationRate = 0.05 + inflationRng() * 0.02; // 5–7%
     fixedExpenses = Math.round((character.totalFixedExpenses * (1 + inflationRate)) / 500) * 500;
-
-    // B. Annual Salary Appraisal (+6% average hike)
-    const hikeRate = 0.06;
-    grossSalary = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
-    const taxRate = grossSalary * 12 > 700000 ? 0.12 : 0.06;
-    const taxAndPF = Math.round(grossSalary * taxRate);
-    const newRaisedTakeHome = grossSalary - taxAndPF;
-    const deltaSurplus = newRaisedTakeHome - baseTakeHome;
-
-    if (employmentStatus === 'unemployed') {
-      preLayoffTakeHome = newRaisedTakeHome;
-    } else {
-      baseTakeHome = newRaisedTakeHome;
-    }
-
-    isPaused = true;
-    const raiseModal = {
-      type: 'raise',
-      hikeRate,
-      oldTakeHome: baseTakeHome,
-      newTakeHome: newRaisedTakeHome,
-      deltaSurplus,
-    };
-    if (!activeModal) {
-      activeModal = raiseModal;
-    } else {
-      modalQueue.push(raiseModal);
-    }
 
     // C. Annual Vacation Cycle
     const vacIndex = updatedGoals.findIndex((g) => g.id === 'goal_vacation');
@@ -313,6 +286,7 @@ export function tickMonthlySimulation(state) {
         employmentStatus = 'unemployed';
         unemploymentMonthsRemaining = shockPayload.unemploymentDuration;
         preLayoffTakeHome = baseTakeHome;
+        lastJobLossMonthIndex = nextMonthIndex;
 
         const emgGoal = updatedGoals.find(g => g.id === 'goal_emergency');
         modalData = {
@@ -344,25 +318,58 @@ export function tickMonthlySimulation(state) {
     }
   }
 
-  // ─── 5. Milestone Checks by Age ──────────────────────────────────────────
+  // ─── 5. Annual Salary Appraisal Check (Evaluated after shock roll) ────────
+  // CRITICAL RULE: If currently unemployed or experienced a job loss within the past 12 months, NO HIKE!
+  if (isAnnualAnniversary) {
+    const isUnemployedOrRecentlyLaidOff =
+      employmentStatus === 'unemployed' ||
+      (lastJobLossMonthIndex !== null && (nextMonthIndex - lastJobLossMonthIndex) < 12);
+
+    if (!isUnemployedOrRecentlyLaidOff) {
+      const hikeRate = 0.06;
+      grossSalary = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
+      const taxRate = grossSalary * 12 > 700000 ? 0.12 : 0.06;
+      const taxAndPF = Math.round(grossSalary * taxRate);
+      const newRaisedTakeHome = grossSalary - taxAndPF;
+      const deltaSurplus = newRaisedTakeHome - baseTakeHome;
+      baseTakeHome = newRaisedTakeHome;
+
+      isPaused = true;
+      const raiseModal = {
+        type: 'raise',
+        hikeRate,
+        oldTakeHome: character.monthlyTakeHome,
+        newTakeHome: newRaisedTakeHome,
+        deltaSurplus,
+      };
+      if (!activeModal) {
+        activeModal = raiseModal;
+      } else {
+        modalQueue.push(raiseModal);
+      }
+    }
+  }
+
+  // ─── 5. Milestone Checks by Age (Ensure NO milestones like Marriage are skipped) ──
   const reachedMilestones = updatedGoals.filter(
-    (g) => g.kind === 'milestone' && g.targetAge === currentAge && monthOfYear === 1 && !g.milestoneTriggered
+    (g) => g.kind === 'milestone' && !g.milestoneTriggered && currentAge >= g.targetAge
   );
   if (reachedMilestones.length > 0) {
-    const pendingMilestone = reachedMilestones[0];
-    isPaused = true;
-    const milestoneModal = {
-      type: 'milestone',
-      goal: pendingMilestone,
-    };
-    if (!activeModal) {
-      activeModal = milestoneModal;
-    } else {
-      modalQueue.push(milestoneModal);
-    }
-    updatedGoals = updatedGoals.map((g) =>
-      g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
-    );
+    reachedMilestones.forEach((pendingMilestone) => {
+      isPaused = true;
+      const milestoneModal = {
+        type: 'milestone',
+        goal: pendingMilestone,
+      };
+      if (!activeModal) {
+        activeModal = milestoneModal;
+      } else {
+        modalQueue.push(milestoneModal);
+      }
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
+      );
+    });
   }
 
   // ─── 6. Cash Inflows, Monthly Surplus & Deficit Resolution ────────────────
@@ -524,6 +531,7 @@ export function tickMonthlySimulation(state) {
     unemploymentMonthsRemaining,
     preLayoffTakeHome: employmentStatus === 'unemployed' ? preLayoffTakeHome : null,
     lastShockMonthIndex,
+    lastJobLossMonthIndex,
   };
 
   return {
