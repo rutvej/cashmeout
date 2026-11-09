@@ -93,11 +93,9 @@ export function evaluateGoalFeasibility(goal, monthlySIP, instrumentId) {
 
 /**
  * Resolves the Cascading Waterfall SIP allocations.
- * - If a goal is completed/full (currentAmount >= targetAmount):
- *   - It stops taking its SIP (effectiveMonthlySIP becomes 0).
- *   - The SIP cascades downstream to redirectGoalId.
- *   - If the downstream goal is ALSO full, it cascades down the redirection chain.
- *   - If the entire chain is satisfied, the unused SIP is 0 so the cash stays in liquid surplus.
+ * - In Percentage Mode: When a goal fills up, its freed allocation redistributes proportionally
+ *   across all remaining active goals (not via redirectGoalId).
+ * - In Fixed-₹ Mode: When a goal fills up, its SIP cascades downstream via redirectGoalId waterfall chain.
  * - Emergency Fund auto-recall guarantee:
  *   - If Emergency Fund drops below target, it recalls its base SIP with highest priority.
  */
@@ -115,7 +113,7 @@ export function calculateEffectiveSIPs(goals) {
   const isEmergencyDepleted =
     emergencyGoal && (emergencyGoal.currentAmount || 0) < (emergencyGoal.targetAmount || 1);
 
-  // Helper function to find next incomplete goal in redirection chain
+  // Helper function to find next incomplete goal in redirection chain (Fixed-₹ mode)
   const findActiveRecipient = (startGoalId) => {
     let currentId = startGoalId;
     const visited = new Set();
@@ -142,7 +140,9 @@ export function calculateEffectiveSIPs(goals) {
     return null; // All downstream goals in chain are full or none configured
   };
 
-  // Process waterfall for each goal
+  let freedPercentageSIP = 0;
+
+  // Process completed goals
   goals.forEach((goal) => {
     const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1);
 
@@ -155,14 +155,56 @@ export function calculateEffectiveSIPs(goals) {
       const outflow = effective[goal.id];
       effective[goal.id] = 0; // Stop funding completed goal!
 
-      if (outflow > 0 && goal.redirectGoalId) {
-        const activeRecipientId = findActiveRecipient(goal.redirectGoalId);
-        if (activeRecipientId && effective[activeRecipientId] !== undefined) {
-          effective[activeRecipientId] += outflow;
+      if (outflow > 0) {
+        if (goal.allocationMode === 'percentage') {
+          // Percentage mode REPLACES the waterfall redirect chain
+          freedPercentageSIP += outflow;
+        } else {
+          // Fixed-₹ mode uses waterfall cascade via redirectGoalId
+          if (goal.redirectGoalId) {
+            const activeRecipientId = findActiveRecipient(goal.redirectGoalId);
+            if (activeRecipientId && effective[activeRecipientId] !== undefined) {
+              effective[activeRecipientId] += outflow;
+            }
+          }
         }
       }
     }
   });
+
+  // When a goal fills up in % mode, its freed allocation redistributes proportionally across all remaining active goals
+  if (freedPercentageSIP > 0) {
+    const activeGoals = goals.filter((g) => {
+      if (g.id === 'goal_emergency' && isEmergencyDepleted) return true;
+      return (g.currentAmount || 0) < (g.targetAmount || 1);
+    });
+
+    if (activeGoals.length > 0) {
+      // Determine weights of active goals (prefer allocationPercent, then effective SIP, then 1)
+      const weights = activeGoals.map((g) => {
+        if (typeof g.allocationPercent === 'number' && g.allocationPercent > 0) {
+          return g.allocationPercent;
+        }
+        if (effective[g.id] > 0) {
+          return effective[g.id];
+        }
+        return 1;
+      });
+
+      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+      let distributed = 0;
+      activeGoals.forEach((g, idx) => {
+        if (idx === activeGoals.length - 1) {
+          effective[g.id] += (freedPercentageSIP - distributed);
+        } else {
+          const share = Math.round(freedPercentageSIP * (weights[idx] / totalWeight));
+          effective[g.id] += share;
+          distributed += share;
+        }
+      });
+    }
+  }
 
   return effective;
 }

@@ -334,18 +334,53 @@ export function tickMonthlySimulation(state) {
       const deltaSurplus = newRaisedTakeHome - baseTakeHome;
       baseTakeHome = newRaisedTakeHome;
 
-      isPaused = true;
-      const raiseModal = {
-        type: 'raise',
-        hikeRate,
-        oldTakeHome: character.monthlyTakeHome,
-        newTakeHome: newRaisedTakeHome,
-        deltaSurplus,
-      };
-      if (!activeModal) {
-        activeModal = raiseModal;
+      const autoSplitOnRaise = state.surplusAllocation?.autoSplitOnRaise;
+      const strategy = state.surplusAllocation?.raiseRoutingStrategy;
+
+      if (autoSplitOnRaise && strategy === 'proportional_split') {
+        // Auto-split proportionally across active goals without pausing
+        const newSurplus = Math.max(0, newRaisedTakeHome - totalMonthlyOutflow);
+        updatedGoals = updatedGoals.map((g) => {
+          const isFull = (g.currentAmount || 0) >= (g.targetAmount || 1);
+          if (isFull) return g;
+          const weight = g.allocationPercent || (character.monthlySurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / character.monthlySurplus) * 100) : 0);
+          if (weight > 0 && newSurplus > 0) {
+            const newSIP = Math.round(((weight / 100) * newSurplus) / 500) * 500;
+            return { ...g, baseMonthlySIP: newSIP, allocationPercent: weight };
+          }
+          return g;
+        });
+      } else if (autoSplitOnRaise && strategy === 'all_to_retirement') {
+        // 100% of raise delta directly to retirement without pausing
+        const newSurplus = Math.max(0, newRaisedTakeHome - totalMonthlyOutflow);
+        updatedGoals = updatedGoals.map((g) => {
+          if (g.id === 'goal_retirement') {
+            const newSIP = (g.baseMonthlySIP || 0) + deltaSurplus;
+            return {
+              ...g,
+              baseMonthlySIP: newSIP,
+              allocationPercent: newSurplus > 0 ? Math.round((newSIP / newSurplus) * 100) : (g.allocationPercent || 0),
+            };
+          }
+          return {
+            ...g,
+            allocationPercent: newSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / newSurplus) * 100) : (g.allocationPercent || 0),
+          };
+        });
       } else {
-        modalQueue.push(raiseModal);
+        isPaused = true;
+        const raiseModal = {
+          type: 'raise',
+          hikeRate,
+          oldTakeHome: character.monthlyTakeHome,
+          newTakeHome: newRaisedTakeHome,
+          deltaSurplus,
+        };
+        if (!activeModal) {
+          activeModal = raiseModal;
+        } else {
+          modalQueue.push(raiseModal);
+        }
       }
     }
   }
@@ -394,6 +429,103 @@ export function tickMonthlySimulation(state) {
       }
     }
     monthlySurplus = 0;
+  }
+
+  // ─── 6b. Percentage-Mode Recalculation & Downward Auto-Contraction ────────
+  // Recompute baseMonthlySIP from allocationPercent × monthlySurplus for percentage-mode goals
+  updatedGoals = updatedGoals.map((g) => {
+    if (g.allocationMode === 'percentage') {
+      const computed = Math.round(((g.allocationPercent || 0) / 100) * monthlySurplus);
+      return {
+        ...g,
+        baseMonthlySIP: computed,
+      };
+    }
+    return g;
+  });
+
+  // Downward auto-contraction: When surplus shrinks, contract percentage-mode SIPs proportionally.
+  // Mandatory goals (Emergency Fund) maintain priority; lifestyle goals shrink first via minPriority ordering.
+  const totalDemandedSIP = updatedGoals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);
+  if (totalDemandedSIP > monthlySurplus && monthlySurplus >= 0) {
+    let excess = totalDemandedSIP - monthlySurplus;
+
+    // Lifestyle/non-mandatory shrink first: priority tiers descending (4 = Lifestyle, 3 = Assets/Education, 2 = Debt/Milestones)
+    const priorityTiers = [4, 3, 2];
+
+    for (const priorityLevel of priorityTiers) {
+      if (excess <= 0) break;
+
+      const tierGoals = updatedGoals.filter(
+        (g) => (g.minPriority || g.priority || 3) === priorityLevel && (g.baseMonthlySIP || 0) > 0
+      );
+
+      const tierPercentageGoals = tierGoals.filter((g) => g.allocationMode === 'percentage');
+      const targetGoals = tierPercentageGoals.length > 0 ? tierPercentageGoals : tierGoals;
+      const tierTotalSIP = targetGoals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);
+
+      if (tierTotalSIP > 0) {
+        if (tierTotalSIP <= excess) {
+          const goalIds = new Set(targetGoals.map((g) => g.id));
+          updatedGoals = updatedGoals.map((g) =>
+            goalIds.has(g.id) ? { ...g, baseMonthlySIP: 0 } : g
+          );
+          excess -= tierTotalSIP;
+        } else {
+          let tierReduced = 0;
+          const goalIds = new Set(targetGoals.map((g) => g.id));
+          updatedGoals = updatedGoals.map((g) => {
+            if (!goalIds.has(g.id)) return g;
+            const sip = g.baseMonthlySIP || 0;
+            const reduction = Math.round(excess * (sip / tierTotalSIP));
+            const newSIP = Math.max(0, sip - reduction);
+            tierReduced += (sip - newSIP);
+            return {
+              ...g,
+              baseMonthlySIP: newSIP,
+            };
+          });
+          excess = Math.max(0, excess - tierReduced);
+        }
+      }
+    }
+
+    // Non-emergency priority 1 goals contract next if excess still remains
+    if (excess > 0) {
+      const otherP1Goals = updatedGoals.filter(
+        (g) => g.id !== 'goal_emergency' && (g.baseMonthlySIP || 0) > 0
+      );
+      const otherP1Total = otherP1Goals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);
+      if (otherP1Total > 0) {
+        if (otherP1Total <= excess) {
+          const ids = new Set(otherP1Goals.map((g) => g.id));
+          updatedGoals = updatedGoals.map((g) =>
+            ids.has(g.id) ? { ...g, baseMonthlySIP: 0 } : g
+          );
+          excess -= otherP1Total;
+        } else {
+          const ids = new Set(otherP1Goals.map((g) => g.id));
+          updatedGoals = updatedGoals.map((g) => {
+            if (!ids.has(g.id)) return g;
+            const sip = g.baseMonthlySIP || 0;
+            const reduction = Math.round(excess * (sip / otherP1Total));
+            return { ...g, baseMonthlySIP: Math.max(0, sip - reduction) };
+          });
+          excess = 0;
+        }
+      }
+    }
+
+    // Emergency Fund is strictly Priority 1 and must never be contracted below its baseMonthlySIP
+    // unless monthlySurplus itself cannot fund it
+    if (excess > 0) {
+      const emg = updatedGoals.find((g) => g.id === 'goal_emergency');
+      if (emg && emg.baseMonthlySIP > monthlySurplus) {
+        updatedGoals = updatedGoals.map((g) =>
+          g.id === 'goal_emergency' ? { ...g, baseMonthlySIP: monthlySurplus } : g
+        );
+      }
+    }
   }
 
   // ─── 7. Distribute Waterfall SIPs ────────────────────────────────────────

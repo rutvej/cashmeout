@@ -43,6 +43,13 @@ export const useGameStore = create((set, get) => ({
     },
   },
 
+  // Phase 2: Surplus Allocation & Auto-Split Config
+  surplusAllocation: {
+    autoSplitOnRaise: false,
+    raiseRoutingStrategy: 'ask_every_time', // 'proportional_split' | 'all_to_retirement' | 'ask_every_time'
+    unallocatedPercent: 0,
+  },
+
   // Simulation state
   simulation: {
     currentMonthIndex: 0,
@@ -75,6 +82,11 @@ export const useGameStore = create((set, get) => ({
       character,
       goals,
       currentScreen: 'spawn_reveal',
+      surplusAllocation: {
+        autoSplitOnRaise: false,
+        raiseRoutingStrategy: 'ask_every_time',
+        unallocatedPercent: 0,
+      },
       simulation: {
         currentMonthIndex: 0,
         currentAge: character.age,
@@ -103,10 +115,133 @@ export const useGameStore = create((set, get) => ({
       goals: state.goals.map((g) => (g.id === goalId ? { ...g, ...updates } : g)),
     })),
 
+  // Phase 2: Bidirectionally synced goal allocation (₹ ↔ %)
   setGoalAllocation: (goalId, allocationUpdates) =>
+    set((state) => {
+      const surplus = state.character?.monthlySurplus || 0;
+      return {
+        goals: state.goals.map((g) => {
+          if (g.id !== goalId) return g;
+          let updates = { ...allocationUpdates };
+
+          if ('baseMonthlySIP' in updates && !('allocationPercent' in updates)) {
+            updates.allocationPercent = surplus > 0 ? Math.round((updates.baseMonthlySIP / surplus) * 100) : 0;
+          } else if ('allocationPercent' in updates && !('baseMonthlySIP' in updates)) {
+            updates.baseMonthlySIP = surplus > 0 ? Math.round(((updates.allocationPercent / 100) * surplus) / 500) * 500 : 0;
+          }
+
+          return { ...g, ...updates };
+        }),
+      };
+    }),
+
+  // Phase 2: Switch allocation mode for a goal (percentage vs fixed)
+  setAllocationMode: (goalId, mode) =>
+    set((state) => {
+      const surplus = state.character?.monthlySurplus || 0;
+      return {
+        goals: state.goals.map((g) => {
+          if (g.id !== goalId) return g;
+          let allocationPercent = g.allocationPercent ?? 0;
+          let baseMonthlySIP = g.baseMonthlySIP ?? 0;
+
+          if (mode === 'percentage') {
+            if (surplus > 0 && (allocationPercent === 0 || allocationPercent === undefined) && baseMonthlySIP > 0) {
+              allocationPercent = Math.round((baseMonthlySIP / surplus) * 100);
+            }
+            baseMonthlySIP = surplus > 0 ? Math.round(((allocationPercent / 100) * surplus) / 500) * 500 : 0;
+          } else {
+            // Switching to fixed: preserve rupee SIP or compute from %
+            if (surplus > 0 && baseMonthlySIP === 0 && allocationPercent > 0) {
+              baseMonthlySIP = Math.round(((allocationPercent / 100) * surplus) / 500) * 500;
+            }
+          }
+
+          return {
+            ...g,
+            allocationMode: mode,
+            allocationPercent,
+            baseMonthlySIP,
+          };
+        }),
+      };
+    }),
+
+  setSurplusAllocation: (partial) =>
     set((state) => ({
-      goals: state.goals.map((g) => (g.id === goalId ? { ...g, ...allocationUpdates } : g)),
+      surplusAllocation: {
+        ...state.surplusAllocation,
+        ...partial,
+      },
     })),
+
+  // Phase 2: Auto-split on raise strategy execution
+  applyRaiseStrategy: (strategy) => {
+    const { character, goals, simulation } = get();
+    const modalData = simulation.activeModal;
+    const deltaSurplus = modalData?.deltaSurplus || 0;
+    const currentSurplus = character.monthlySurplus;
+
+    let updatedGoals = goals.map((g) => ({ ...g }));
+
+    if (strategy === 'proportional_split') {
+      // Proportionally scales all active goal SIPs by their current % weights
+      updatedGoals = updatedGoals.map((g) => {
+        const isFull = (g.currentAmount || 0) >= (g.targetAmount || 1);
+        if (isFull) return g;
+
+        let weight = g.allocationPercent;
+        if (weight === undefined || weight === null || weight === 0) {
+          const oldSurplus = currentSurplus - deltaSurplus;
+          weight = oldSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / oldSurplus) * 100) : 0;
+        }
+
+        if (weight > 0 && currentSurplus > 0) {
+          const newSIP = Math.round(((weight / 100) * currentSurplus) / 500) * 500;
+          return {
+            ...g,
+            allocationPercent: weight,
+            baseMonthlySIP: newSIP,
+          };
+        }
+        return g;
+      });
+    } else if (strategy === 'all_to_retirement') {
+      // Keeps all existing SIPs unchanged, funnels entire ΔS into goal_retirement
+      updatedGoals = updatedGoals.map((g) => {
+        if (g.id === 'goal_retirement') {
+          const newSIP = (g.baseMonthlySIP || 0) + deltaSurplus;
+          const newPercent = currentSurplus > 0 ? Math.round((newSIP / currentSurplus) * 100) : (g.allocationPercent || 0);
+          return {
+            ...g,
+            baseMonthlySIP: newSIP,
+            allocationPercent: newPercent,
+          };
+        }
+        const newPercent = currentSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / currentSurplus) * 100) : (g.allocationPercent || 0);
+        return {
+          ...g,
+          allocationPercent: newPercent,
+        };
+      });
+    }
+
+    // Resume instantly: advance modal queue or resume simulation
+    const queue = simulation.modalQueue || [];
+    const hasNext = queue.length > 0;
+    const nextModal = hasNext ? queue[0] : null;
+    const nextQueue = hasNext ? queue.slice(1) : [];
+
+    set({
+      goals: updatedGoals,
+      simulation: {
+        ...simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNext ? true : false,
+      },
+    });
+  },
 
   addCustomGoal: ({ name, targetAmount, instrumentId = 'equity', icon = '💎' }) => {
     const goalId = `goal_custom_${Date.now()}`;
@@ -117,11 +252,15 @@ export const useGameStore = create((set, get) => ({
       kind: 'milestone',
       targetAmount: Number(targetAmount) || 2500000,
       currentAmount: 0,
+      allocationMode: 'fixed',
+      allocationPercent: 0,
       baseMonthlySIP: 0,
       effectiveMonthlySIP: 0,
       instrumentId: instrumentId || 'equity',
       redirectGoalId: null,
       isMandatory: false,
+      priority: 3,
+      minPriority: 3,
       targetAge: 50,
       description: 'Custom wealth creation milestone',
       status: 'in_progress',
@@ -457,6 +596,11 @@ export const useGameStore = create((set, get) => ({
       },
       character: null,
       goals: [],
+      surplusAllocation: {
+        autoSplitOnRaise: false,
+        raiseRoutingStrategy: 'ask_every_time',
+        unallocatedPercent: 0,
+      },
       simulation: {
         currentMonthIndex: 0,
         currentAge: 23,

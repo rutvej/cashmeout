@@ -23,6 +23,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
     simulation,
     toggleInsurance,
     setGoalAllocation,
+    setAllocationMode,
     addCustomGoal,
     navigateTo,
     play,
@@ -69,6 +70,11 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const remainingSurplus = monthlySurplus - totalAllocated;
   const isOverAllocated = remainingSurplus < 0;
+  const totalAllocatedPercent = monthlySurplus > 0 ? Math.round((totalAllocated / monthlySurplus) * 100) : 0;
+  const unallocatedSurplus = Math.max(0, remainingSurplus);
+  const unallocatedPercent = monthlySurplus > 0 ? Math.max(0, 100 - totalAllocatedPercent) : 0;
+  const isBalanced = !isOverAllocated && (remainingSurplus === 0 || totalAllocatedPercent === 100);
+  const isUnderAllocated = remainingSurplus > 0 && totalAllocatedPercent < 100;
 
   // Handlers
   const handleNext = () => {
@@ -81,14 +87,37 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const handleSkip = () => {
     if (!currentGoal) return;
-    setGoalAllocation(currentGoal.id, { baseMonthlySIP: 0 });
+    setGoalAllocation(currentGoal.id, { baseMonthlySIP: 0, allocationPercent: 0 });
     setSkippedGoals(new Set([...skippedGoals, currentGoal.id]));
     handleNext();
   };
 
+  const handleModeChange = (mode) => {
+    if (!currentGoal) return;
+    setAllocationMode(currentGoal.id, mode);
+  };
+
   const handleSIPChange = (val) => {
     const num = Math.max(0, Math.round(Number(val) || 0));
-    setGoalAllocation(currentGoal.id, { baseMonthlySIP: num });
+    const percent = monthlySurplus > 0 ? Math.round((num / monthlySurplus) * 100) : 0;
+    setGoalAllocation(currentGoal.id, {
+      baseMonthlySIP: num,
+      allocationPercent: percent,
+    });
+    if (skippedGoals.has(currentGoal.id)) {
+      const nextSkipped = new Set(skippedGoals);
+      nextSkipped.delete(currentGoal.id);
+      setSkippedGoals(nextSkipped);
+    }
+  };
+
+  const handlePercentChange = (val) => {
+    const pct = Math.min(100, Math.max(0, Math.round(Number(val) || 0)));
+    const sip = monthlySurplus > 0 ? Math.round(((pct / 100) * monthlySurplus) / 500) * 500 : 0;
+    setGoalAllocation(currentGoal.id, {
+      allocationPercent: pct,
+      baseMonthlySIP: sip,
+    });
     if (skippedGoals.has(currentGoal.id)) {
       const nextSkipped = new Set(skippedGoals);
       nextSkipped.delete(currentGoal.id);
@@ -133,7 +162,9 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   // Projection math for active goal
   const currentInst = INSTRUMENTS[currentGoal?.instrumentId || 'savings'] || INSTRUMENTS.savings;
+  const currentMode = currentGoal?.allocationMode || 'fixed';
   const currentSIP = currentGoal?.baseMonthlySIP || 0;
+  const currentPercent = currentGoal?.allocationPercent ?? (monthlySurplus > 0 ? Math.round((currentSIP / monthlySurplus) * 100) : 0);
   const currentAmount = currentGoal?.currentAmount || 0;
   const targetAmount = currentGoal?.targetAmount || 1;
   const monthsAway = currentGoal?.targetMonthsRemaining || (currentGoal?.recurrenceIntervalMonths || 12);
@@ -244,14 +275,57 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
             </div>
           </div>
 
-          {/* Allocation Progress Bar */}
-          <div className="w-full h-2.5 sm:h-3 bg-slate-100 border-2 border-slate-900 overflow-hidden">
+          {/* Allocation Progress Bar & Dynamic Status Banner */}
+          <div className="space-y-1.5">
             <div
-              className={`h-full transition-all duration-300 ${
-                isOverAllocated ? 'bg-rose-500' : 'bg-emerald-500'
+              className={`w-full h-2.5 sm:h-3 border-2 overflow-hidden relative transition-colors ${
+                isOverAllocated
+                  ? 'bg-rose-100 border-rose-600'
+                  : isBalanced
+                  ? 'bg-emerald-100 border-emerald-600'
+                  : 'bg-amber-100 border-amber-500'
               }`}
-              style={{ width: `${Math.min(100, (totalAllocated / monthlySurplus) * 100)}%` }}
-            />
+            >
+              <div
+                className={`h-full transition-all duration-300 ${
+                  isOverAllocated
+                    ? 'bg-rose-500'
+                    : isBalanced
+                    ? 'bg-emerald-500'
+                    : 'bg-amber-400'
+                }`}
+                style={{ width: `${Math.min(100, (totalAllocated / (monthlySurplus || 1)) * 100)}%` }}
+              />
+            </div>
+
+            {/* Dynamic Status Banner */}
+            {isOverAllocated && (
+              <div className="p-2 bg-rose-50 border-2 border-rose-600 text-rose-900 text-xs font-mono font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🔴</span>
+                  <span>Over-Allocated (+{formatINR(Math.abs(remainingSurplus))}/mo · {totalAllocatedPercent - 100}%)</span>
+                </span>
+                <span className="text-[10px] text-rose-700 uppercase">Rebalance to start</span>
+              </div>
+            )}
+            {isBalanced && (
+              <div className="p-1.5 bg-emerald-50 border-2 border-emerald-600 text-emerald-900 text-xs font-mono font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🟢</span>
+                  <span>100% Allocated (Balanced)</span>
+                </span>
+                <span className="text-[10px] font-mono text-emerald-700">100% of surplus deployed</span>
+              </div>
+            )}
+            {isUnderAllocated && (
+              <div className="p-1.5 bg-amber-50 border-2 border-amber-600 text-amber-900 text-xs font-mono font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🟡</span>
+                  <span>{unallocatedPercent}% ({formatINR(unallocatedSurplus)}/mo) flowing to Bank Cash</span>
+                </span>
+                <span className="text-[10px] font-mono text-amber-700">Liquid buffer</span>
+              </div>
+            )}
           </div>
 
           {/* Goal Stepper Indicator Dots & New Goal Action */}
@@ -397,50 +471,170 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
               </div>
             )}
 
-            {/* Monthly SIP Input */}
-            <div className="space-y-1.5 sm:space-y-2">
-              <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
-                Monthly Allocation (SIP)
-              </label>
-              <div className="flex gap-2 items-center">
-                <div className="relative flex-1">
-                  <span className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-lg sm:text-xl font-black">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    step="500"
-                    min="0"
-                    value={currentSIP || ''}
-                    onChange={(e) => handleSIPChange(e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-white border-2 border-slate-900 py-2 sm:py-3 pl-8 sm:pl-10 pr-3 sm:pr-4 font-mono font-black text-slate-900 text-xl sm:text-2xl outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                  />
+            {/* Monthly SIP Input with Dual Mode Pill Toggle */}
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
+                  Monthly Allocation
+                </label>
+
+                {/* Dual Allocation Mode Pill Toggle */}
+                <div className="inline-flex bg-slate-100 border-2 border-slate-900 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange('fixed')}
+                    className={`px-2.5 py-0.5 text-[10px] font-mono font-bold transition-all ${
+                      currentMode === 'fixed'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ₹ Amount
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleModeChange('percentage')}
+                    className={`px-2.5 py-0.5 text-[10px] font-mono font-bold transition-all ${
+                      currentMode === 'percentage'
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    % Percentage
+                  </button>
                 </div>
               </div>
 
-              {/* Quick Presets Row */}
-              <div className="grid grid-cols-4 sm:flex gap-1.5 pt-0.5">
-                {[500, 1000, 2000, 5000].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => handlePreset(amt)}
-                    className="py-1.5 sm:py-2 px-1.5 sm:px-2 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 font-mono text-xs font-bold btn-press-sm transition-colors text-slate-900 text-center"
-                  >
-                    +₹{amt}
-                  </button>
-                ))}
-                {remainingSurplus > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleFillRemaining}
-                    className="col-span-4 sm:col-auto py-1.5 sm:py-2 px-3 bg-emerald-100 hover:bg-emerald-200 border-2 border-slate-900 font-mono text-xs font-bold text-emerald-900 btn-press-sm transition-colors text-center"
-                  >
-                    Fill (+{formatINR(remainingSurplus)})
-                  </button>
-                )}
-              </div>
+              {currentMode === 'fixed' ? (
+                /* ── Fixed Rupee Mode ── */
+                <div className="space-y-1.5">
+                  <div className="flex gap-2 items-center">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-lg sm:text-xl font-black">
+                        ₹
+                      </span>
+                      <input
+                        type="number"
+                        step="500"
+                        min="0"
+                        value={currentSIP || ''}
+                        onChange={(e) => handleSIPChange(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-white border-2 border-slate-900 py-2 sm:py-3 pl-8 sm:pl-10 pr-3 sm:pr-4 font-mono font-black text-slate-900 text-xl sm:text-2xl outline-none focus:ring-2 focus:ring-blue-600 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Sync footnote */}
+                  <div className="flex justify-between items-center text-[10px] font-mono text-slate-500 px-0.5">
+                    <span>≈ {currentPercent}% of monthly surplus</span>
+                    <span>Step: ₹500</span>
+                  </div>
+
+                  {/* Quick Presets Row */}
+                  <div className="grid grid-cols-4 sm:flex gap-1.5 pt-0.5">
+                    {[500, 1000, 2000, 5000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => handlePreset(amt)}
+                        className="py-1.5 sm:py-2 px-1.5 sm:px-2 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 font-mono text-xs font-bold btn-press-sm transition-colors text-slate-900 text-center"
+                      >
+                        +₹{amt}
+                      </button>
+                    ))}
+                    {remainingSurplus > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleFillRemaining}
+                        className="col-span-4 sm:col-auto py-1.5 sm:py-2 px-3 bg-emerald-100 hover:bg-emerald-200 border-2 border-slate-900 font-mono text-xs font-bold text-emerald-900 btn-press-sm transition-colors text-center"
+                      >
+                        Fill (+{formatINR(remainingSurplus)})
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* ── Percentage Mode ── */
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="relative w-28 sm:w-36 shrink-0">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={currentPercent || ''}
+                        onChange={(e) => handlePercentChange(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-white border-2 border-slate-900 py-2 sm:py-2.5 pl-3 pr-7 font-mono font-black text-slate-900 text-xl sm:text-2xl outline-none focus:ring-2 focus:ring-blue-600 transition-all"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-base sm:text-lg font-black">
+                        %
+                      </span>
+                    </div>
+
+                    {/* Calculated ₹ Live Feedback Box */}
+                    <div className="flex-1 bg-slate-100 p-2 sm:p-2.5 border-2 border-slate-900 flex items-center justify-between">
+                      <span className="text-[10px] font-mono font-bold uppercase text-slate-600">Calculated SIP:</span>
+                      <span className="font-mono font-black text-base sm:text-xl text-emerald-700">
+                        {formatINR(currentSIP)}/mo
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Percentage Slider */}
+                  <div className="space-y-1 pt-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={currentPercent || 0}
+                      onChange={(e) => handlePercentChange(e.target.value)}
+                      className="w-full accent-blue-600 h-2 bg-slate-200 border border-slate-900 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] font-mono text-slate-500 px-0.5">
+                      <span>0%</span>
+                      <span>25%</span>
+                      <span>50%</span>
+                      <span>75%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+
+                  {/* Quick % Presets */}
+                  <div className="grid grid-cols-4 sm:flex gap-1.5 pt-0.5">
+                    {[5, 10, 20, 25, 50].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => handlePercentChange(pct)}
+                        className={`py-1.5 sm:py-2 px-1.5 sm:px-2 border-2 border-slate-900 font-mono text-xs font-bold btn-press-sm transition-colors text-center ${
+                          currentPercent === pct
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-900'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                    {remainingSurplus > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const p = currentGoal.allocationPercent || 0;
+                          const availableP = Math.round((remainingSurplus / (monthlySurplus || 1)) * 100);
+                          handlePercentChange(Math.min(100, p + availableP));
+                        }}
+                        className="col-span-4 sm:col-auto py-1.5 sm:py-2 px-3 bg-emerald-100 hover:bg-emerald-200 border-2 border-slate-900 font-mono text-xs font-bold text-emerald-900 btn-press-sm transition-colors text-center"
+                      >
+                        Fill Remaining %
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {isOverAllocated && (
                 <p className="text-xs font-bold text-rose-600 pt-1">
@@ -567,37 +761,51 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
               </div>
             </div>
 
-            {/* Cascading Waterfall Redirection Selector */}
-            <div className="p-3 sm:p-3.5 bg-slate-100 border-2 border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-              <div className="min-w-0">
-                <span className="font-bold text-slate-900 flex items-center gap-1">
-                  <span>↪️</span> When 100% Full, Redirect SIP to:
-                </span>
-                <p className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5">
-                  {isEmergency
-                    ? '⚡ Auto-recalls immediately if life emergency drains the safety buffer.'
-                    : 'Surplus auto-cascades to next goal when milestone is met.'}
-                </p>
+            {/* Cascading Waterfall Redirection Selector (Fixed-₹) or Auto-Redistribution Info (Percentage-%) */}
+            {currentMode === 'percentage' ? (
+              <div className="p-3 sm:p-3.5 bg-blue-50 border-2 border-slate-900 flex items-start gap-2.5 text-xs">
+                <span className="text-base sm:text-lg">⚡</span>
+                <div className="space-y-0.5">
+                  <span className="font-bold text-blue-950 font-mono block">
+                    Percentage Mode: Proportional Auto-Redistribution
+                  </span>
+                  <p className="text-[10px] sm:text-[11px] text-blue-900 leading-snug">
+                    When this goal hits 100% capacity, its freed {currentPercent}% allocation automatically scales up all remaining active goals proportionally based on their weights (waterfall cascade is inactive in % mode).
+                  </p>
+                </div>
               </div>
-              <select
-                value={currentGoal.redirectGoalId || 'none'}
-                onChange={(e) =>
-                  setGoalAllocation(currentGoal.id, {
-                    redirectGoalId: e.target.value === 'none' ? null : e.target.value,
-                  })
-                }
-                className="bg-white border-2 border-slate-900 text-slate-900 text-xs font-mono px-2.5 py-1.5 outline-none font-bold w-full sm:w-auto max-w-full truncate"
-              >
-                <option value="none">-- None (Keep in Bank Cash) --</option>
-                {goals
-                  .filter((g) => g.id !== currentGoal.id)
-                  .map((og) => (
-                    <option key={og.id} value={og.id}>
-                      {og.icon} {og.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
+            ) : (
+              <div className="p-3 sm:p-3.5 bg-slate-100 border-2 border-slate-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="min-w-0">
+                  <span className="font-bold text-slate-900 flex items-center gap-1">
+                    <span>↪️</span> When 100% Full, Redirect Fixed SIP to:
+                  </span>
+                  <p className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5">
+                    {isEmergency
+                      ? '⚡ Auto-recalls immediately if life emergency drains the safety buffer.'
+                      : 'Fixed SIP auto-cascades downstream to next goal when milestone is met.'}
+                  </p>
+                </div>
+                <select
+                  value={currentGoal.redirectGoalId || 'none'}
+                  onChange={(e) =>
+                    setGoalAllocation(currentGoal.id, {
+                      redirectGoalId: e.target.value === 'none' ? null : e.target.value,
+                    })
+                  }
+                  className="bg-white border-2 border-slate-900 text-slate-900 text-xs font-mono px-2.5 py-1.5 outline-none font-bold w-full sm:w-auto max-w-full truncate"
+                >
+                  <option value="none">-- None (Keep in Bank Cash) --</option>
+                  {goals
+                    .filter((g) => g.id !== currentGoal.id)
+                    .map((og) => (
+                      <option key={og.id} value={og.id}>
+                        {og.icon} {og.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
 
             {/* Stepper Navigation Controls */}
             <div className="flex justify-between items-center pt-2">
