@@ -398,9 +398,20 @@ export function tickMonthlySimulation(state) {
 
   // ─── 6b. Percentage-Mode Recalculation & Downward Auto-Contraction ────────
   // Recompute baseMonthlySIP from allocationPercent × monthlySurplus for percentage-mode goals
+  const pctGoals = updatedGoals.filter((g) => g.allocationMode === 'percentage');
+  const totalPct = pctGoals.reduce((sum, g) => sum + (g.allocationPercent || 0), 0);
+  let allocatedPctSIP = 0;
+
   updatedGoals = updatedGoals.map((g) => {
     if (g.allocationMode === 'percentage') {
-      const computed = Math.round(((g.allocationPercent || 0) / 100) * monthlySurplus);
+      const isLastPct = g.id === pctGoals[pctGoals.length - 1]?.id;
+      let computed = 0;
+      if (isLastPct && totalPct === 100) {
+        computed = Math.max(0, monthlySurplus - allocatedPctSIP);
+      } else {
+        computed = Math.round(((g.allocationPercent || 0) / 100) * monthlySurplus);
+        allocatedPctSIP += computed;
+      }
       return {
         ...g,
         baseMonthlySIP: computed,

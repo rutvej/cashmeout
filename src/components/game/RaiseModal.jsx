@@ -8,7 +8,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
   const { closeModal, pause, applyRaiseStrategy, setSurplusAllocation, surplusAllocation } = useGameStore();
 
   const isAutoSplitPreferred = surplusAllocation?.autoSplitOnRaise || false;
-  const timerDuration = surplusAllocation?.autoSplitTimerSeconds || 7;
+  const timerDuration = surplusAllocation?.autoSplitTimerSeconds || 3;
 
   const [autoTimerEnabled, setAutoTimerEnabled] = useState(isAutoSplitPreferred);
   const [secondsLeft, setSecondsLeft] = useState(isAutoSplitPreferred ? timerDuration : null);
@@ -47,7 +47,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
     }
   };
 
-  // 7-second countdown auto-timer for Auto-Split
+  // 3-second countdown auto-timer for Auto-Split
   useEffect(() => {
     if (!autoTimerEnabled || isTimerPaused || secondsLeft === null) return;
 
@@ -108,7 +108,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
 
         {/* 3 Actions */}
         <div className="space-y-2 pt-1 text-left">
-          {/* Action 1: Auto-Split with 7s Countdown Timer */}
+          {/* Action 1: Auto-Split with 3s Countdown Timer */}
           <div className="relative">
             <button
               type="button"
@@ -150,7 +150,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
                   onClick={() => setIsTimerPaused(!isTimerPaused)}
                   className="text-[10px] font-mono text-slate-500 hover:text-slate-900 underline cursor-pointer"
                 >
-                  {isTimerPaused ? '▶ Resume 7s timer' : '⏸ Pause countdown'}
+                  {isTimerPaused ? '▶ Resume 3s timer' : '⏸ Pause countdown'}
                 </button>
               </div>
             )}
@@ -191,7 +191,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
           </button>
         </div>
 
-        {/* 7-Second Auto-Select Preference Checkbox */}
+        {/* 3-Second Auto-Select Preference Checkbox */}
         <label className="flex items-center justify-center gap-2 pt-1 text-xs text-slate-600 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -200,7 +200,7 @@ export default function RaiseModal({ data, onAdjustAllocations }) {
             className="accent-slate-900 h-4 w-4 rounded cursor-pointer"
           />
           <span className="text-[11px] font-mono">
-            Auto-select Auto-Split in 7s on future raises (still shows appraisal screen)
+            Auto-select Auto-Split in 3s on future raises (still shows appraisal screen)
           </span>
         </label>
       </motion.div>

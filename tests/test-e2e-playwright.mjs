@@ -162,14 +162,14 @@ async function run() {
 
   const timerCheckbox = page.locator('input[type="checkbox"]').first();
   await timerCheckbox.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ RaiseModal: Auto-select in 7s checkbox is visible');
+  console.log('✓ RaiseModal: Auto-select in 3s checkbox is visible');
 
-  // Toggle 7s timer on
+  // Toggle 3s timer on
   await timerCheckbox.check();
   await page.waitForTimeout(300);
   const countdownBadge = page.locator('text=/⏱/').first();
   await countdownBadge.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ RaiseModal: 7-second countdown badge & progress bar activated');
+  console.log('✓ RaiseModal: 3-second countdown badge & progress bar activated');
 
   // Screenshot of RaiseModal
   await page.screenshot({ path: 'tests/screenshot-raise-modal.png' });

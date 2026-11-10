@@ -47,7 +47,7 @@ export const useGameStore = create((set, get) => ({
   surplusAllocation: {
     autoSplitOnRaise: false,
     raiseRoutingStrategy: 'ask_every_time', // 'proportional_split' | 'bank_cash' | 'ask_every_time'
-    autoSplitTimerSeconds: 7,
+    autoSplitTimerSeconds: 3,
     unallocatedPercent: 0,
   },
 
@@ -86,7 +86,7 @@ export const useGameStore = create((set, get) => ({
       surplusAllocation: {
         autoSplitOnRaise: false,
         raiseRoutingStrategy: 'ask_every_time',
-        autoSplitTimerSeconds: 7,
+        autoSplitTimerSeconds: 3,
         unallocatedPercent: 0,
       },
       simulation: {
@@ -129,7 +129,7 @@ export const useGameStore = create((set, get) => ({
           if ('baseMonthlySIP' in updates && !('allocationPercent' in updates)) {
             updates.allocationPercent = surplus > 0 ? Math.round((updates.baseMonthlySIP / surplus) * 100) : 0;
           } else if ('allocationPercent' in updates && !('baseMonthlySIP' in updates)) {
-            updates.baseMonthlySIP = surplus > 0 ? Math.round(((updates.allocationPercent / 100) * surplus) / 500) * 500 : 0;
+            updates.baseMonthlySIP = surplus > 0 ? Math.round((updates.allocationPercent / 100) * surplus) : 0;
           }
 
           return { ...g, ...updates };
@@ -140,7 +140,13 @@ export const useGameStore = create((set, get) => ({
   // Phase 2: Switch allocation mode for a goal (percentage vs fixed)
   setAllocationMode: (goalId, mode) =>
     set((state) => {
-      const surplus = state.character?.monthlySurplus || 0;
+      const isMidGame = (state.simulation?.currentMonthIndex || 0) > 0;
+      const healthPremium = state.insurance?.health?.isPurchased ? state.insurance.health.monthlyPremium : 0;
+      const termPremium = state.insurance?.termLife?.isPurchased ? state.insurance.termLife.monthlyPremium : 0;
+      const surplus = isMidGame
+        ? (state.character?.monthlySurplus || 0)
+        : Math.max(0, (state.character?.monthlySurplus || 0) - (healthPremium + termPremium));
+
       return {
         goals: state.goals.map((g) => {
           if (g.id !== goalId) return g;
@@ -151,11 +157,11 @@ export const useGameStore = create((set, get) => ({
             if (surplus > 0 && (allocationPercent === 0 || allocationPercent === undefined) && baseMonthlySIP > 0) {
               allocationPercent = Math.round((baseMonthlySIP / surplus) * 100);
             }
-            baseMonthlySIP = surplus > 0 ? Math.round(((allocationPercent / 100) * surplus) / 500) * 500 : 0;
+            baseMonthlySIP = surplus > 0 ? Math.round((allocationPercent / 100) * surplus) : 0;
           } else {
             // Switching to fixed: preserve rupee SIP or compute from %
             if (surplus > 0 && baseMonthlySIP === 0 && allocationPercent > 0) {
-              baseMonthlySIP = Math.round(((allocationPercent / 100) * surplus) / 500) * 500;
+              baseMonthlySIP = Math.round((allocationPercent / 100) * surplus);
             }
           }
 
@@ -188,6 +194,19 @@ export const useGameStore = create((set, get) => ({
 
     if (strategy === 'proportional_split') {
       // Proportionally scales all active goal SIPs by their current % weights
+      const activeGoals = updatedGoals.filter(
+        (g) => (g.currentAmount || 0) < (g.targetAmount || 1)
+      );
+      const totalWeight = activeGoals.reduce((sum, g) => {
+        let w = g.allocationPercent;
+        if (w === undefined || w === null || w === 0) {
+          const oldSurplus = currentSurplus - deltaSurplus;
+          w = oldSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / oldSurplus) * 100) : 0;
+        }
+        return sum + (w || 0);
+      }, 0);
+
+      let allocatedSoFar = 0;
       updatedGoals = updatedGoals.map((g) => {
         const isFull = (g.currentAmount || 0) >= (g.targetAmount || 1);
         if (isFull) return g;
@@ -199,7 +218,14 @@ export const useGameStore = create((set, get) => ({
         }
 
         if (weight > 0 && currentSurplus > 0) {
-          const newSIP = Math.round(((weight / 100) * currentSurplus) / 500) * 500;
+          const isLastActive = g.id === activeGoals[activeGoals.length - 1]?.id;
+          let newSIP = 0;
+          if (isLastActive && totalWeight === 100) {
+            newSIP = Math.max(0, currentSurplus - allocatedSoFar);
+          } else {
+            newSIP = Math.round((weight / 100) * currentSurplus);
+            allocatedSoFar += newSIP;
+          }
           return {
             ...g,
             allocationPercent: weight,
@@ -610,7 +636,7 @@ export const useGameStore = create((set, get) => ({
       surplusAllocation: {
         autoSplitOnRaise: false,
         raiseRoutingStrategy: 'ask_every_time',
-        autoSplitTimerSeconds: 7,
+        autoSplitTimerSeconds: 3,
         unallocatedPercent: 0,
       },
       simulation: {

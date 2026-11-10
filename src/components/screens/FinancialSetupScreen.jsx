@@ -61,21 +61,28 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const totalInsurancePremiums = healthPremium + termPremium;
 
   // Monthly Surplus & Allocations
-  const monthlySurplus = character.monthlySurplus;
+  // In mid-game, simulationEngine already accounts for insurance in character.monthlySurplus.
+  // In Month 0 setup, we deduct purchased insurance to get the true investable surplus:
+  const isMidGame = (simulation.currentMonthIndex || 0) > 0;
+  const investableSurplus = isMidGame
+    ? character.monthlySurplus
+    : Math.max(0, character.monthlySurplus - totalInsurancePremiums);
+
   const totalAllocated = useMemo(() => {
     return goals.reduce((sum, g) => {
       if (skippedGoals.has(g.id)) return sum;
       return sum + (g.baseMonthlySIP || 0);
-    }, 0) + totalInsurancePremiums;
-  }, [goals, skippedGoals, totalInsurancePremiums]);
+    }, 0);
+  }, [goals, skippedGoals]);
 
-  const remainingSurplus = monthlySurplus - totalAllocated;
-  const isOverAllocated = remainingSurplus < 0;
-  const totalAllocatedPercent = monthlySurplus > 0 ? Math.round((totalAllocated / monthlySurplus) * 100) : 0;
+  const remainingSurplus = investableSurplus - totalAllocated;
+  const totalAllocatedPercent = investableSurplus > 0 ? Math.round((totalAllocated / investableSurplus) * 100) : 0;
+  // Over-allocated only if strictly exceeding by more than rounding epsilon
+  const isOverAllocated = remainingSurplus < -5 && totalAllocatedPercent > 100;
   const unallocatedSurplus = Math.max(0, remainingSurplus);
-  const unallocatedPercent = monthlySurplus > 0 ? Math.max(0, 100 - totalAllocatedPercent) : 0;
-  const isBalanced = !isOverAllocated && (remainingSurplus === 0 || totalAllocatedPercent === 100);
-  const isUnderAllocated = remainingSurplus > 0 && totalAllocatedPercent < 100;
+  const unallocatedPercent = investableSurplus > 0 ? Math.max(0, 100 - totalAllocatedPercent) : 0;
+  const isBalanced = !isOverAllocated && (Math.abs(remainingSurplus) <= 5 || totalAllocatedPercent === 100);
+  const isUnderAllocated = remainingSurplus > 5 && totalAllocatedPercent < 100;
 
   // Handlers
   const handleNext = () => {
@@ -100,7 +107,24 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const handleSIPChange = (val) => {
     const num = Math.max(0, Math.round(Number(val) || 0));
-    const percent = monthlySurplus > 0 ? Math.round((num / monthlySurplus) * 100) : 0;
+    const otherGoalsSIP = goals.reduce(
+      (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.baseMonthlySIP || 0)),
+      0
+    );
+    const otherGoalsPct = goals.reduce(
+      (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.allocationPercent || 0)),
+      0
+    );
+
+    let percent = 0;
+    if (num > 0 && investableSurplus > 0) {
+      if (num + otherGoalsSIP === investableSurplus) {
+        percent = Math.max(0, 100 - otherGoalsPct);
+      } else {
+        percent = Math.round((num / investableSurplus) * 100);
+      }
+    }
+
     setGoalAllocation(currentGoal.id, {
       baseMonthlySIP: num,
       allocationPercent: percent,
@@ -114,7 +138,25 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const handlePercentChange = (val) => {
     const pct = Math.min(100, Math.max(0, Math.round(Number(val) || 0)));
-    const sip = monthlySurplus > 0 ? Math.round(((pct / 100) * monthlySurplus) / 500) * 500 : 0;
+    const otherGoalsPct = goals.reduce(
+      (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.allocationPercent || 0)),
+      0
+    );
+    const otherGoalsSIP = goals.reduce(
+      (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.baseMonthlySIP || 0)),
+      0
+    );
+
+    let sip = 0;
+    if (pct > 0 && investableSurplus > 0) {
+      if (pct + otherGoalsPct === 100) {
+        // Exact balancing to ensure 0-rupee discrepancy at 100%
+        sip = Math.max(0, investableSurplus - otherGoalsSIP);
+      } else {
+        sip = Math.round((pct / 100) * investableSurplus);
+      }
+    }
+
     setGoalAllocation(currentGoal.id, {
       allocationPercent: pct,
       baseMonthlySIP: sip,
@@ -132,9 +174,31 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   };
 
   const handleFillRemaining = () => {
-    const current = currentGoal.baseMonthlySIP || 0;
-    const maxAvailable = current + Math.max(0, remainingSurplus);
-    handleSIPChange(maxAvailable);
+    if ((currentGoal?.allocationMode || 'fixed') === 'percentage') {
+      const otherGoalsPct = goals.reduce(
+        (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.allocationPercent || 0)),
+        0
+      );
+      const remainingPct = Math.max(0, 100 - otherGoalsPct);
+      const otherGoalsSIP = goals.reduce(
+        (sum, g) => (g.id === currentGoal.id || skippedGoals.has(g.id) ? sum : sum + (g.baseMonthlySIP || 0)),
+        0
+      );
+      const remainingSIP = Math.max(0, investableSurplus - otherGoalsSIP);
+      setGoalAllocation(currentGoal.id, {
+        allocationPercent: remainingPct,
+        baseMonthlySIP: remainingSIP,
+      });
+    } else {
+      const current = currentGoal.baseMonthlySIP || 0;
+      const maxAvailable = current + Math.max(0, remainingSurplus);
+      handleSIPChange(maxAvailable);
+    }
+    if (skippedGoals.has(currentGoal.id)) {
+      const nextSkipped = new Set(skippedGoals);
+      nextSkipped.delete(currentGoal.id);
+      setSkippedGoals(nextSkipped);
+    }
   };
 
   const handleCreateCustomGoal = () => {
@@ -165,7 +229,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const currentInst = INSTRUMENTS[currentGoal?.instrumentId || 'savings'] || INSTRUMENTS.savings;
   const currentMode = currentGoal?.allocationMode || 'fixed';
   const currentSIP = currentGoal?.baseMonthlySIP || 0;
-  const currentPercent = currentGoal?.allocationPercent ?? (monthlySurplus > 0 ? Math.round((currentSIP / monthlySurplus) * 100) : 0);
+  const currentPercent = currentGoal?.allocationPercent ?? (investableSurplus > 0 ? Math.round((currentSIP / investableSurplus) * 100) : 0);
   const currentAmount = currentGoal?.currentAmount || 0;
   const targetAmount = currentGoal?.targetAmount || 1;
   const monthsAway = currentGoal?.targetMonthsRemaining || (currentGoal?.recurrenceIntervalMonths || 12);
@@ -229,8 +293,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
       ? '#D97706'
       : '#DC2626';
 
-  const isMidGame = simulation.currentMonthIndex > 0;
-
   return (
     <div className={`min-h-screen bg-mesh-light text-slate-900 flex flex-col font-sans overflow-x-hidden ${isModal ? 'p-1 sm:p-2 min-h-0' : ''}`}>
       
@@ -279,7 +341,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                 Monthly Surplus
               </span>
               <span className="text-xl sm:text-2xl font-mono font-black text-slate-900">
-                {formatINR(monthlySurplus)}
+                {formatINR(investableSurplus)}
               </span>
             </div>
             <div className="text-right">
@@ -287,7 +349,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                 Allocated
               </span>
               <span className={`text-xs sm:text-base font-mono font-black ${isOverAllocated ? 'text-rose-600' : 'text-emerald-700'}`}>
-                {formatINR(totalAllocated)} / {formatINR(monthlySurplus)}
+                {formatINR(totalAllocated)} / {formatINR(investableSurplus)}
               </span>
             </div>
           </div>
@@ -311,7 +373,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                     ? 'bg-emerald-500'
                     : 'bg-amber-400'
                 }`}
-                style={{ width: `${Math.min(100, (totalAllocated / (monthlySurplus || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (totalAllocated / (investableSurplus || 1)) * 100)}%` }}
               />
             </div>
 
@@ -647,11 +709,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                     {remainingSurplus > 0 && (
                       <button
                         type="button"
-                        onClick={() => {
-                          const p = currentGoal.allocationPercent || 0;
-                          const availableP = Math.round((remainingSurplus / (monthlySurplus || 1)) * 100);
-                          handlePercentChange(Math.min(100, p + availableP));
-                        }}
+                        onClick={handleFillRemaining}
                         className="col-span-4 sm:col-auto py-1.5 sm:py-2 px-3 bg-emerald-100 hover:bg-emerald-200 border-2 border-slate-900 font-mono text-xs font-bold text-emerald-900 btn-press-sm transition-colors text-center"
                       >
                         Fill Remaining %

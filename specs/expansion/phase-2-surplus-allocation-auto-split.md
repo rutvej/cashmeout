@@ -39,10 +39,10 @@ Unallocated surplus ($100\% - \sum w_g$) represents the **Liquid Cash Buffer** d
 ### B. Auto-Split on Inflow Changes (Salary Hikes, Appraisals)
 When monthly surplus expands from $S_{\text{old}}$ to $S_{\text{new}}$ with delta $\Delta S = S_{\text{new}} - S_{\text{old}} > 0$:
 
-1. **Option 1: Proportional Auto-Split with 7s Auto-Timer (Default)**
+1. **Option 1: Proportional Auto-Split with 3s Auto-Timer (Default)**
    - Scales each active goal's SIP proportionally according to current % weights:
-     $$\text{SIP}_{g, \text{new}} = \text{Math.round}\left(\frac{w_g}{100} \times S_{\text{new}} / 500\right) \times 500$$
-   - Displays a 7-second countdown timer badge on the modal. If the player does not interact or pause, it automatically confirms Auto-Split and resumes smoothly. The player can pause the timer anytime to inspect or pick another option.
+     $$\text{SIP}_{g, \text{new}} = \text{Math.round}\left(\frac{w_g}{100} \times S_{\text{new}}\right)$$
+   - Displays a 3-second countdown timer badge on the modal. If the player does not interact or pause, it automatically confirms Auto-Split and resumes smoothly. The player can pause the timer anytime to inspect or pick another option.
 
 2. **Option 2: Keep in Liquid Bank Cash & Resume**
    - Keeps all existing goal SIPs unchanged.
@@ -76,7 +76,7 @@ export interface GoalAllocationConfig {
 export interface SurplusAllocationProfile {
   autoSplitOnRaise: boolean;        // true: auto-scales without pause
   raiseRoutingStrategy: 'proportional_split' | 'bank_cash' | 'ask_every_time';
-  autoSplitTimerSeconds: number;    // e.g. 7 seconds countdown
+  autoSplitTimerSeconds: number;    // e.g. 3 seconds countdown
   unallocatedPercent: number;       // Cash buffer slice (e.g. 10%)
 }
 ```
@@ -100,7 +100,7 @@ export interface SurplusAllocationProfile {
   - 🔴 **> 100% (Over-Allocated)**: Red alert banner disabling confirmation until rebalanced.
 
 ### C. Appraisal Hike Modal Upgrade (`RaiseModal.jsx`)
-- Adds three streamlined action buttons with a 7-second countdown auto-select:
-  1. `⚡ Auto-Split (+₹8,500 across current %)` ➔ Confirms proportional scaling (auto-confirms in 7s unless paused).
+- Adds three streamlined action buttons with a 3-second countdown auto-select:
+  1. `⚡ Auto-Split (+₹8,500 across current %)` ➔ Confirms proportional scaling (auto-confirms in 3s unless paused).
   2. `💵 Keep in Liquid Bank Cash & Resume` ➔ Keeps current SIPs untouched, funnels extra cash into liquid savings buffer.
   3. `⚙️ Custom Rebalance` ➔ Pauses simulation and opens allocation drawer.
