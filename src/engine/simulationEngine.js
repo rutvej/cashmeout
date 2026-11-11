@@ -180,6 +180,8 @@ export function tickMonthlySimulation(state) {
 
   const nextMonthIndex = simulation.currentMonthIndex + 1;
   const currentAge = character.age + Math.floor(nextMonthIndex / 12);
+  const initialExp = character.initialExperienceYears ?? Math.max(0, character.age - 22);
+  const yearsOfExperience = initialExp + Math.floor(nextMonthIndex / 12);
   const monthOfYear = (nextMonthIndex % 12) === 0 ? 12 : (nextMonthIndex % 12);
   const isAnnualAnniversary = nextMonthIndex > 0 && nextMonthIndex % 12 === 0;
   const isRetirementReached = currentAge >= (character.retirementAge || 60);
@@ -189,6 +191,12 @@ export function tickMonthlySimulation(state) {
   let isPaused = simulation.isPaused;
   let modalQueue = [...(simulation.modalQueue || [])];
   let liquidCash = character.liquidCash;
+
+  // Phase 3: Active Course & Career Ladder tracking
+  let activeCourse = character.activeCourse ? { ...character.activeCourse } : null;
+  let skillLevel = character.skillLevel ?? 1.2;
+  let completedCourses = [...(character.completedCourses || [])];
+  const courseFee = activeCourse ? activeCourse.monthlyFee : 0;
 
   // ─── 1. Unemployment State Transition ─────────────────────────────────────
   let employmentStatus = character.employmentStatus || 'employed';
@@ -255,10 +263,10 @@ export function tickMonthlySimulation(state) {
   const termPremium = insurance.termLife?.isPurchased ? insurance.termLife.monthlyPremium : 0;
   const totalInsurance = healthPremium + termPremium;
   const totalLoanEMIs = (character.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
-  const totalMonthlyOutflow = fixedExpenses + totalInsurance + totalLoanEMIs;
+  const totalMonthlyOutflow = fixedExpenses + totalInsurance + totalLoanEMIs + courseFee;
 
-  // Dynamic Emergency Fund Target = 6 × totalMonthlyOutflow
-  const dynamicEmergencyTarget = Math.round(6 * totalMonthlyOutflow);
+  // Dynamic Emergency Fund Target = 6 × core living outflows (excluding temporary course fees)
+  const dynamicEmergencyTarget = Math.round(6 * (fixedExpenses + totalInsurance + totalLoanEMIs));
   updatedGoals = updatedGoals.map((g) => {
     if (g.id !== 'goal_emergency') return g;
     const current = g.currentAmount || 0;
@@ -602,6 +610,41 @@ export function tickMonthlySimulation(state) {
 
   const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
 
+  // ─── 9b. Advance Active Course Progress (Phase 3) ─────────────────────────
+  if (activeCourse) {
+    activeCourse.monthsCompleted = (activeCourse.monthsCompleted || 0) + 1;
+    if (activeCourse.monthsCompleted >= activeCourse.totalDurationMonths) {
+      const boost = activeCourse.skillBoostReward || 0.4;
+      skillLevel = Math.min(5.0, Number((skillLevel + boost).toFixed(2)));
+      completedCourses.push(activeCourse.courseId);
+
+      const courseCompletedModal = {
+        type: 'course_completed',
+        courseName: activeCourse.courseName,
+        courseId: activeCourse.courseId,
+        skillBoost: boost,
+        newSkillLevel: skillLevel,
+      };
+
+      isPaused = true;
+      if (!activeModal) {
+        activeModal = courseCompletedModal;
+      } else {
+        modalQueue.push(courseCompletedModal);
+      }
+
+      activeCourse = null;
+    }
+  }
+
+  // Clean up any job application cooldowns that have expired
+  let jobApplicationCooldowns = { ...(character.jobApplicationCooldowns || {}) };
+  Object.keys(jobApplicationCooldowns).forEach((jobId) => {
+    if (jobApplicationCooldowns[jobId] <= nextMonthIndex) {
+      delete jobApplicationCooldowns[jobId];
+    }
+  });
+
   // ─── 10. Check Retirement ────────────────────────────────────────────────
   if (isRetirementReached) {
     isPaused = true;
@@ -625,16 +668,24 @@ export function tickMonthlySimulation(state) {
     totalDebt: updatedLoans.reduce((sum, l) => sum + l.principalRemaining, 0),
   };
 
+  const finalCourseFee = activeCourse ? activeCourse.monthlyFee : 0;
+  const finalTotalOutflow = fixedExpenses + nextTotalLoanEMIs + totalInsurance + finalCourseFee;
+
   const updatedCharacter = {
     ...character,
+    yearsOfExperience,
+    skillLevel,
+    activeCourse,
+    completedCourses,
+    jobApplicationCooldowns,
     grossMonthlySalary: grossSalary,
     monthlyTakeHome: baseTakeHome,
     loans: updatedLoans,
     liquidCash,
     totalFixedExpenses: fixedExpenses,
     totalLoanEMIs: nextTotalLoanEMIs,
-    totalMonthlyOutflow: fixedExpenses + nextTotalLoanEMIs + totalInsurance,
-    monthlySurplus: baseTakeHome - (fixedExpenses + nextTotalLoanEMIs + totalInsurance),
+    totalMonthlyOutflow: finalTotalOutflow,
+    monthlySurplus: baseTakeHome - finalTotalOutflow,
     employmentStatus,
     unemploymentMonthsRemaining,
     preLayoffTakeHome: employmentStatus === 'unemployed' ? preLayoffTakeHome : null,

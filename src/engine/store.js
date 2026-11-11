@@ -3,6 +3,7 @@ import { generateRandomSeedString } from './prng.js';
 import { generateCharacter } from './characterGenerator.js';
 import { generateInitialGoals } from './goalsGenerator.js';
 import { tickMonthlySimulation } from './simulationEngine.js';
+import { UPSKILLING_COURSES, evaluateJobApplication } from './careerEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -593,6 +594,181 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     });
+  },
+
+  // ─── Phase 3: Career & Upskilling Actions ────────────────────────────────
+  enrollInCourse: (courseId) => {
+    const { character } = get();
+    if (!character || character.activeCourse) return false;
+
+    const course = UPSKILLING_COURSES.find((c) => c.id === courseId);
+    if (!course) return false;
+
+    const activeCourse = {
+      courseId: course.id,
+      courseName: course.name,
+      totalDurationMonths: course.durationMonths,
+      monthsCompleted: 0,
+      monthlyFee: course.monthlyFee,
+      skillBoostReward: course.skillBoostReward,
+    };
+
+    const nextOutflow = character.totalMonthlyOutflow + course.monthlyFee;
+    const nextSurplus = character.monthlyTakeHome - nextOutflow;
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        activeCourse,
+        totalMonthlyOutflow: nextOutflow,
+        monthlySurplus: nextSurplus,
+      },
+    }));
+    return true;
+  },
+
+  dropActiveCourse: () => {
+    const { character } = get();
+    if (!character || !character.activeCourse) return;
+
+    const fee = character.activeCourse.monthlyFee || 0;
+    const nextOutflow = Math.max(0, character.totalMonthlyOutflow - fee);
+    const nextSurplus = character.monthlyTakeHome - nextOutflow;
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        activeCourse: null,
+        totalMonthlyOutflow: nextOutflow,
+        monthlySurplus: nextSurplus,
+      },
+    }));
+  },
+
+  applyForJob: (job) => {
+    const { character, simulation } = get();
+    if (!character) return { isAccepted: false };
+
+    // Check cooldown
+    const cooldowns = character.jobApplicationCooldowns || {};
+    const currentMonth = simulation.currentMonthIndex || 0;
+    if (cooldowns[job.id] && cooldowns[job.id] > currentMonth) {
+      return {
+        isAccepted: false,
+        cooldownRemaining: cooldowns[job.id] - currentMonth,
+        reason: 'cooldown',
+      };
+    }
+
+    const result = evaluateJobApplication(job, character, currentMonth);
+
+    if (result.isAccepted) {
+      // Pause simulation and show offer letter modal
+      set((state) => ({
+        simulation: {
+          ...state.simulation,
+          isPaused: true,
+          activeModal: {
+            type: 'job_offer',
+            offer: job,
+          },
+        },
+      }));
+      return { isAccepted: true, offer: job };
+    } else {
+      // Set 3-month cooldown
+      const nextCooldowns = {
+        ...cooldowns,
+        [job.id]: currentMonth + 3,
+      };
+      set((state) => ({
+        character: {
+          ...state.character,
+          jobApplicationCooldowns: nextCooldowns,
+        },
+      }));
+      return { isAccepted: false, cooldownRemaining: 3, reason: 'rejected' };
+    }
+  },
+
+  acceptJobOffer: (offer) => {
+    const { character, simulation, insurance } = get();
+    if (!character || !offer) return;
+
+    const healthPremium = insurance?.health?.isPurchased ? insurance.health.monthlyPremium : 0;
+    const termPremium = insurance?.termLife?.isPurchased ? insurance.termLife.monthlyPremium : 0;
+    const totalInsurance = healthPremium + termPremium;
+    const totalLoanEMIs = (character.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
+    const courseFee = character.activeCourse ? character.activeCourse.monthlyFee : 0;
+    const totalOutflow = character.totalFixedExpenses + totalLoanEMIs + totalInsurance + courseFee;
+    const newSurplus = offer.monthlyTakeHome - totalOutflow;
+
+    const signingBonus = offer.signingBonus || 0;
+    const nextLiquidCash = character.liquidCash + signingBonus;
+
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        jobTitle: offer.title,
+        jobTier: offer.tier,
+        grossMonthlySalary: offer.grossMonthlySalary,
+        monthlyTakeHome: offer.monthlyTakeHome,
+        city: offer.city || state.character.city,
+        cityTier: offer.cityTier || state.character.cityTier,
+        liquidCash: nextLiquidCash,
+        totalMonthlyOutflow: totalOutflow,
+        monthlySurplus: newSurplus,
+        // Immediately restores active employment if previously laid off
+        employmentStatus: 'employed',
+        unemploymentMonthsRemaining: 0,
+        preLayoffTakeHome: null,
+      },
+      simulation: {
+        ...state.simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    }));
+  },
+
+  declineJobOffer: () => {
+    const { simulation } = get();
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set((state) => ({
+      simulation: {
+        ...state.simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    }));
+  },
+
+  dismissCourseCompletion: () => {
+    const { simulation } = get();
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set((state) => ({
+      simulation: {
+        ...state.simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    }));
   },
 
   prepayLoan: (loanId, amount) => {

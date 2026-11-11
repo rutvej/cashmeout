@@ -208,5 +208,13 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
     preLayoffTakeHome: null,
     lastShockMonthIndex: -18, // Allows shocks after Year 1 (month 12+) since cooldown is 18mo
     lastJobLossMonthIndex: null,
+    // Phase 3: Career Ladder & Progression
+    yearsOfExperience: Math.max(0, age - 22),
+    initialExperienceYears: Math.max(0, age - 22),
+    skillLevel: 1.2,
+    jobTier: 1,
+    activeCourse: null,
+    completedCourses: [],
+    jobApplicationCooldowns: {},
   };
 }
