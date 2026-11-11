@@ -193,8 +193,19 @@ async function runPhase3Tests() {
       character: {
         ...store.getState().character,
         employmentStatus: 'unemployed',
-        unemploymentMonthsRemaining: 4,
+        unemploymentDurationMonths: 2,
         preLayoffTakeHome: 60000,
+      },
+      simulation: {
+        ...store.getState().simulation,
+        unemploymentReminder: {
+          id: 'test_remind_1',
+          monthIndex: 14,
+          unemploymentMonth: 2,
+          monthlyBurn: 45000,
+          remainingReserves: 250000,
+          runwayMonths: 5.5,
+        }
       }
     });
   });
@@ -204,6 +215,22 @@ async function runPhase3Tests() {
   const closeMarketBtn = page.locator('button:has-text("Close Market")').first();
   await closeMarketBtn.click();
   await page.waitForTimeout(300);
+
+  // Verify non-blocking 3s runway toast is visible
+  const runwayToast = page.locator('text=/Month 2 of Unemployment/i').first();
+  await runwayToast.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ Non-blocking 3s unemployment runway reminder toast is visible on screen');
+
+  // Verify that ticking a month while unemployed advances duration and DOES NOT auto-rehire
+  await page.evaluate(() => {
+    const store = window.__GAME_STORE__;
+    store.setState({ simulation: { ...store.getState().simulation, isPaused: false } });
+    store.getState().tickMonth();
+  });
+  const unhiredChar = await page.evaluate(() => window.__GAME_STORE__.getState().character);
+  console.assert(unhiredChar.employmentStatus === 'unemployed', 'Character must remain unemployed (no auto-rehire)');
+  console.assert(unhiredChar.unemploymentDurationMonths === 3, 'unemploymentDurationMonths must increment to 3');
+  console.log('✓ Confirmed: Character remains unhired on simulation tick without auto-rehire!');
 
   await jobMarketBtn.click();
   await page.waitForTimeout(300);
@@ -260,14 +287,14 @@ async function runPhase3Tests() {
   console.log('✓ Captured tests/screenshot-offer-letter-modal.png');
 
   // Accept the offer!
-  const acceptOfferBtn = page.locator('button:has-text("Accept Offer & Join")').first();
+  const acceptOfferBtn = page.locator('button:has-text("Accept & Join")').first();
   await acceptOfferBtn.click();
   await page.waitForTimeout(500);
 
   // Verify character is immediately employed, with new title, salary, and bonus
   const finalChar = await page.evaluate(() => window.__GAME_STORE__.getState().character);
   console.assert(finalChar.employmentStatus === 'employed', 'employmentStatus must be restored to employed');
-  console.assert(finalChar.unemploymentMonthsRemaining === 0, 'unemploymentMonthsRemaining must be 0');
+  console.assert(finalChar.unemploymentDurationMonths === 0, 'unemploymentDurationMonths must be 0');
   console.assert(finalChar.jobTitle === 'Senior Software Engineer', 'jobTitle should update to offered title');
   console.assert(finalChar.monthlyTakeHome === 83600, 'monthlyTakeHome should update to 83600');
   console.assert(finalChar.city === 'Bengaluru', 'city should be Bengaluru');

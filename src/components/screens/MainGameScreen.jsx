@@ -13,6 +13,7 @@ import UpskillingModal from '../game/UpskillingModal.jsx';
 import JobMarketModal from '../game/JobMarketModal.jsx';
 import OfferLetterModal from '../game/OfferLetterModal.jsx';
 import CourseCompletedModal from '../game/CourseCompletedModal.jsx';
+import UnemploymentRunwayToast from '../game/UnemploymentRunwayToast.jsx';
 import {
   pageTransition,
   staggerContainer,
@@ -165,6 +166,17 @@ export default function MainGameScreen() {
           </div>
         )}
 
+        {/* ─── Unemployment 3s Runway Reminder Toast (Non-blocking) ─── */}
+        {character.employmentStatus === 'unemployed' && simulation.unemploymentReminder && (
+          <UnemploymentRunwayToast
+            reminder={simulation.unemploymentReminder}
+            onOpenJobMarket={() => {
+              pause();
+              setIsJobMarketModalOpen(true);
+            }}
+          />
+        )}
+
         {/* ─── Top Command Bar (Light CRED NeoPOP) ─── */}
         <div className="card-neopop p-3 sm:p-5 space-y-2.5 sm:space-y-4 bg-white">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
@@ -183,7 +195,7 @@ export default function MainGameScreen() {
                     <span>Age {simulation.currentAge}</span>
                     {character.employmentStatus === 'unemployed' && (
                       <span className="px-1.5 py-0.5 bg-rose-100 border border-slate-900 text-rose-900 text-[9px] sm:text-[10px] font-mono font-bold animate-pulse inline-block">
-                        ⚠️ Layoff: {character.unemploymentMonthsRemaining} mos left
+                        ⚠️ Unemployed (Month {character.unemploymentDurationMonths || 1})
                       </span>
                     )}
                   </div>
@@ -471,7 +483,7 @@ export default function MainGameScreen() {
                   <span>{character.jobTitle}</span>
                   {character.employmentStatus === 'unemployed' ? (
                     <span className="px-2 py-0.5 bg-rose-100 border border-rose-900 text-rose-900 text-[10px] font-mono font-bold animate-pulse">
-                      ⚠️ Laid Off ({character.unemploymentMonthsRemaining} mos left)
+                      ⚠️ Laid Off (Month {character.unemploymentDurationMonths || 1})
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 bg-emerald-100 border border-emerald-900 text-emerald-900 text-[10px] font-mono font-bold">
@@ -640,7 +652,7 @@ export default function MainGameScreen() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs pt-1">
               <div className="space-y-1.5 sm:space-y-2">
                 {[
-                  ['Status', character.employmentStatus === 'unemployed' ? `⚠️ Layoff (${character.unemploymentMonthsRemaining} mos left)` : '✅ Active Employment'],
+                  ['Status', character.employmentStatus === 'unemployed' ? `⚠️ Unemployed (Month ${character.unemploymentDurationMonths || 1})` : '✅ Active Employment'],
                   ['Current Role', character.jobTitle],
                   ['City & Tier', `${character.city} (${character.cityTier.toUpperCase()})`],
                   ['Field', character.careerField],

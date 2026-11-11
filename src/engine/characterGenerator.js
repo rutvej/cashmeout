@@ -204,7 +204,7 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
     primaryDream,
     // Phase 1: Employment & Shock tracking
     employmentStatus: 'employed',
-    unemploymentMonthsRemaining: 0,
+    unemploymentDurationMonths: 0,
     preLayoffTakeHome: null,
     lastShockMonthIndex: -18, // Allows shocks after Year 1 (month 12+) since cooldown is 18mo
     lastJobLossMonthIndex: null,

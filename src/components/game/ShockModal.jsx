@@ -217,8 +217,8 @@ export default function ShockModal({ data, onReviewAllocations }) {
               <p className="text-slate-700 leading-snug">
                 Each month you remain unemployed, all fixed outflows will be drawn from your liquid bank cash, then emergency fund. SIPs are paused when cash runs dry.
               </p>
-              <p className="font-bold text-amber-800">
-                Rehire in: {data?.unemploymentDuration} months
+              <p className="font-bold text-amber-900 bg-amber-100 p-1.5 border border-amber-600">
+                ⚠️ No automatic rehire: You must actively apply on the Job Market to restore your salary and stop fund burn!
               </p>
             </div>
           )}

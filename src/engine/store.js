@@ -725,11 +725,12 @@ export const useGameStore = create((set, get) => ({
         monthlySurplus: newSurplus,
         // Immediately restores active employment if previously laid off
         employmentStatus: 'employed',
-        unemploymentMonthsRemaining: 0,
+        unemploymentDurationMonths: 0,
         preLayoffTakeHome: null,
       },
       simulation: {
         ...state.simulation,
+        unemploymentReminder: null,
         activeModal: nextModal,
         modalQueue: nextQueue,
         isPaused: hasNextModal ? true : false,

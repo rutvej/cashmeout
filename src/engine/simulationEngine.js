@@ -198,21 +198,16 @@ export function tickMonthlySimulation(state) {
   let completedCourses = [...(character.completedCourses || [])];
   const courseFee = activeCourse ? activeCourse.monthlyFee : 0;
 
-  // ─── 1. Unemployment State Transition ─────────────────────────────────────
+  // ─── 1. Unemployment State Tracking (No Automatic Rehire) ────────────────
   let employmentStatus = character.employmentStatus || 'employed';
-  let unemploymentMonthsRemaining = character.unemploymentMonthsRemaining || 0;
+  let unemploymentDurationMonths = character.unemploymentDurationMonths || 0;
   let preLayoffTakeHome = character.preLayoffTakeHome ?? null;
   let lastShockMonthIndex = character.lastShockMonthIndex ?? -18;
   let lastJobLossMonthIndex = character.lastJobLossMonthIndex ?? null;
 
   if (employmentStatus === 'unemployed') {
-    if (unemploymentMonthsRemaining > 0) {
-      unemploymentMonthsRemaining = Math.max(0, unemploymentMonthsRemaining - 1);
-    }
-    if (unemploymentMonthsRemaining === 0) {
-      // Rehire: restore employment
-      employmentStatus = 'employed';
-    }
+    unemploymentDurationMonths += 1;
+    // Player remains unhired until they actively accept a job from the Job Board!
   }
 
   // ─── 2. Annual Boundary: Inflation, Appraisal Hike, Vacation ─────────────
@@ -292,7 +287,7 @@ export function tickMonthlySimulation(state) {
       if (shockPayload.shockId === 'shock_job_loss') {
         liquidCash += shockPayload.severancePaid || 0;
         employmentStatus = 'unemployed';
-        unemploymentMonthsRemaining = shockPayload.unemploymentDuration;
+        unemploymentDurationMonths = 1;
         preLayoffTakeHome = baseTakeHome;
         lastJobLossMonthIndex = nextMonthIndex;
 
@@ -671,6 +666,19 @@ export function tickMonthlySimulation(state) {
   const finalCourseFee = activeCourse ? activeCourse.monthlyFee : 0;
   const finalTotalOutflow = fixedExpenses + nextTotalLoanEMIs + totalInsurance + finalCourseFee;
 
+  const emgGoal = updatedGoals.find((g) => g.id === 'goal_emergency');
+  const totalReserves = liquidCash + (emgGoal?.currentAmount || 0);
+  const runwayMonths = finalTotalOutflow > 0 ? Number((totalReserves / finalTotalOutflow).toFixed(1)) : 0;
+
+  const unemploymentReminder = employmentStatus === 'unemployed' ? {
+    id: `unemp_remind_${nextMonthIndex}_${unemploymentDurationMonths}`,
+    monthIndex: nextMonthIndex,
+    unemploymentMonth: unemploymentDurationMonths,
+    monthlyBurn: finalTotalOutflow,
+    remainingReserves: totalReserves,
+    runwayMonths,
+  } : null;
+
   const updatedCharacter = {
     ...character,
     yearsOfExperience,
@@ -687,7 +695,7 @@ export function tickMonthlySimulation(state) {
     totalMonthlyOutflow: finalTotalOutflow,
     monthlySurplus: baseTakeHome - finalTotalOutflow,
     employmentStatus,
-    unemploymentMonthsRemaining,
+    unemploymentDurationMonths,
     preLayoffTakeHome: employmentStatus === 'unemployed' ? preLayoffTakeHome : null,
     lastShockMonthIndex,
     lastJobLossMonthIndex,
@@ -706,6 +714,7 @@ export function tickMonthlySimulation(state) {
       isPaused: isRetirementReached ? true : isPaused,
       activeModal: isRetirementReached ? null : activeModal,
       modalQueue: isRetirementReached ? [] : modalQueue,
+      unemploymentReminder,
       history: [...(simulation.history || []), newHistoryEntry],
     },
   };
