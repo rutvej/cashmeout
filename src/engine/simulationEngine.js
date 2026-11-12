@@ -2,6 +2,7 @@
 import { INSTRUMENTS, calculateEffectiveSIPs } from './compoundingEngine.js';
 import { createPRNG } from './prng.js';
 import { calculateVentureMonthlyCashFlow } from './ventureEngine.js';
+import { generateSpouseProfile, getInitialAssetMaintenanceState } from './lifeEventsEngine.js';
 
 // ─── Phase 1: Shock resolution helper ───────────────────────────────────────
 
@@ -361,14 +362,42 @@ export function tickMonthlySimulation(state) {
   if (reachedMilestones.length > 0) {
     reachedMilestones.forEach((pendingMilestone) => {
       isPaused = true;
-      const milestoneModal = {
-        type: 'milestone',
-        goal: pendingMilestone,
-      };
-      if (!activeModal) {
-        activeModal = milestoneModal;
+      if (pendingMilestone.id === 'goal_marriage') {
+        const spouseProfile = generateSpouseProfile(character.seed);
+        const isFunded = (pendingMilestone.currentAmount || 0) >= (pendingMilestone.targetAmount || 1);
+        if (isFunded) {
+          const weddingModal = {
+            type: 'wedding',
+            goal: pendingMilestone,
+            spouseProfile,
+          };
+          if (!activeModal) {
+            activeModal = weddingModal;
+          } else {
+            modalQueue.push(weddingModal);
+          }
+        } else {
+          const milestoneModal = {
+            type: 'milestone',
+            goal: pendingMilestone,
+            spouseProfile,
+          };
+          if (!activeModal) {
+            activeModal = milestoneModal;
+          } else {
+            modalQueue.push(milestoneModal);
+          }
+        }
       } else {
-        modalQueue.push(milestoneModal);
+        const milestoneModal = {
+          type: 'milestone',
+          goal: pendingMilestone,
+        };
+        if (!activeModal) {
+          activeModal = milestoneModal;
+        } else {
+          modalQueue.push(milestoneModal);
+        }
       }
       updatedGoals = updatedGoals.map((g) =>
         g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
@@ -401,8 +430,10 @@ export function tickMonthlySimulation(state) {
     return g;
   });
 
+  const assetMaintenance = character.assetMaintenanceState || getInitialAssetMaintenanceState();
+  const spouseTakeHome = (assetMaintenance.isMarried && assetMaintenance.spouse) ? (assetMaintenance.spouse.monthlyTakeHome || 0) : 0;
   const actualSalaryTakeHome = employmentStatus === 'unemployed' ? 0 : baseTakeHome;
-  const totalMonthlyInflow = actualSalaryTakeHome + totalVentureInflow;
+  const totalMonthlyInflow = actualSalaryTakeHome + spouseTakeHome + totalVentureInflow;
   let monthlySurplus = totalMonthlyInflow - totalMonthlyOutflow;
 
   if (monthlySurplus < 0) {
@@ -770,10 +801,12 @@ export function tickMonthlySimulation(state) {
   } : null;
 
   const effectiveTakeHome = (employmentStatus === 'unemployed' ? 0 : baseTakeHome) + totalVentureInflow;
-  const effectiveSurplus = effectiveTakeHome - finalTotalOutflow;
+  const householdTakeHome = (employmentStatus === 'unemployed' ? 0 : baseTakeHome) + spouseTakeHome + totalVentureInflow;
+  const effectiveSurplus = householdTakeHome - finalTotalOutflow;
 
   const updatedCharacter = {
     ...character,
+    assetMaintenanceState: assetMaintenance,
     yearsOfExperience,
     skillLevel,
     activeCourse,
@@ -782,6 +815,8 @@ export function tickMonthlySimulation(state) {
     grossMonthlySalary: grossSalary,
     salaryTakeHome: baseTakeHome,
     ventureIncome: totalVentureInflow,
+    spouseTakeHome,
+    householdTakeHome,
     monthlyTakeHome: effectiveTakeHome,
     loans: updatedLoans,
     liquidCash,

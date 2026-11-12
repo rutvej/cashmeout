@@ -16,6 +16,8 @@ import CourseCompletedModal from '../game/CourseCompletedModal.jsx';
 import UnemploymentRunwayToast from '../game/UnemploymentRunwayToast.jsx';
 import VentureIncubatorModal from '../game/VentureIncubatorModal.jsx';
 import LaunchVentureModal from '../game/LaunchVentureModal.jsx';
+import WeddingModal from '../game/WeddingModal.jsx';
+import { getOutflowItemization } from '../../engine/lifeEventsEngine.js';
 import {
   pageTransition,
   staggerContainer,
@@ -82,6 +84,8 @@ export default function MainGameScreen() {
   const [isUpskillingModalOpen, setIsUpskillingModalOpen] = useState(false);
   const [isJobMarketModalOpen, setIsJobMarketModalOpen] = useState(false);
   const [isVentureModalOpen, setIsVentureModalOpen] = useState(false);
+  const [isOutflowDrawerOpen, setIsOutflowDrawerOpen] = useState(false);
+  const outflowBreakdown = getOutflowItemization(character);
 
   // Retirement target computation
   const retirementAge = character?.retirementAge || 60;
@@ -312,10 +316,26 @@ export default function MainGameScreen() {
               </span>
             </div>
           )}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Expenses:</span>
-            <span className="text-slate-800 truncate">{formatINR(character.totalFixedExpenses)}</span>
-          </div>
+          {character.assetMaintenanceState?.isMarried && character.assetMaintenanceState?.spouse && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
+              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Spouse:</span>
+              <span className="text-emerald-700 font-black truncate">
+                +{formatINR(character.assetMaintenanceState.spouse.monthlyTakeHome)}/mo
+              </span>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsOutflowDrawerOpen((v) => !v)}
+            title="Click to toggle itemized recurring outflow ledger"
+            className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0 text-left hover:bg-slate-50 p-0.5 -m-0.5 rounded transition-colors cursor-pointer"
+          >
+            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px] flex items-center gap-0.5">
+              <span>Expenses</span>
+              <span className="text-[8px] text-blue-600 font-bold underline">Ledger ℹ️</span>:
+            </span>
+            <span className="text-slate-800 font-black truncate">{formatINR(character.totalFixedExpenses)}</span>
+          </button>
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Bank Cash:</span>
             <span className="text-slate-900 font-black truncate">{formatINR(character.liquidCash)}</span>
@@ -343,6 +363,72 @@ export default function MainGameScreen() {
             <span className="text-blue-700 font-black truncate">{formatINR(totalSIPs)}/mo</span>
           </div>
         </div>
+
+        {/* ─── Phase 5: Expandable Outflow Ledger Drawer ─── */}
+        <AnimatePresence>
+          {isOutflowDrawerOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="card-neopop p-3 sm:p-4 bg-slate-50 border-2 border-slate-900 shadow-hard-sm space-y-2.5 overflow-hidden text-xs font-mono"
+            >
+              <div className="flex items-center justify-between border-b border-slate-300 pb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📋</span>
+                  <span className="font-display font-black text-xs sm:text-sm uppercase tracking-wider text-slate-900">
+                    Monthly Outflow Ledger (Itemized Ongoing Costs)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOutflowDrawerOpen(false)}
+                  className="px-2 py-0.5 text-[10px] font-bold bg-white border border-slate-900 hover:bg-slate-200 btn-press-sm"
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                <div className="p-2 bg-white border border-slate-900">
+                  <span className="text-[9px] uppercase font-bold text-slate-500 block">🏠 Base Living</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900">{formatINR(outflowBreakdown.baseLiving)}</span>
+                  <span className="text-[8px] text-slate-500 block truncate">Rent, food, utils</span>
+                </div>
+                <div className={`p-2 border ${outflowBreakdown.hasCar ? 'bg-blue-50 border-blue-900 text-blue-950' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[9px] uppercase font-bold block">🚗 Car Upkeep</span>
+                  <span className="text-xs sm:text-sm font-black">{outflowBreakdown.hasCar ? formatINR(outflowBreakdown.carUpkeep) : '₹0'}</span>
+                  <span className="text-[8px] block truncate">{outflowBreakdown.hasCar ? 'Fuel, svc, ins' : 'Not owned'}</span>
+                </div>
+                <div className={`p-2 border ${outflowBreakdown.hasOwnedHome ? 'bg-amber-50 border-amber-900 text-amber-950' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[9px] uppercase font-bold block">🏢 Home Maint.</span>
+                  <span className="text-xs sm:text-sm font-black">{outflowBreakdown.hasOwnedHome ? formatINR(outflowBreakdown.homeMaintenance) : '₹0'}</span>
+                  <span className="text-[8px] block truncate">{outflowBreakdown.hasOwnedHome ? 'Society & taxes' : 'Renting'}</span>
+                </div>
+                <div className={`p-2 border ${outflowBreakdown.isMarried ? 'bg-rose-50 border-rose-900 text-rose-950' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[9px] uppercase font-bold block">💍 Spouse Addon</span>
+                  <span className="text-xs sm:text-sm font-black">{outflowBreakdown.isMarried ? formatINR(outflowBreakdown.spouseAddon) : '₹0'}</span>
+                  <span className="text-[8px] block truncate">{outflowBreakdown.isMarried ? 'Household living' : 'Single'}</span>
+                </div>
+                <div className={`p-2 border ${outflowBreakdown.loanEMIs > 0 ? 'bg-rose-50 border-rose-900 text-rose-900' : 'bg-white border-slate-900 text-slate-900'} col-span-2 sm:col-span-1`}>
+                  <span className="text-[9px] uppercase font-bold text-slate-500 block">💳 Loan EMIs</span>
+                  <span className="text-xs sm:text-sm font-black">{formatINR(outflowBreakdown.loanEMIs)}</span>
+                  <span className="text-[8px] text-slate-500 block truncate">{outflowBreakdown.loanEMIs > 0 ? 'Active debts' : 'Debt-free'}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 border-t border-slate-200 text-[11px] gap-1">
+                <span className="text-slate-600">
+                  Fixed Expenses: <strong className="text-slate-900">{formatINR(outflowBreakdown.totalFixed)}/mo</strong>
+                  {totalInsurance > 0 && <span> · Insurance: <strong className="text-slate-900">{formatINR(totalInsurance)}/mo</strong></span>}
+                </span>
+                <span className="font-bold text-slate-900">
+                  Total Monthly Recurring Outflow: <span className="font-black text-rose-700">{formatINR(character.totalMonthlyOutflow)}/mo</span>
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ─── Tabs Navigation (Strict Grid: Zero Overflow Guarantee) ─── */}
         <div className="grid grid-cols-4 border-b-2 border-slate-900 gap-0.5 sm:gap-1">
@@ -919,6 +1005,83 @@ export default function MainGameScreen() {
                 ))}
               </div>
             </div>
+
+            {/* Phase 5: Household Partner Economics (if married) */}
+            {character.assetMaintenanceState?.isMarried && character.assetMaintenanceState?.spouse && (
+              <div className="p-3 sm:p-4 bg-rose-50/60 border-2 border-slate-900 shadow-hard-sm space-y-2 mt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-rose-200 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">💍</span>
+                    <div>
+                      <span className="text-[9px] font-mono font-bold text-slate-500 uppercase block">Married Household Economics</span>
+                      <h4 className="font-display font-black text-sm text-slate-900">
+                        {character.assetMaintenanceState.spouse.name} · <span className="text-slate-700 font-mono text-xs">{character.assetMaintenanceState.spouse.profession}</span>
+                      </h4>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 border ${character.assetMaintenanceState.spouse.badgeBg || 'bg-rose-100 text-rose-900 border-rose-800'}`}>
+                    {character.assetMaintenanceState.spouse.archetype}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono text-center pt-1">
+                  <div className="p-1.5 bg-white border border-slate-900">
+                    <span className="text-[8px] uppercase text-slate-500 block">Spouse Take-Home</span>
+                    <span className="font-bold text-emerald-700">+{formatINR(character.assetMaintenanceState.spouse.monthlyTakeHome)}/mo</span>
+                  </div>
+                  <div className="p-1.5 bg-white border border-slate-900">
+                    <span className="text-[8px] uppercase text-slate-500 block">Spouse Living Addon</span>
+                    <span className="font-bold text-rose-700">+{formatINR(character.assetMaintenanceState.spouse.addedHouseholdExpenses)}/mo</span>
+                  </div>
+                  <div className="p-1.5 bg-white border border-slate-900">
+                    <span className="text-[8px] uppercase text-slate-500 block">Surplus Impact</span>
+                    <span className={`font-black ${character.assetMaintenanceState.spouse.netSurplusDelta >= 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                      {character.assetMaintenanceState.spouse.netSurplusDelta >= 0 ? `+${formatINR(character.assetMaintenanceState.spouse.netSurplusDelta)}/mo` : `-${formatINR(Math.abs(character.assetMaintenanceState.spouse.netSurplusDelta))}/mo`}
+                    </span>
+                  </div>
+                  <div className="p-1.5 bg-white border border-slate-900">
+                    <span className="text-[8px] uppercase text-slate-500 block">Joint Household CTC</span>
+                    <span className="font-black text-slate-900">{formatINR((character.monthlyTakeHome || 0) + (character.assetMaintenanceState.spouse.monthlyTakeHome || 0))}/mo</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Phase 5: Itemized Outflow Ledger in Profile Tab */}
+            <div className="p-3 sm:p-4 bg-slate-50 border-2 border-slate-900 space-y-2 mt-2 font-mono text-xs">
+              <div className="flex items-center justify-between border-b border-slate-300 pb-1">
+                <span className="font-display font-black text-xs uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
+                  <span>📊</span> Monthly Recurring Outflows Breakdown
+                </span>
+                <span className="text-[10px] text-slate-500 font-bold">Ledger</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center pt-1">
+                <div className="p-1.5 bg-white border border-slate-900">
+                  <span className="text-[8px] uppercase text-slate-500 block">Base Living</span>
+                  <span className="font-bold text-slate-900">{formatINR(outflowBreakdown.baseLiving)}</span>
+                </div>
+                <div className={`p-1.5 border ${outflowBreakdown.hasCar ? 'bg-blue-50 border-blue-900 text-blue-950 font-bold' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[8px] uppercase block">Car Upkeep</span>
+                  <span>{outflowBreakdown.hasCar ? formatINR(outflowBreakdown.carUpkeep) : '₹0'}</span>
+                </div>
+                <div className={`p-1.5 border ${outflowBreakdown.hasOwnedHome ? 'bg-amber-50 border-amber-900 text-amber-950 font-bold' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[8px] uppercase block">Home Maint.</span>
+                  <span>{outflowBreakdown.hasOwnedHome ? formatINR(outflowBreakdown.homeMaintenance) : '₹0'}</span>
+                </div>
+                <div className={`p-1.5 border ${outflowBreakdown.isMarried ? 'bg-rose-50 border-rose-900 text-rose-950 font-bold' : 'bg-slate-100 border-slate-300 text-slate-400'}`}>
+                  <span className="text-[8px] uppercase block">Spouse Addon</span>
+                  <span>{outflowBreakdown.isMarried ? formatINR(outflowBreakdown.spouseAddon) : '₹0'}</span>
+                </div>
+                <div className={`p-1.5 border ${outflowBreakdown.loanEMIs > 0 ? 'bg-rose-50 border-rose-900 text-rose-900 font-bold' : 'bg-white border-slate-900 text-slate-900'} col-span-2 sm:col-span-1`}>
+                  <span className="text-[8px] uppercase text-slate-500 block">Loan EMIs</span>
+                  <span>{formatINR(outflowBreakdown.loanEMIs)}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-200">
+                <span className="text-slate-600">Total Fixed: <strong>{formatINR(character.totalFixedExpenses)}/mo</strong></span>
+                <span className="font-black text-rose-700">Total Outflow: {formatINR(character.totalMonthlyOutflow)}/mo</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1006,6 +1169,9 @@ export default function MainGameScreen() {
       )}
       {simulation.activeModal?.type === 'milestone' && (
         <MilestoneModal goal={simulation.activeModal.goal} />
+      )}
+      {simulation.activeModal?.type === 'wedding' && (
+        <WeddingModal data={simulation.activeModal} goal={simulation.activeModal.goal} />
       )}
       {simulation.activeModal?.type === 'shock_event' && (
         <ShockModal

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:e2e": "node tests/test-e2e-playwright.mjs",
     "test:phase3": "node tests/test-phase3-career.mjs",
-    "test:phase4": "node tests/test-phase4-ventures.mjs"
+    "test:phase4": "node tests/test-phase4-ventures.mjs",
+    "test:phase5": "node tests/test-phase5-life-events.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

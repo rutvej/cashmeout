@@ -5,7 +5,7 @@ import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
 
 export default function MilestoneModal({ goal }) {
-  const { resolveMilestoneShortfall, closeModal, character, simulation, goals } = useGameStore();
+  const { resolveMilestoneShortfall, finalizeMilestone, closeModal, character, simulation, goals } = useGameStore();
 
   const current = goal?.currentAmount || 0;
   const target = goal?.targetAmount || 1;
@@ -51,7 +51,7 @@ export default function MilestoneModal({ goal }) {
 
   const handleConfirm = () => {
     if (isFunded) {
-      closeModal();
+      finalizeMilestone(goal.id);
     } else {
       resolveMilestoneShortfall({
         goalId: goal.id,
@@ -109,6 +109,44 @@ export default function MilestoneModal({ goal }) {
             </span>
           </div>
         </div>
+
+        {/* Phase 5: Life Event Ongoing Outflow Notices */}
+        {goal?.id === 'goal_car' && (
+          <div className="p-2.5 sm:p-3 bg-blue-50 border-2 border-blue-900 text-[11px] space-y-1">
+            <div className="font-bold text-blue-950 flex items-center gap-1.5">
+              <span>🚗</span>
+              <span>Recurring Vehicle Upkeep Impact (+₹3,500/mo)</span>
+            </div>
+            <p className="text-blue-900 text-[10px] sm:text-[11px] leading-relaxed">
+              Completing vehicle purchase permanently adds <strong>+₹3,500/mo</strong> to monthly fixed expenses (Fuel ₹2,200 + Servicing Reserve ₹800 + Motor Insurance ₹500).
+              Your 6-month Emergency Fund target will automatically expand by <strong>+₹21,000</strong>.
+            </p>
+          </div>
+        )}
+
+        {goal?.id === 'goal_home' && (
+          <div className="p-2.5 sm:p-3 bg-amber-50 border-2 border-amber-900 text-[11px] space-y-1">
+            <div className="font-bold text-amber-950 flex items-center gap-1.5">
+              <span>🏠</span>
+              <span>Property Maintenance Charges (+₹5,500/mo)</span>
+            </div>
+            <p className="text-amber-900 text-[10px] sm:text-[11px] leading-relaxed">
+              Finalizing homeownership introduces <strong>+₹5,500/mo</strong> in fixed expenses for apartment society maintenance, civic taxes, and utility charges (combined with any mortgage loan EMI).
+            </p>
+          </div>
+        )}
+
+        {goal?.id === 'goal_marriage' && (
+          <div className="p-2.5 sm:p-3 bg-rose-50 border-2 border-rose-900 text-[11px] space-y-1">
+            <div className="font-bold text-rose-950 flex items-center gap-1.5">
+              <span>💍</span>
+              <span>Marriage Ceremony & Household Economics</span>
+            </div>
+            <p className="text-rose-900 text-[10px] sm:text-[11px] leading-relaxed">
+              Achieving this milestone celebrates your wedding and reveals your partner's career archetype, transitioning to combined dual-income household cashflows.
+            </p>
+          </div>
+        )}
 
         {/* Shortfall Resolution Options (Requested by User) */}
         {!isFunded && (

@@ -1,4 +1,5 @@
 import { createPRNG } from './prng.js';
+import { getInitialAssetMaintenanceState } from './lifeEventsEngine.js';
 
 const CITIES = {
   tier1: ['Bengaluru', 'Mumbai', 'Delhi NCR', 'Hyderabad'],
@@ -202,6 +203,9 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
     totalMonthlyOutflow,
     monthlySurplus,
     primaryDream,
+    // Phase 5: Life Event Outflows & Asset Maintenance
+    assetMaintenanceState: getInitialAssetMaintenanceState(),
+    spouseTakeHome: 0,
     // Phase 1: Employment & Shock tracking
     employmentStatus: 'employed',
     unemploymentDurationMonths: 0,

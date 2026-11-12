@@ -5,6 +5,13 @@ import { generateInitialGoals } from './goalsGenerator.js';
 import { tickMonthlySimulation } from './simulationEngine.js';
 import { UPSKILLING_COURSES, evaluateJobApplication } from './careerEngine.js';
 import { VENTURE_CATALOG, createVentureGoal } from './ventureEngine.js';
+import {
+  applyCarOwnership,
+  applyHomeOwnership,
+  applyMarriageEconomics,
+  generateSpouseProfile,
+  getInitialAssetMaintenanceState,
+} from './lifeEventsEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -715,11 +722,102 @@ export const useGameStore = create((set, get) => ({
       );
     }
 
-    const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+    let nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
     const totalInsurance =
       (insurance.health.isPurchased ? insurance.health.monthlyPremium : 0) +
       (insurance.termLife.isPurchased ? insurance.termLife.monthlyPremium : 0);
-    const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance;
+    const courseFee = character.activeCourse ? (character.activeCourse.monthlyFee || 0) : 0;
+
+    let intermediateChar = {
+      ...character,
+      liquidCash: updatedLiquidCash,
+      loans: updatedLoans,
+      totalLoanEMIs: nextTotalLoanEMIs,
+      totalFixedExpenses: character.totalFixedExpenses,
+      totalMonthlyOutflow: character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee,
+      monthlySurplus: (character.monthlyTakeHome || 0) + (character.spouseTakeHome || 0) + (character.ventureIncome || 0) - (character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee),
+    };
+
+    let finalGoals = updatedGoals;
+    let nextModalToTrigger = null;
+
+    if (resolutionType === 'other_fund' || resolutionType === 'loan') {
+      if (goal.id === 'goal_car') {
+        const carRes = applyCarOwnership(intermediateChar, finalGoals, insurance);
+        intermediateChar = carRes.character;
+        finalGoals = carRes.goals;
+      } else if (goal.id === 'goal_home') {
+        const homeRes = applyHomeOwnership(intermediateChar, finalGoals, insurance);
+        intermediateChar = homeRes.character;
+        finalGoals = homeRes.goals;
+      } else if (goal.id === 'goal_marriage') {
+        const spouseProfile = generateSpouseProfile(character.seed);
+        nextModalToTrigger = {
+          type: 'wedding',
+          goal,
+          spouseProfile,
+        };
+      }
+    }
+
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = nextModalToTrigger ? true : queue.length > 0;
+    const nextModal = nextModalToTrigger ? nextModalToTrigger : (queue.length > 0 ? queue[0] : null);
+    const nextQueue = nextModalToTrigger ? queue : (queue.length > 0 ? queue.slice(1) : []);
+
+    set({
+      character: intermediateChar,
+      goals: finalGoals,
+      simulation: {
+        ...simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    });
+  },
+
+  // Phase 5: Finalize milestone completion when 100% funded
+  finalizeMilestone: (goalId) => {
+    const { character, goals, insurance, simulation } = get();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) {
+      get().closeModal();
+      return;
+    }
+
+    if (goal.id === 'goal_marriage') {
+      const spouseProfile = generateSpouseProfile(character.seed);
+      set({
+        simulation: {
+          ...simulation,
+          activeModal: {
+            type: 'wedding',
+            goal,
+            spouseProfile,
+          },
+          isPaused: true,
+        },
+      });
+      return;
+    }
+
+    let updatedCharacter = { ...character };
+    let updatedGoals = goals.map((g) => ({ ...g }));
+
+    if (goal.id === 'goal_car') {
+      const applied = applyCarOwnership(updatedCharacter, updatedGoals, insurance);
+      updatedCharacter = applied.character;
+      updatedGoals = applied.goals;
+    } else if (goal.id === 'goal_home') {
+      const applied = applyHomeOwnership(updatedCharacter, updatedGoals, insurance);
+      updatedCharacter = applied.character;
+      updatedGoals = applied.goals;
+    } else {
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goalId ? { ...g, status: 'completed', milestoneTriggered: true } : g
+      );
+    }
 
     const queue = simulation.modalQueue || [];
     const hasNextModal = queue.length > 0;
@@ -727,21 +825,54 @@ export const useGameStore = create((set, get) => ({
     const nextQueue = hasNextModal ? queue.slice(1) : [];
 
     set({
-      character: {
-        ...character,
-        liquidCash: updatedLiquidCash,
-        loans: updatedLoans,
-        totalLoanEMIs: nextTotalLoanEMIs,
-        totalMonthlyOutflow: nextTotalMonthlyOutflow,
-        monthlySurplus: character.monthlyTakeHome - nextTotalMonthlyOutflow,
-      },
+      character: updatedCharacter,
       goals: updatedGoals,
       simulation: {
         ...simulation,
         activeModal: nextModal,
         modalQueue: nextQueue,
-        isPaused: hasNextModal ? true : false,
+        isPaused: hasNextModal,
       },
+    });
+  },
+
+  // Phase 5: Confirm wedding & apply household economics
+  confirmWedding: (spouseProfile) => {
+    const { character, goals, insurance, simulation } = get();
+    const applied = applyMarriageEconomics(character, spouseProfile, goals, insurance);
+
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set({
+      character: applied.character,
+      goals: applied.goals,
+      simulation: {
+        ...simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal,
+      },
+    });
+  },
+
+  completeCarPurchase: () => {
+    const { character, goals, insurance } = get();
+    const applied = applyCarOwnership(character, goals, insurance);
+    set({
+      character: applied.character,
+      goals: applied.goals,
+    });
+  },
+
+  completeHomePurchase: (mortgageLoan = null) => {
+    const { character, goals, insurance } = get();
+    const applied = applyHomeOwnership(character, goals, insurance, mortgageLoan);
+    set({
+      character: applied.character,
+      goals: applied.goals,
     });
   },
 
