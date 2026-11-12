@@ -4,6 +4,7 @@ import { generateCharacter } from './characterGenerator.js';
 import { generateInitialGoals } from './goalsGenerator.js';
 import { tickMonthlySimulation } from './simulationEngine.js';
 import { UPSKILLING_COURSES, evaluateJobApplication } from './careerEngine.js';
+import { VENTURE_CATALOG, createVentureGoal } from './ventureEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -307,6 +308,154 @@ export const useGameStore = create((set, get) => ({
       goals: [...state.goals, newGoal],
     }));
     return goalId;
+  },
+
+  // ─── Phase 4: Extra Opt-In Goals & Cash-Flow Ventures ─────────────────────
+  addVentureGoal: (catalogId) => {
+    const template = VENTURE_CATALOG.find((v) => v.id === catalogId);
+    if (!template) return null;
+
+    const { goals, simulation } = get();
+    // Prevent duplicate venture of same template if already active or incubating
+    const existing = goals.find((g) => g.ventureCatalogId === catalogId);
+    if (existing) return existing.id;
+
+    const currentAge = simulation?.currentAge || 25;
+    const newVenture = createVentureGoal(template, currentAge);
+
+    set((state) => ({
+      goals: [...state.goals, newVenture],
+    }));
+    return newVenture.id;
+  },
+
+  launchVenture: (goalId) => {
+    const { character, goals, simulation, insurance } = get();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return;
+
+    let updatedLoans = [...(character.loans || [])];
+    let updatedGoals = goals.map((g) => {
+      if (g.id !== goalId) return g;
+
+      if (g.ventureType === 'rental_property') {
+        const propVal = g.propertyInitialValue || 5000000;
+        return {
+          ...g,
+          isLaunched: true,
+          status: 'active_asset',
+          launchedAtMonthIndex: simulation.currentMonthIndex,
+          baseMonthlySIP: 0,
+          effectiveMonthlySIP: 0,
+          allocationPercent: 0,
+          currentAmount: propVal,
+          propertyAssetValue: propVal,
+          netMonthlyCashFlow: g.monthlyRevenueBase || 28000,
+          lastMonthNetCashFlow: g.monthlyRevenueBase || 28000,
+        };
+      }
+
+      return {
+        ...g,
+        isLaunched: true,
+        status: 'active_asset',
+        launchedAtMonthIndex: simulation.currentMonthIndex,
+        baseMonthlySIP: 0,
+        effectiveMonthlySIP: 0,
+        allocationPercent: 0,
+        netMonthlyCashFlow: (g.monthlyRevenueBase || 0) - (g.monthlyOperationalCost || 0),
+        lastMonthNetCashFlow: (g.monthlyRevenueBase || 0) - (g.monthlyOperationalCost || 0),
+      };
+    });
+
+    if (goal.ventureType === 'rental_property') {
+      const mortgage = {
+        id: `loan_mortgage_${goal.id}`,
+        name: 'Rental Property Mortgage',
+        principalRemaining: goal.mortgageAmount || 4000000,
+        interestRateAnnual: goal.mortgageInterestRate || 0.085,
+        tenureMonthsRemaining: goal.mortgageTenureMonths || 180,
+        emi: goal.mortgageEMI || 39388,
+      };
+      updatedLoans.push(mortgage);
+    }
+
+    const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+    const healthPremium = insurance.health?.isPurchased ? insurance.health.monthlyPremium : 0;
+    const termPremium = insurance.termLife?.isPurchased ? insurance.termLife.monthlyPremium : 0;
+    const totalInsurance = healthPremium + termPremium;
+    const courseFee = character.activeCourse ? character.activeCourse.monthlyFee : 0;
+    const nextTotalMonthlyOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee;
+
+    // Advance modal queue if activeModal was launch_venture
+    const queue = simulation.modalQueue || [];
+    const isCurrentLaunchModal = simulation.activeModal?.type === 'launch_venture';
+    const hasNextModal = isCurrentLaunchModal && queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : (isCurrentLaunchModal ? null : simulation.activeModal);
+    const nextQueue = hasNextModal ? queue.slice(1) : (isCurrentLaunchModal ? [] : queue);
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        loans: updatedLoans,
+        totalLoanEMIs: nextTotalLoanEMIs,
+        totalMonthlyOutflow: nextTotalMonthlyOutflow,
+        monthlySurplus: state.character.monthlyTakeHome - nextTotalMonthlyOutflow,
+      },
+      goals: updatedGoals,
+      simulation: {
+        ...state.simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal,
+      },
+    }));
+  },
+
+  dismissLaunchVentureModal: () => {
+    const { simulation } = get();
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set((state) => ({
+      simulation: {
+        ...state.simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    }));
+  },
+
+  scaleVenture: (goalId) => {
+    const { character, goals } = get();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal || !goal.isLaunched || goal.isScaledUp) return false;
+
+    const cost = goal.scaleUpCost || 100000;
+    if ((character.liquidCash || 0) < cost) return false;
+
+    const updatedGoals = goals.map((g) => {
+      if (g.id !== goalId) return g;
+      const boostedRevenue = Math.round((g.monthlyRevenueBase || 0) * 1.30);
+      return {
+        ...g,
+        isScaledUp: true,
+        monthlyRevenueBase: boostedRevenue,
+        netMonthlyCashFlow: Math.max(0, boostedRevenue - (g.monthlyOperationalCost || 0)),
+      };
+    });
+
+    set((state) => ({
+      character: {
+        ...state.character,
+        liquidCash: state.character.liquidCash - cost,
+      },
+      goals: updatedGoals,
+    }));
+    return true;
   },
 
   toggleInsurance: (type) =>

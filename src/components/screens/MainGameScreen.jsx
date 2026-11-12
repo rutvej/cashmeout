@@ -14,6 +14,8 @@ import JobMarketModal from '../game/JobMarketModal.jsx';
 import OfferLetterModal from '../game/OfferLetterModal.jsx';
 import CourseCompletedModal from '../game/CourseCompletedModal.jsx';
 import UnemploymentRunwayToast from '../game/UnemploymentRunwayToast.jsx';
+import VentureIncubatorModal from '../game/VentureIncubatorModal.jsx';
+import LaunchVentureModal from '../game/LaunchVentureModal.jsx';
 import {
   pageTransition,
   staggerContainer,
@@ -70,6 +72,8 @@ export default function MainGameScreen() {
     navigateTo,
     toggleAutoVacation,
     dropActiveCourse,
+    launchVenture,
+    scaleVenture,
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState('goals');
@@ -77,6 +81,7 @@ export default function MainGameScreen() {
   const [isAdjustingAllocations, setIsAdjustingAllocations] = useState(false);
   const [isUpskillingModalOpen, setIsUpskillingModalOpen] = useState(false);
   const [isJobMarketModalOpen, setIsJobMarketModalOpen] = useState(false);
+  const [isVentureModalOpen, setIsVentureModalOpen] = useState(false);
 
   // Retirement target computation
   const retirementAge = character?.retirementAge || 60;
@@ -283,14 +288,30 @@ export default function MainGameScreen() {
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Take-Home:</span>
             {character.employmentStatus === 'unemployed' ? (
-              <span className="text-rose-600 font-black truncate flex items-center gap-1">
-                <span className="line-through">{formatINR(character.monthlyTakeHome)}</span>
-                <span className="text-[9px] bg-rose-100 text-rose-800 px-1 border border-rose-800">₹0</span>
-              </span>
+              (character.ventureIncome || 0) > 0 ? (
+                <span className="text-emerald-700 font-black truncate flex items-center gap-1">
+                  +{formatINR(character.ventureIncome)}/mo
+                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 border border-emerald-800">Ventures</span>
+                </span>
+              ) : (
+                <span className="text-rose-600 font-black truncate flex items-center gap-1">
+                  <span className="line-through">{formatINR(character.preLayoffTakeHome || 0)}</span>
+                  <span className="text-[9px] bg-rose-100 text-rose-800 px-1 border border-rose-800">₹0</span>
+                </span>
+              )
             ) : (
               <span className="text-emerald-700 font-black truncate">{formatINR(character.monthlyTakeHome)}</span>
             )}
           </div>
+          {character.ventureIncome > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
+              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Ventures:</span>
+              <span className="text-emerald-700 font-black truncate flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                +{formatINR(character.ventureIncome)}/mo
+              </span>
+            </div>
+          )}
           <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Expenses:</span>
             <span className="text-slate-800 truncate">{formatINR(character.totalFixedExpenses)}</span>
@@ -368,16 +389,28 @@ export default function MainGameScreen() {
                 ))}
               </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  pause();
-                  setIsAdjustingAllocations(true);
-                }}
-                className="w-full sm:w-auto px-3 sm:px-3.5 py-1.5 bg-white border-2 border-slate-900 text-[11px] sm:text-xs font-mono font-bold btn-press-sm hover:bg-slate-50 text-center"
-              >
-                ⚙️ Adjust SIPs & Redirections
-              </button>
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    pause();
+                    setIsVentureModalOpen(true);
+                  }}
+                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white border-2 border-slate-900 text-[11px] sm:text-xs font-mono font-bold btn-press shadow-[2px_2px_0px_#0f172a] text-center"
+                >
+                  + New Venture / Side Hustle
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    pause();
+                    setIsAdjustingAllocations(true);
+                  }}
+                  className="flex-1 sm:flex-none px-3 sm:px-3.5 py-1.5 bg-white border-2 border-slate-900 text-[11px] sm:text-xs font-mono font-bold btn-press-sm hover:bg-slate-50 text-center"
+                >
+                  ⚙️ Adjust SIPs & Redirections
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
@@ -389,6 +422,215 @@ export default function MainGameScreen() {
                 const effectiveSIP = goal.effectiveMonthlySIP || goal.baseMonthlySIP || 0;
                 const bonusSIP = Math.max(0, effectiveSIP - (goal.baseMonthlySIP || 0));
                 const ringColor = pct >= 100 ? '#059669' : pct >= 60 ? '#D97706' : '#2563EB';
+
+                // ─── ACTIVE VENTURE ASSET CARD ───
+                if (goal.category === 'venture' && goal.isLaunched) {
+                  const netInflow = goal.lastMonthNetCashFlow || goal.netMonthlyCashFlow || (goal.monthlyRevenueBase - goal.monthlyOperationalCost);
+                  const isRental = goal.ventureType === 'rental_property';
+                  const isFranchise = goal.ventureType === 'franchise';
+                  const isSideHustle = goal.ventureType === 'side_hustle';
+                  const canScale = !goal.isScaledUp && (character.liquidCash >= (goal.scaleUpCost || 100000));
+
+                  return (
+                    <div
+                      key={goal.id}
+                      className="border-2 border-emerald-900 p-3.5 sm:p-4 space-y-3 bg-emerald-50/50 shadow-[3px_3px_0px_#065f46]"
+                    >
+                      {/* Active Header */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                          <span className="text-2xl p-2 bg-white border-2 border-emerald-900 shrink-0">
+                            {goal.icon}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="font-display font-black text-xs sm:text-sm text-slate-900 truncate">
+                              {goal.name}
+                            </div>
+                            <div className="text-[10px] sm:text-[11px] font-mono font-bold text-emerald-800 truncate">
+                              {isRental
+                                ? 'Real Estate Asset · 6.5% p.a. Compounding'
+                                : isFranchise
+                                ? 'Turnkey Retail · Net Passive Dividends'
+                                : 'Digital Sweat Equity · Recurring Net Inflow'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Pulse Indicator */}
+                        <div className="shrink-0">
+                          <span className="text-[9px] sm:text-[10px] font-mono font-black px-2 py-0.5 bg-emerald-200/90 border border-emerald-950 text-emerald-950 flex items-center gap-1.5 shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>🟢 ACTIVE ASSET</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Cashflow & Lifetime Stats Strip */}
+                      <div className="grid grid-cols-2 gap-2 bg-white border-2 border-emerald-900 p-2 sm:p-2.5 text-xs font-mono">
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-slate-500 block">
+                            Net Cash Flow
+                          </span>
+                          <span className="text-sm sm:text-base font-black text-emerald-700 block">
+                            +{formatINR(netInflow)}/mo
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase tracking-wider text-slate-500 block">
+                            Lifetime Generated
+                          </span>
+                          <span className="text-sm sm:text-base font-black text-slate-900 block">
+                            +{formatINR(goal.lifetimeEarnings || 0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Operational Details Breakdown */}
+                      <div className="text-[10px] sm:text-[11px] font-mono space-y-1 bg-emerald-100/60 p-2 border border-emerald-800/40">
+                        {isRental && (
+                          <div className="space-y-0.5 text-emerald-950">
+                            <div className="flex justify-between">
+                              <span>Tenant Rent Inflow:</span>
+                              <strong className="text-emerald-800">+{formatINR(netInflow)}/mo</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Property Equity Valuation:</span>
+                              <strong>{formatINR(goal.currentAmount || 5000000)}</strong>
+                            </div>
+                          </div>
+                        )}
+                        {isFranchise && (
+                          <div className="space-y-0.5 text-emerald-950">
+                            <div className="flex justify-between">
+                              <span>Gross Monthly Profit:</span>
+                              <strong>+₹45,000/mo</strong>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Manager Operational Cost:</span>
+                              <span className="text-rose-700">-₹15,000/mo</span>
+                            </div>
+                          </div>
+                        )}
+                        {isSideHustle && (
+                          <div className="flex justify-between text-emerald-950">
+                            <span>Dynamic Market Variance:</span>
+                            <span>±15% demand fluctuation</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Reinvest / Scale Up Button */}
+                      <div className="pt-1 flex items-center justify-between gap-2">
+                        {goal.isScaledUp ? (
+                          <span className="text-[10px] font-mono font-bold text-purple-900 bg-purple-100 px-2 py-1 border border-purple-900 inline-block">
+                            ⚡ Scaled Up (+30% Yield Boost Active)
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => scaleVenture(goal.id)}
+                            disabled={!canScale}
+                            className={`w-full py-1.5 px-3 text-[10px] sm:text-xs font-mono font-bold uppercase border border-slate-900 text-center transition-all ${
+                              canScale
+                                ? 'bg-purple-600 hover:bg-purple-700 text-white btn-press shadow-[2px_2px_0px_#0f172a]'
+                                : 'bg-slate-200 text-slate-500 cursor-not-allowed'
+                            }`}
+                          >
+                            ⚡ Reinvest & Scale Up (+30% Yield) · {formatINR(goal.scaleUpCost || 100000)}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ─── INCUBATING VENTURE CARD ───
+                if (goal.category === 'venture' && !goal.isLaunched) {
+                  const isReadyToLaunch = (goal.currentAmount || 0) >= (goal.targetAmount || 1);
+
+                  return (
+                    <div
+                      key={goal.id}
+                      className={`card-neopop-sm p-3 sm:p-4 space-y-2 sm:space-y-3 bg-white border-2 ${
+                        isReadyToLaunch ? 'border-emerald-600 shadow-[3px_3px_0px_#059669]' : 'border-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                          <div className="relative shrink-0">
+                            <ProgressRing percent={pct} size={38} stroke={3} color={ringColor} />
+                            <div className="absolute inset-0 flex items-center justify-center text-base sm:text-lg">
+                              {goal.icon}
+                            </div>
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-display font-black text-xs sm:text-sm text-slate-900 truncate">
+                              {goal.name}
+                            </div>
+                            <div className="text-[10px] sm:text-[11px] font-mono font-bold text-purple-700 truncate">
+                              {goal.projectedNetMonthly || 'Generates Recurring Cash Flow'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
+                          {isReadyToLaunch ? (
+                            <button
+                              type="button"
+                              onClick={() => launchVenture(goal.id)}
+                              className="text-[9px] sm:text-[10px] font-mono font-black px-2 py-0.5 bg-emerald-500 text-white border border-slate-900 animate-pulse uppercase tracking-wider btn-press"
+                            >
+                              🚀 LAUNCH NOW!
+                            </button>
+                          ) : (
+                            <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-purple-100 border border-slate-900 text-purple-900">
+                              🌱 INCUBATING ({pct}%)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Amount Progress Bar */}
+                      <div className="space-y-0.5 sm:space-y-1">
+                        <div className="flex justify-between text-[11px] sm:text-xs font-mono font-bold">
+                          <span className="text-emerald-700">{formatINR(goal.currentAmount || 0)}</span>
+                          <span className="text-slate-600">Target: {formatINR(target)}</span>
+                        </div>
+                        <div className="w-full h-1.5 sm:h-2 bg-slate-100 border border-slate-900 overflow-hidden">
+                          <div
+                            className="h-full transition-all duration-300"
+                            style={{ width: `${pct}%`, backgroundColor: ringColor }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Ready to launch button if funded */}
+                      {isReadyToLaunch ? (
+                        <button
+                          type="button"
+                          onClick={() => launchVenture(goal.id)}
+                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-mono font-black text-xs uppercase tracking-wider border-2 border-slate-900 shadow-[2px_2px_0px_#0f172a] btn-press text-center"
+                        >
+                          🚀 Launch Active Asset ({goal.projectedNetMonthly})
+                        </button>
+                      ) : (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 border-t border-slate-200 text-[10px] sm:text-xs font-mono gap-0.5 sm:gap-1">
+                          <div className="text-slate-600 truncate">
+                            SIP: <strong className="text-slate-900 font-bold">{formatINR(effectiveSIP)}</strong>
+                            {bonusSIP > 0 && (
+                              <span className="text-emerald-700 font-bold ml-1">(+{formatINR(bonusSIP)} ↪)</span>
+                            )}
+                          </div>
+                          <span className="text-[9px] sm:text-[10px] text-purple-700 font-bold">
+                            Transitions to Cash-Flow Asset @ 100%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ─── STANDARD MILESTONE / RECURRING GOAL CARD ───
 
                 return (
                   <div
@@ -780,6 +1022,12 @@ export default function MainGameScreen() {
       {simulation.activeModal?.type === 'course_completed' && (
         <CourseCompletedModal data={simulation.activeModal} />
       )}
+      {simulation.activeModal?.type === 'launch_venture' && (
+        <LaunchVentureModal
+          goal={simulation.activeModal.goal}
+          onAdjustAllocations={() => setIsAdjustingAllocations(true)}
+        />
+      )}
 
       {/* ─── Upskilling & Job Market Hub Modals ─── */}
       {isUpskillingModalOpen && (
@@ -787,6 +1035,9 @@ export default function MainGameScreen() {
       )}
       {isJobMarketModalOpen && (
         <JobMarketModal onClose={() => setIsJobMarketModalOpen(false)} />
+      )}
+      {isVentureModalOpen && (
+        <VentureIncubatorModal onClose={() => setIsVentureModalOpen(false)} />
       )}
 
       {/* ─── Allocation Adjustment Modal ─── */}

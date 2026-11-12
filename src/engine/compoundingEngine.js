@@ -104,7 +104,8 @@ export function calculateEffectiveSIPs(goals) {
   const goalMap = {};
 
   goals.forEach((g) => {
-    effective[g.id] = g.baseMonthlySIP || 0;
+    // Launched ventures are active cash flow assets and do not take SIPs
+    effective[g.id] = g.isLaunched ? 0 : (g.baseMonthlySIP || 0);
     goalMap[g.id] = g;
   });
 
@@ -123,7 +124,8 @@ export function calculateEffectiveSIPs(goals) {
       const targetGoal = goalMap[currentId];
       if (!targetGoal) return null;
 
-      const isTargetFull = (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1);
+      const isTargetFull =
+        (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1) || targetGoal.isLaunched;
       // Emergency fund is only full when at 100%
       if (currentId === 'goal_emergency' && isEmergencyDepleted) {
         return currentId;
@@ -144,7 +146,7 @@ export function calculateEffectiveSIPs(goals) {
 
   // Process completed goals
   goals.forEach((goal) => {
-    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1);
+    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1) || goal.isLaunched;
 
     // Emergency fund that is depleted cannot redirect its SIP
     if (goal.id === 'goal_emergency' && isEmergencyDepleted) {
@@ -175,6 +177,7 @@ export function calculateEffectiveSIPs(goals) {
   // When a goal fills up in % mode, its freed allocation redistributes proportionally across all remaining active goals
   if (freedPercentageSIP > 0) {
     const activeGoals = goals.filter((g) => {
+      if (g.isLaunched) return false;
       if (g.id === 'goal_emergency' && isEmergencyDepleted) return true;
       return (g.currentAmount || 0) < (g.targetAmount || 1);
     });

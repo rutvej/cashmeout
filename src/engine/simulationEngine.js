@@ -1,6 +1,7 @@
 // Pure deterministic simulation loop engine
 import { INSTRUMENTS, calculateEffectiveSIPs } from './compoundingEngine.js';
 import { createPRNG } from './prng.js';
+import { calculateVentureMonthlyCashFlow } from './ventureEngine.js';
 
 // ─── Phase 1: Shock resolution helper ───────────────────────────────────────
 
@@ -376,8 +377,33 @@ export function tickMonthlySimulation(state) {
   }
 
   // ─── 6. Cash Inflows, Monthly Surplus & Deficit Resolution ────────────────
-  const actualTakeHome = employmentStatus === 'unemployed' ? 0 : baseTakeHome;
-  let monthlySurplus = actualTakeHome - totalMonthlyOutflow;
+  // Process cash flows from active launched ventures
+  let totalVentureInflow = 0;
+  updatedGoals = updatedGoals.map((g) => {
+    if (g.category === 'venture' && g.isLaunched) {
+      const { grossRevenue, operationalCost, netCashFlow } = calculateVentureMonthlyCashFlow(
+        g,
+        character.seed,
+        nextMonthIndex
+      );
+      totalVentureInflow += netCashFlow;
+      const lifetimeEarnings = (g.lifetimeEarnings || 0) + netCashFlow;
+
+      return {
+        ...g,
+        currentMonthlyRevenue: grossRevenue,
+        currentMonthlyCost: operationalCost,
+        netMonthlyCashFlow: netCashFlow,
+        lastMonthNetCashFlow: netCashFlow,
+        lifetimeEarnings,
+      };
+    }
+    return g;
+  });
+
+  const actualSalaryTakeHome = employmentStatus === 'unemployed' ? 0 : baseTakeHome;
+  const totalMonthlyInflow = actualSalaryTakeHome + totalVentureInflow;
+  let monthlySurplus = totalMonthlyInflow - totalMonthlyOutflow;
 
   if (monthlySurplus < 0) {
     const deficit = Math.abs(monthlySurplus);
@@ -512,6 +538,16 @@ export function tickMonthlySimulation(state) {
   let totalSIPDeductions = 0;
 
   updatedGoals = updatedGoals.map((g) => {
+    // Active launched ventures are operational assets that do not consume SIPs
+    if (g.isLaunched) {
+      return {
+        ...g,
+        effectiveMonthlySIP: 0,
+        baseMonthlySIP: 0,
+        allocationPercent: 0,
+      };
+    }
+
     const sip = effectiveSIPs[g.id] || 0;
     let current = g.currentAmount || 0;
     const target = g.targetAmount || 1;
@@ -550,6 +586,29 @@ export function tickMonthlySimulation(state) {
 
   // ─── 8. Compound Investments with Monthly Rates ──────────────────────────
   updatedGoals = updatedGoals.map((g) => {
+    // Active launched ventures
+    if (g.isLaunched) {
+      if (g.ventureType === 'rental_property') {
+        // Equity growth: rental property value compounds at 6.5% p.a.
+        const annualRate = g.propertyAppreciationRate || 0.065;
+        const monthlyRate = annualRate / 12;
+        const currentVal = g.currentAmount || g.propertyInitialValue || 5000000;
+        const growth = Math.round(currentVal * monthlyRate);
+        const newBalance = currentVal + growth;
+        return {
+          ...g,
+          currentAmount: newBalance,
+          propertyAssetValue: newBalance,
+          status: 'active_asset',
+        };
+      }
+      // Digital agency / franchise: equity remains preserved while producing recurring cash flow
+      return {
+        ...g,
+        status: 'active_asset',
+      };
+    }
+
     const inst = INSTRUMENTS[g.instrumentId] || INSTRUMENTS.savings;
     const monthlyRate = inst.monthlyRate;
     const balance = g.currentAmount || 0;
@@ -560,7 +619,11 @@ export function tickMonthlySimulation(state) {
     let excessGrowth = 0;
     let status = g.status;
 
-    const isFixedCap = g.id === 'goal_emergency' || g.id === 'goal_vacation' || (g.kind === 'milestone' && balance >= target);
+    const isFixedCap =
+      g.id === 'goal_emergency' ||
+      g.id === 'goal_vacation' ||
+      (g.kind === 'milestone' && balance >= target) ||
+      (g.category === 'venture' && balance >= target);
 
     if (isFixedCap) {
       if (balance >= target) {
@@ -575,7 +638,7 @@ export function tickMonthlySimulation(state) {
     if (g.id === 'goal_emergency') {
       status = newBalance >= target ? 'buffer_full' : (newBalance > 0 ? 'refill_needed' : 'in_progress');
     } else if (newBalance >= target) {
-      status = 'completed';
+      status = g.category === 'venture' ? 'launch_ready' : 'completed';
     }
 
     if (excessGrowth > 0) {
@@ -588,6 +651,33 @@ export function tickMonthlySimulation(state) {
       status,
     };
   });
+
+  // ─── 8b. Check for Venture Goals Reaching 100% Target (Launch Ready) ─────
+  const launchReadyVentures = updatedGoals.filter(
+    (g) =>
+      g.category === 'venture' &&
+      !g.isLaunched &&
+      !g.launchModalTriggered &&
+      (g.currentAmount || 0) >= (g.targetAmount || 1)
+  );
+
+  if (launchReadyVentures.length > 0) {
+    launchReadyVentures.forEach((v) => {
+      isPaused = true;
+      const launchModal = {
+        type: 'launch_venture',
+        goal: v,
+      };
+      if (!activeModal) {
+        activeModal = launchModal;
+      } else {
+        modalQueue.push(launchModal);
+      }
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === v.id ? { ...g, launchModalTriggered: true, status: 'launch_ready' } : g
+      );
+    });
+  }
 
   // ─── 9. Service Loans ────────────────────────────────────────────────────
   let updatedLoans = (character.loans || []).map((l) => {
@@ -679,6 +769,9 @@ export function tickMonthlySimulation(state) {
     runwayMonths,
   } : null;
 
+  const effectiveTakeHome = (employmentStatus === 'unemployed' ? 0 : baseTakeHome) + totalVentureInflow;
+  const effectiveSurplus = effectiveTakeHome - finalTotalOutflow;
+
   const updatedCharacter = {
     ...character,
     yearsOfExperience,
@@ -687,13 +780,15 @@ export function tickMonthlySimulation(state) {
     completedCourses,
     jobApplicationCooldowns,
     grossMonthlySalary: grossSalary,
-    monthlyTakeHome: baseTakeHome,
+    salaryTakeHome: baseTakeHome,
+    ventureIncome: totalVentureInflow,
+    monthlyTakeHome: effectiveTakeHome,
     loans: updatedLoans,
     liquidCash,
     totalFixedExpenses: fixedExpenses,
     totalLoanEMIs: nextTotalLoanEMIs,
     totalMonthlyOutflow: finalTotalOutflow,
-    monthlySurplus: baseTakeHome - finalTotalOutflow,
+    monthlySurplus: effectiveSurplus,
     employmentStatus,
     unemploymentDurationMonths,
     preLayoffTakeHome: employmentStatus === 'unemployed' ? preLayoffTakeHome : null,

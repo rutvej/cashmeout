@@ -8,7 +8,8 @@ export function evaluateScorecard(state) {
 
   const retirementCorpus = retirementGoal?.currentAmount || 0;
   const annualLivingExpenses = (character.totalFixedExpenses || 1) * 12;
-  const annualPassiveIncome = Math.round(retirementCorpus * 0.04);
+  const annualVentureCashFlow = (character.ventureIncome || 0) * 12;
+  const annualPassiveIncome = Math.round(retirementCorpus * 0.04) + annualVentureCashFlow;
   const monthlyPassiveIncome = Math.round(annualPassiveIncome / 12);
   const fiRatio = annualLivingExpenses > 0 ? annualPassiveIncome / annualLivingExpenses : 1;
 
@@ -29,7 +30,7 @@ export function evaluateScorecard(state) {
   // Pillar 2: Milestone Completion (Max 30)
   const nonRetirementGoals = goals.filter((g) => g.id !== 'goal_retirement');
   const completedGoals = nonRetirementGoals.filter(
-    (g) => (g.currentAmount || 0) >= (g.targetAmount || 1)
+    (g) => (g.currentAmount || 0) >= (g.targetAmount || 1) || g.isLaunched
   );
   const milestoneScore = nonRetirementGoals.length > 0
     ? Math.round(30 * (completedGoals.length / nonRetirementGoals.length))

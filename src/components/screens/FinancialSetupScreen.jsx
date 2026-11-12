@@ -71,6 +71,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const totalAllocated = useMemo(() => {
     return goals.reduce((sum, g) => {
       if (skippedGoals.has(g.id)) return sum;
+      if (g.isLaunched) return sum;
       return sum + (g.baseMonthlySIP || 0);
     }, 0);
   }, [goals, skippedGoals]);
@@ -516,8 +517,23 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
               </div>
             </div>
 
+            {/* Active Launched Asset Banner */}
+            {currentGoal?.isLaunched && (
+              <div className="p-3 sm:p-3.5 bg-emerald-100 border-2 border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-950">
+                    <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
+                    <span>Active Cash Flow Asset (Launched)</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-900">
+                    This venture is operational and delivers monthly recurring cash flow directly to your surplus. No monthly SIP required.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Goal 100% Full Banner with 1-Click Redirect */}
-            {isGoalFull && (
+            {isGoalFull && !currentGoal?.isLaunched && (
               <div className="p-3 sm:p-3.5 bg-emerald-50 border-2 border-emerald-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-900">
