@@ -15,9 +15,9 @@
 </p>
 
 ### 🎬 Watch / Download Full Video
-- 🎥 **Full Gameplay Demo (MP4 - 9:16 Mobile HD)**: [**`demo-cashmeout-mobile.mp4`**](./demo-cashmeout-mobile.mp4) (9.6 MB · 2 min 22 sec)
-- 🎙️ **Narrated by**: Male studio voiceover (`en-US-ChristopherNeural`)
-- 🔍 **Camera Effects**: Dynamic cinematic zoom-ins (`1.35x` - `1.45x`), focus spotlighting, and animated mobile touch indicator.
+- 🎥 **Full Gameplay Demo (MP4 - 9:16 Mobile HD)**: [**`demo-cashmeout-mobile.mp4`**](./demo-cashmeout-mobile.mp4) (22.4 MB · 2 min 30 sec)
+- 🎙️ **Narrated by**: Male studio voiceover (`en-US-BrianNeural`) paired with ambient background music (*"Shiny Tech"* by Kevin MacLeod)
+- 📱 **Presentation**: 1:1 authentic mobile view (iPhone 15 Pro Max `430 × 932`), realistic touch feedback ripples, calibrated pacing, and zero subtitle/HUD overlays for a clean, distraction-free product walkthrough.
 
 ---
 
@@ -25,17 +25,17 @@
 
 | # | Scene | Timestamp | Description & Focus Area |
 | :-: | :--- | :---: | :--- |
-| **1** | **Fresh Start at Age 23** | `00:00 - 00:13` | Character generation in Tier-1 Metro, starting salary, liquid bank buffer, and student loan. |
-| **2** | **Goals Roadmap** | `00:13 - 00:24` | Life milestones setup: First Car, Dream Wedding, Home Down Payment, and Vacations. |
-| **3** | **Financial Engine & SIPs** | `00:24 - 00:38` | Strategy Hint modal, asset distribution (Equity, FD, Gold), and Health/Term Insurance shield. |
-| **4** | **Main Dashboard & Pulse** | `00:38 - 00:53` | Live Net Worth odometer, Monthly Cashflow Pulse, and slide-up Outflow Ledger. |
-| **5** | **Career Ladder & Upskilling**| `00:53 - 01:04` | Career card, Upskill Hub modal, certification courses, and upfront vs monthly fee. |
-| **6** | **Job Market & +40% Hike** | `01:04 - 01:16` | Browsing open tech roles, applying for senior positions, and accepting high-raise offer letters. |
-| **7** | **Startup Ventures & Passive Income** | `01:16 - 01:29` | Incubating Micro-SaaS/E-commerce ventures to generate recurring monthly dividends. |
-| **8** | **Real Estate & Home Ownership** | `01:29 - 01:40` | Purchasing property with realistic down payment and mortgage; renting out to tenants for cashflow. |
-| **9** | **Emergency Shield & Shocks** | `01:40 - 01:54` | Surviving unexpected hospitalizations; insurance covers 80%+ of the bill to avoid toxic debt. |
-| **10**| **5x Speed Compounding** | `01:54 - 02:06` | Fast-forwarding simulation decades; watching Net Worth soar past ₹50 Lakhs and ₹1 Crore. |
-| **11**| **Retirement & Endgame Scorecard** | `02:06 - 02:22` | Reaching age 60; comprehensive Financial Literacy Score (92/100), 4 pillar audit, and debrief. |
+| **1** | **Fresh Start at Age 23** | `00:00 - 00:15` | Character generation in Tier-1 Metro, starting salary, liquid bank buffer, and student loan. |
+| **2** | **Goals Roadmap** | `00:15 - 00:28` | Life milestones setup: First Car, Dream Wedding, Home Down Payment, and Vacations. |
+| **3** | **Financial Engine & SIPs** | `00:28 - 00:42` | Strategy Hint modal, asset distribution (Equity, FD, Gold), and Health/Term Insurance shield. |
+| **4** | **Main Dashboard & Pulse** | `00:42 - 01:00` | Live Net Worth odometer, Monthly Cashflow Pulse, and slide-up Outflow Ledger. |
+| **5** | **Career Ladder & Upskilling**| `01:00 - 01:14` | Career card, Upskill Hub modal, certification courses, and upfront vs monthly fee. |
+| **6** | **Job Market & +40% Hike** | `01:14 - 01:26` | Browsing open tech roles, applying for senior positions, and accepting high-raise offer letters. |
+| **7** | **Startup Ventures & Passive Income** | `01:26 - 01:41` | Incubating Micro-SaaS/E-commerce ventures to generate recurring monthly dividends. |
+| **8** | **Real Estate & Home Ownership** | `01:41 - 01:53` | Purchasing property with realistic down payment and mortgage; renting out to tenants for cashflow. |
+| **9** | **Emergency Shield & Shocks** | `01:53 - 02:07` | Surviving unexpected hospitalizations; insurance covers 80%+ of the bill to avoid toxic debt. |
+| **10**| **5x Speed Compounding** | `02:07 - 02:20` | Fast-forwarding simulation decades; watching Net Worth soar past ₹50 Lakhs and ₹2 Crores. |
+| **11**| **Retirement & Endgame Scorecard** | `02:20 - 02:30` | Reaching age 60; comprehensive Financial Literacy Score, 5 Quantitative Pillars audit, and strategic debrief. |
 
 ---
 
