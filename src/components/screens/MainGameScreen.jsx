@@ -19,6 +19,9 @@ import LaunchVentureModal from '../game/LaunchVentureModal.jsx';
 import WeddingModal from '../game/WeddingModal.jsx';
 import HomePurchaseModal from '../game/HomePurchaseModal.jsx';
 import EarlyHomeDecisionModal from '../game/EarlyHomeDecisionModal.jsx';
+import FinancialCommandDrawer from '../game/FinancialCommandDrawer.jsx';
+import VoiceoverTourModal from '../game/VoiceoverTourModal.jsx';
+import ProgressRing from '../game/ProgressRing.jsx';
 import { getOutflowItemization } from '../../engine/lifeEventsEngine.js';
 import {
   pageTransition,
@@ -29,38 +32,6 @@ import {
   backdropFade,
   sheetSlideUp,
 } from '../../utils/motion.js';
-
-/* ─── Circular Progress Ring ─── */
-function ProgressRing({ percent, size = 48, stroke = 3.5, color = '#059669' }) {
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (Math.min(100, Math.max(0, percent)) / 100) * circumference;
-
-  return (
-    <svg width={size} height={size} className="transform -rotate-90 shrink-0">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="#E2E8F0"
-        strokeWidth={stroke}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth={stroke}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="butt"
-        className="transition-all duration-300 ease-out"
-      />
-    </svg>
-  );
-}
 
 export default function MainGameScreen() {
   const {
@@ -87,6 +58,8 @@ export default function MainGameScreen() {
   const [isJobMarketModalOpen, setIsJobMarketModalOpen] = useState(false);
   const [isVentureModalOpen, setIsVentureModalOpen] = useState(false);
   const [isOutflowDrawerOpen, setIsOutflowDrawerOpen] = useState(false);
+  const [isCommandDrawerOpen, setIsCommandDrawerOpen] = useState(false);
+  const [isVoiceoverTourOpen, setIsVoiceoverTourOpen] = useState(false);
   const outflowBreakdown = getOutflowItemization(character);
 
   // Retirement target computation
@@ -188,91 +161,35 @@ export default function MainGameScreen() {
           />
         )}
 
-        {/* ─── Top Command Bar (Light CRED NeoPOP) ─── */}
-        <div className="card-neopop p-3 sm:p-5 space-y-2.5 sm:space-y-4 bg-white">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
+        {/* ─── Top Command Bar (Decluttered CRED NeoPOP) ─── */}
+        <div className="card-neopop p-3 sm:p-5 space-y-2.5 sm:space-y-3.5 bg-white">
+          <div className="flex items-center justify-between gap-3">
             
-            {/* Top row on mobile: Age Badge + Net Worth */}
-            <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
-              <div className="flex items-center gap-2.5 sm:gap-3">
-                <div className="relative">
-                  <ProgressRing percent={progressToRetirement} size={44} stroke={3.5} color="#2563EB" />
-                  <div className="absolute inset-0 flex items-center justify-center font-mono font-black text-base sm:text-lg text-slate-900">
-                    {simulation.currentAge}
-                  </div>
-                </div>
-                <div>
-                  <div className="font-display font-black text-slate-900 text-sm sm:text-base leading-tight flex items-center gap-1.5 flex-wrap">
-                    <span>Age {simulation.currentAge}</span>
-                    {character.employmentStatus === 'unemployed' && (
-                      <span className="px-1.5 py-0.5 bg-rose-100 border border-slate-900 text-rose-900 text-[9px] sm:text-[10px] font-mono font-bold animate-pulse inline-block">
-                        ⚠️ Unemployed (Month {character.unemploymentDurationMonths || 1})
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-500">
-                    Y{currentYear} · M{currentMonthInYear} · Target {retirementAge}
-                  </div>
+            {/* Left: Age Badge + Life Timeline */}
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="relative">
+                <ProgressRing percent={progressToRetirement} size={44} stroke={3.5} color="#2563EB" />
+                <div className="absolute inset-0 flex items-center justify-center font-mono font-black text-base sm:text-lg text-slate-900">
+                  {simulation.currentAge}
                 </div>
               </div>
-
-              {/* Net Worth Hero (compact on mobile) */}
-              <div className="text-right sm:text-left bg-slate-50 border-2 border-slate-900 px-3 py-1.5 sm:px-5 sm:py-2.5">
-                <span className="text-[8px] sm:text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
-                  Net Worth
-                </span>
-                <span className="text-lg sm:text-2xl font-mono font-black text-slate-900">
-                  {formatINR(netWorth)}
-                </span>
+              <div>
+                <div className="font-display font-black text-slate-900 text-sm sm:text-base leading-tight flex items-center gap-1.5 flex-wrap">
+                  <span>Age {simulation.currentAge}</span>
+                  {character.employmentStatus === 'unemployed' && (
+                    <span className="px-1.5 py-0.5 bg-rose-100 border border-slate-900 text-rose-900 text-[9px] sm:text-[10px] font-mono font-bold animate-pulse inline-block">
+                      ⚠️ Unemployed (Month {character.unemploymentDurationMonths || 1})
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-500">
+                  Y{currentYear} · M{currentMonthInYear} · Target {retirementAge}
+                </div>
               </div>
             </div>
 
-            {/* Simulation Controls & Auto-Vacation */}
-            <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-              <button
-                type="button"
-                onClick={simulation.isPaused ? play : pause}
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2.5 text-xs font-mono font-bold tracking-wider uppercase btn-press text-center ${
-                  simulation.isPaused
-                    ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                    : 'bg-amber-400 text-slate-950 hover:bg-amber-500'
-                }`}
-              >
-                {simulation.isPaused ? '▶ PLAY' : '⏸ PAUSE'}
-              </button>
-
-              <div className="flex bg-white border-2 border-slate-900 p-0.5 shrink-0">
-                {[1, 2, 5].map((spd) => (
-                  <button
-                    key={spd}
-                    type="button"
-                    onClick={() => setSpeed(spd)}
-                    className={`px-2 sm:px-2.5 py-1 text-xs font-mono font-bold transition-all ${
-                      simulation.gameSpeed === spd
-                        ? 'bg-slate-900 text-white'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {spd}×
-                  </button>
-                ))}
-              </div>
-
-              {/* Auto-Vacation Toggle Badge */}
-              <button
-                type="button"
-                onClick={() => toggleAutoVacation()}
-                title="Toggle automatic annual vacation without stopping the simulation"
-                className={`px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] font-mono font-bold border-2 border-slate-900 btn-press-sm transition-colors shrink-0 ${
-                  simulation.autoVacation
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-white text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {simulation.autoVacation ? '✈️ AUTO: ON' : '✈️ AUTO: OFF'}
-              </button>
-
-              {/* Auto-Saved Status Indicator */}
+            {/* Right: Net Worth Hero + Auto-Saved Status + Hamburger Menu Button */}
+            <div className="flex items-center gap-2 sm:gap-3">
               <div
                 className="hidden sm:inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] font-mono font-bold bg-slate-50 border-2 border-slate-900 text-slate-700 shrink-0"
                 title="Simulation state is auto-saved to browser storage"
@@ -281,6 +198,26 @@ export default function MainGameScreen() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>Auto-Saved</span>
               </div>
+
+              <div className="text-right bg-slate-50 border-2 border-slate-900 px-3 py-1 sm:px-4 sm:py-2">
+                <span className="text-[8px] sm:text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                  Net Worth
+                </span>
+                <span className="text-base sm:text-2xl font-mono font-black text-slate-900">
+                  {formatINR(netWorth)}
+                </span>
+              </div>
+
+              {/* CRED-style Hamburger / Command Menu Button */}
+              <button
+                type="button"
+                onClick={() => setIsCommandDrawerOpen(true)}
+                title="Open Life Decisions & Settings Menu"
+                className="px-3 py-2 sm:px-3.5 sm:py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 border-2 border-slate-900 font-mono font-black text-xs sm:text-sm btn-press flex items-center gap-1.5 shadow-[2px_2px_0px_#0f172a]"
+              >
+                <span className="text-sm">☰</span>
+                <span className="hidden sm:inline uppercase tracking-wider text-[11px]">Menu</span>
+              </button>
             </div>
           </div>
 
@@ -299,80 +236,86 @@ export default function MainGameScreen() {
           </div>
         </div>
 
-        {/* ─── Cashflow Ticker Strip ─── */}
-        <div className="card-neopop-sm bg-white p-2.5 sm:p-3 grid grid-cols-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between gap-2 sm:gap-3 text-[11px] sm:text-xs font-mono font-bold">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Take-Home:</span>
-            {character.employmentStatus === 'unemployed' ? (
-              (character.ventureIncome || 0) > 0 ? (
-                <span className="text-emerald-700 font-black truncate flex items-center gap-1">
-                  +{formatINR(character.ventureIncome)}/mo
-                  <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1 border border-emerald-800">Ventures</span>
-                </span>
-              ) : (
-                <span className="text-rose-600 font-black truncate flex items-center gap-1">
-                  <span className="line-through">{formatINR(character.preLayoffTakeHome || 0)}</span>
-                  <span className="text-[9px] bg-rose-100 text-rose-800 px-1 border border-rose-800">₹0</span>
-                </span>
-              )
-            ) : (
-              <span className="text-emerald-700 font-black truncate">{formatINR(character.monthlyTakeHome)}</span>
-            )}
-          </div>
-          {character.ventureIncome > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Ventures:</span>
-              <span className="text-emerald-700 font-black truncate flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                +{formatINR(character.ventureIncome)}/mo
+        {/* ─── CRED-Style Monthly Cashflow Pulse Card ─── */}
+        <div className="card-neopop-sm bg-white p-3 sm:p-4 border-2 border-slate-900 space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-200 pb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-base">⚡</span>
+              <span className="font-display font-black text-xs sm:text-sm uppercase tracking-wider text-slate-900">
+                Monthly Cashflow Pulse
               </span>
             </div>
-          )}
-          {character.assetMaintenanceState?.isMarried && character.assetMaintenanceState?.spouse && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Spouse:</span>
-              <span className="text-emerald-700 font-black truncate">
-                +{formatINR(character.assetMaintenanceState.spouse.monthlyTakeHome)}/mo
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsOutflowDrawerOpen((v) => !v)}
+                title="Click to toggle itemized recurring outflow ledger"
+                className="px-2.5 py-1 text-[10px] font-mono font-bold bg-slate-50 hover:bg-slate-100 border border-slate-900 btn-press-sm flex items-center gap-1"
+              >
+                <span>Expenses Ledger ℹ️</span>
+                <span className="text-[9px] text-blue-600 underline">
+                  {isOutflowDrawerOpen ? '▲ Hide' : '▼ View'}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 text-xs font-mono">
+            {/* Inflow */}
+            <div className="p-2 sm:p-2.5 bg-slate-50 border border-slate-900 rounded">
+              <span className="text-[9px] uppercase font-bold text-slate-500 block">
+                Total Monthly Inflow
+              </span>
+              <div className="flex items-baseline gap-1 pt-0.5">
+                <span className="text-sm sm:text-base font-black text-emerald-700">
+                  {character.employmentStatus === 'unemployed'
+                    ? (character.ventureIncome > 0 ? formatINR(character.ventureIncome) : '₹0')
+                    : formatINR((character.monthlyTakeHome || 0) + (character.ventureIncome || 0) + (character.assetMaintenanceState?.spouse?.monthlyTakeHome || 0))}
+                </span>
+                <span className="text-[10px] text-slate-500">/mo</span>
+              </div>
+              {character.ventureIncome > 0 && (
+                <div className="text-[9px] text-emerald-800 font-bold truncate flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Ventures: +{formatINR(character.ventureIncome)}/mo</span>
+                </div>
+              )}
+              <span className="text-[8px] text-slate-500 truncate block">
+                {character.employmentStatus === 'unemployed' ? '⚠️ Laid Off (Venture income only)' : 'Salary + side ventures'}
               </span>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setIsOutflowDrawerOpen((v) => !v)}
-            title="Click to toggle itemized recurring outflow ledger"
-            className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0 text-left hover:bg-slate-50 p-0.5 -m-0.5 rounded transition-colors cursor-pointer"
-          >
-            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px] flex items-center gap-0.5">
-              <span>Expenses</span>
-              <span className="text-[8px] text-blue-600 font-bold underline">Ledger ℹ️</span>:
-            </span>
-            <span className="text-slate-800 font-black truncate">{formatINR(character.totalFixedExpenses)}</span>
-          </button>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Bank Cash:</span>
-            <span className="text-slate-900 font-black truncate">{formatINR(character.liquidCash)}</span>
-          </div>
-          {totalEMIs > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">EMIs:</span>
-              <span className="text-rose-600 truncate">{formatINR(totalEMIs)}</span>
+
+            {/* Outflow */}
+            <div className="p-2 sm:p-2.5 bg-slate-50 border border-slate-900 rounded">
+              <span className="text-[9px] uppercase font-bold text-slate-500 block">
+                Total Fixed Outflows
+              </span>
+              <div className="flex items-baseline gap-1 pt-0.5">
+                <span className="text-sm sm:text-base font-black text-slate-900">
+                  {formatINR(character.totalMonthlyOutflow || character.totalFixedExpenses)}
+                </span>
+                <span className="text-[10px] text-slate-500">/mo</span>
+              </div>
+              <span className="text-[8px] text-slate-500 truncate block">
+                Living + {totalEMIs > 0 ? `EMIs (${formatINR(totalEMIs)})` : 'Debt-free'} + Ins.
+              </span>
             </div>
-          )}
-          {totalInsurance > 0 && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Insurance:</span>
-              <span className="text-slate-800 truncate">{formatINR(totalInsurance)}</span>
+
+            {/* Monthly Surplus */}
+            <div className="p-2 sm:p-2.5 bg-emerald-50 border-2 border-emerald-900 rounded shadow-sm">
+              <span className="text-[9px] uppercase font-black tracking-wider text-emerald-900 block">
+                Net Surplus to Goals
+              </span>
+              <div className="flex items-baseline gap-1 pt-0.5">
+                <span className="text-base sm:text-lg font-black text-emerald-700">
+                  +{formatINR(Math.max(0, ((character.monthlyTakeHome || 0) + (character.ventureIncome || 0) + (character.assetMaintenanceState?.spouse?.monthlyTakeHome || 0)) - (character.totalMonthlyOutflow || character.totalFixedExpenses)))}
+                </span>
+                <span className="text-[10px] text-emerald-800 font-bold">/mo</span>
+              </div>
+              <span className="text-[8px] text-emerald-800 font-bold block truncate">
+                Active SIPs: {formatINR(totalSIPs)}/mo · Rest to Bank
+              </span>
             </div>
-          )}
-          {character.activeCourse && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-              <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Course:</span>
-              <span className="text-purple-700 font-black truncate">{formatINR(character.activeCourse.monthlyFee)}/mo</span>
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
-            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Active SIPs:</span>
-            <span className="text-blue-700 font-black truncate">{formatINR(totalSIPs)}/mo</span>
           </div>
         </div>
 
@@ -936,7 +879,9 @@ export default function MainGameScreen() {
                     </h4>
                     <div className="text-xs font-mono text-slate-600">
                       Month {character.activeCourse.monthsCompleted} of {character.activeCourse.totalDurationMonths} · Deduction:{' '}
-                      <strong className="text-purple-900">{formatINR(character.activeCourse.monthlyFee)}/mo</strong>
+                      <strong className="text-purple-900">
+                        {character.activeCourse.isPaidUpfront ? 'Paid Upfront (₹0/mo)' : `${formatINR(character.activeCourse.monthlyFee)}/mo`}
+                      </strong>
                     </div>
                   </div>
 
@@ -1007,7 +952,7 @@ export default function MainGameScreen() {
                 {[
                   ['Gross CTC', formatINR(character.grossMonthlySalary), 'text-emerald-700 font-mono'],
                   ['Take-Home Pay', formatINR(character.monthlyTakeHome), 'text-emerald-700 font-mono'],
-                  ['Course Outflow', character.activeCourse ? `${formatINR(character.activeCourse.monthlyFee)}/mo` : '₹0', 'text-purple-700 font-mono'],
+                  ['Course Outflow', character.activeCourse ? (character.activeCourse.isPaidUpfront ? 'Paid Upfront (₹0/mo)' : `${formatINR(character.activeCourse.monthlyFee)}/mo`) : '₹0', 'text-purple-700 font-mono'],
                   ['Appraisal Cycle', '+5–7% Annual Hike', 'text-slate-800'],
                 ].map(([label, val, color]) => (
                   <div key={label} className="flex justify-between py-1 border-b border-slate-200">
@@ -1167,6 +1112,74 @@ export default function MainGameScreen() {
           </div>
         )}
 
+        {/* ─── Floating Simulation Dock (CRED Thumb Zone) ─── */}
+        <div className="sticky bottom-2 z-30 card-neopop bg-slate-900 text-white p-2.5 sm:p-3 border-2 border-slate-900 shadow-2xl flex items-center justify-between gap-2 sm:gap-4 font-mono text-xs">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={simulation.isPaused ? play : pause}
+              className={`px-3.5 sm:px-5 py-2 font-black tracking-wider uppercase btn-press text-xs rounded transition-all ${
+                simulation.isPaused
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-400'
+                  : 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+              }`}
+            >
+              {simulation.isPaused ? '▶ PLAY' : '⏸ PAUSE'}
+            </button>
+
+            <div className="flex bg-slate-800 border border-slate-700 p-0.5 rounded">
+              {[1, 2, 5].map((spd) => (
+                <button
+                  key={spd}
+                  type="button"
+                  onClick={() => setSpeed(spd)}
+                  className={`px-2 sm:px-2.5 py-1 text-xs font-bold transition-all ${
+                    simulation.gameSpeed === spd
+                      ? 'bg-blue-600 text-white rounded'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {spd}×
+                </button>
+              ))}
+            </div>
+
+            {/* Auto-Vacation quick toggle */}
+            <button
+              type="button"
+              onClick={() => toggleAutoVacation()}
+              title="Toggle automatic annual vacation without stopping the simulation"
+              className={`hidden sm:inline-block px-2.5 py-1 text-[10px] font-bold border border-slate-700 rounded btn-press-sm ${
+                simulation.autoVacation
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {simulation.autoVacation ? '✈️ AUTO: ON' : '✈️ AUTO: OFF'}
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="bg-slate-800 border border-slate-700 px-2.5 py-1 rounded text-right">
+              <span className="text-[8px] text-slate-400 uppercase tracking-wider block">Bank Cash</span>
+              <span className="text-xs sm:text-sm font-black text-white font-mono">
+                {formatINR(character.liquidCash)}
+              </span>
+            </div>
+
+            {/* Voice-Over Tour Demo Button */}
+            <button
+              type="button"
+              onClick={() => setIsVoiceoverTourOpen(true)}
+              className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-[10px] sm:text-xs rounded border border-purple-400 btn-press flex items-center gap-1 shadow-sm shrink-0"
+              title="Listen to Voice-Over Mobile Demo"
+            >
+              <span>🎙️</span>
+              <span className="hidden sm:inline">Demo Tour</span>
+            </button>
+          </div>
+        </div>
+
       </div>
 
       {/* ─── Auto-Pause Modals ─── */}
@@ -1245,6 +1258,44 @@ export default function MainGameScreen() {
           </div>
         </div>
       )}
+
+      {/* ─── Financial Command Drawer (CRED-style Hamburger Menu) ─── */}
+      <FinancialCommandDrawer
+        isOpen={isCommandDrawerOpen}
+        onClose={() => setIsCommandDrawerOpen(false)}
+        character={character}
+        simulation={simulation}
+        setSpeed={setSpeed}
+        toggleAutoVacation={toggleAutoVacation}
+        onOpenUpskilling={() => {
+          pause();
+          setIsUpskillingModalOpen(true);
+        }}
+        onOpenJobMarket={() => {
+          pause();
+          setIsJobMarketModalOpen(true);
+        }}
+        onOpenVenture={() => {
+          pause();
+          setIsVentureModalOpen(true);
+        }}
+        onOpenAllocations={() => {
+          pause();
+          setIsAdjustingAllocations(true);
+        }}
+        onOpenVoiceoverTour={() => setIsVoiceoverTourOpen(true)}
+        onSelectTab={(tabId) => setActiveTab(tabId)}
+      />
+
+      {/* ─── Voice-Over Guided Mobile Tour Modal ─── */}
+      <VoiceoverTourModal
+        isOpen={isVoiceoverTourOpen}
+        onClose={() => setIsVoiceoverTourOpen(false)}
+        character={character}
+        simulation={simulation}
+        goals={goals}
+        netWorth={netWorth}
+      />
 
     </motion.div>
   );
