@@ -62,7 +62,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const totalInsurancePremiums = healthPremium + termPremium;
 
   // Monthly Surplus & Allocations
-  const isMidGame = isModal || (simulation.currentMonthIndex || 0) > 0;
+  const isMidGame = (simulation.currentMonthIndex || 0) > 0;
   const investableSurplus = isMidGame
     ? character.monthlySurplus
     : Math.max(0, character.monthlySurplus - totalInsurancePremiums);

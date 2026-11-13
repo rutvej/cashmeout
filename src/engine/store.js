@@ -25,7 +25,6 @@ import {
   calculateLiquidationPenalty,
   isMarketInCorrection,
   processLiquidationFromGoal,
-  autoContractGoalsSIP,
 } from './compoundingEngine.js';
 import {
   saveActiveGameSession,
@@ -1444,89 +1443,24 @@ export const useGameStore = create((set, get) => ({
   },
 
   // ─── Phase 3: Career & Upskilling Actions ────────────────────────────────
-  enrollInCourse: (courseId, options = {}) => {
-    const { character, goals, simulation } = get();
+  enrollInCourse: (courseId) => {
+    const { character } = get();
     if (!character || character.activeCourse) return false;
 
     const course = UPSKILLING_COURSES.find((c) => c.id === courseId);
     if (!course) return false;
 
-    const paymentMethod = typeof options === 'string' ? options : (options.paymentMethod || 'monthly');
-
-    if (paymentMethod === 'upfront') {
-      const totalCost = course.totalCost || (course.monthlyFee * course.durationMonths);
-      if ((character.liquidCash || 0) < totalCost) {
-        return false; // Insufficient bank cash
-      }
-
-      const activeCourse = {
-        courseId: course.id,
-        courseName: course.name,
-        totalDurationMonths: course.durationMonths,
-        monthsCompleted: 0,
-        monthlyFee: 0,
-        isPaidUpfront: true,
-        totalCost,
-        skillBoostReward: course.skillBoostReward,
-      };
-
-      const nextLiquidCash = (character.liquidCash || 0) - totalCost;
-
-      const updatedJournal = [
-        ...(simulation.decisionJournal || []),
-        {
-          type: 'course_enrolled',
-          courseId: course.id,
-          paymentMethod: 'upfront',
-          amountPaid: totalCost,
-          monthIndex: simulation.currentMonthIndex || 0,
-        },
-      ];
-
-      set((state) => ({
-        character: {
-          ...state.character,
-          activeCourse,
-          liquidCash: nextLiquidCash,
-        },
-        simulation: {
-          ...state.simulation,
-          decisionJournal: updatedJournal,
-        },
-      }));
-      triggerAutoSave(get());
-      return true;
-    }
-
-    // Default: Monthly EMI
-    const totalCost = course.totalCost || (course.monthlyFee * course.durationMonths);
     const activeCourse = {
       courseId: course.id,
       courseName: course.name,
       totalDurationMonths: course.durationMonths,
       monthsCompleted: 0,
       monthlyFee: course.monthlyFee,
-      isPaidUpfront: false,
-      totalCost,
       skillBoostReward: course.skillBoostReward,
     };
 
     const nextOutflow = character.totalMonthlyOutflow + course.monthlyFee;
     const nextSurplus = character.monthlyTakeHome - nextOutflow;
-
-    // Automatically contract/reduce existing SIPs so surplus funds the monthly EMI
-    const updatedGoals = autoContractGoalsSIP(goals, nextSurplus);
-
-    const updatedJournal = [
-      ...(simulation.decisionJournal || []),
-      {
-        type: 'course_enrolled',
-        courseId: course.id,
-        paymentMethod: 'monthly',
-        monthlyFee: course.monthlyFee,
-        monthIndex: simulation.currentMonthIndex || 0,
-      },
-    ];
 
     set((state) => ({
       character: {
@@ -1534,11 +1468,6 @@ export const useGameStore = create((set, get) => ({
         activeCourse,
         totalMonthlyOutflow: nextOutflow,
         monthlySurplus: nextSurplus,
-      },
-      goals: updatedGoals,
-      simulation: {
-        ...state.simulation,
-        decisionJournal: updatedJournal,
       },
     }));
     triggerAutoSave(get());
@@ -1549,20 +1478,6 @@ export const useGameStore = create((set, get) => ({
     const { character } = get();
     if (!character || !character.activeCourse) return;
 
-    const isUpfront = character.activeCourse.isPaidUpfront;
-    let liquidCash = character.liquidCash || 0;
-
-    if (isUpfront) {
-      // Prorated refund for uncompleted months if paid upfront
-      const remainingMonths = Math.max(
-        0,
-        character.activeCourse.totalDurationMonths - (character.activeCourse.monthsCompleted || 0)
-      );
-      const totalMonths = character.activeCourse.totalDurationMonths || 1;
-      const refund = Math.round((character.activeCourse.totalCost || 0) * (remainingMonths / totalMonths));
-      liquidCash += refund;
-    }
-
     const fee = character.activeCourse.monthlyFee || 0;
     const nextOutflow = Math.max(0, character.totalMonthlyOutflow - fee);
     const nextSurplus = character.monthlyTakeHome - nextOutflow;
@@ -1570,7 +1485,6 @@ export const useGameStore = create((set, get) => ({
     set((state) => ({
       character: {
         ...state.character,
-        liquidCash,
         activeCourse: null,
         totalMonthlyOutflow: nextOutflow,
         monthlySurplus: nextSurplus,
@@ -1784,7 +1698,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   // Phase 11: Convenience aliases & persistence actions
-  enrollCourse: (courseId, options) => get().enrollInCourse(courseId, options),
+  enrollCourse: (courseId) => get().enrollInCourse(courseId),
   celebrateWedding: (spouseProfile) => get().confirmWedding(spouseProfile),
   buyCar: () => get().completeCarPurchase(),
 

@@ -17,8 +17,8 @@ export default function UpskillingModal({ onClose }) {
   const surplus = character.monthlySurplus || 0;
   const liquidCash = character.liquidCash || 0;
 
-  const handleEnroll = (courseId, paymentMethod = 'monthly') => {
-    const success = enrollInCourse(courseId, { paymentMethod });
+  const handleEnroll = (courseId) => {
+    const success = enrollInCourse(courseId);
     if (success) {
       setSelectedCourseId(courseId);
     }
@@ -104,9 +104,7 @@ export default function UpskillingModal({ onClose }) {
                 </h4>
                 <div className="text-xs font-mono text-slate-600">
                   Month {activeCourse.monthsCompleted} of {activeCourse.totalDurationMonths} · Outflow:{' '}
-                  <strong>
-                    {activeCourse.isPaidUpfront ? 'Paid in Full (₹0/mo)' : `${formatINR(activeCourse.monthlyFee)}/mo`}
-                  </strong>
+                  <strong>{formatINR(activeCourse.monthlyFee)}/mo</strong>
                 </div>
               </div>
 
@@ -171,7 +169,6 @@ export default function UpskillingModal({ onClose }) {
               const hasOtherActive = activeCourse && !isCurrentlyEnrolled;
               const hasCompleted = character.completedCourses?.includes(course.id);
               const isAffordable = surplus >= course.monthlyFee;
-              const canPayUpfront = liquidCash >= course.totalCost;
 
               return (
                 <div
@@ -217,84 +214,31 @@ export default function UpskillingModal({ onClose }) {
                       </div>
                     </div>
 
-                    <div className="shrink-0 flex flex-col sm:items-end justify-center gap-1.5 pt-2 sm:pt-0 w-full sm:w-auto">
+                    <div className="shrink-0 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 pt-1 sm:pt-0">
                       {isCurrentlyEnrolled ? (
-                        <div className="text-left sm:text-right">
-                          <span className="px-3 py-1.5 bg-blue-600 text-white text-xs font-mono font-bold tracking-wider uppercase border-2 border-slate-900 inline-block">
-                            Enrolled
-                          </span>
-                          <span className="text-[10px] font-mono text-blue-900 font-bold block pt-1">
-                            {activeCourse?.isPaidUpfront ? '💵 Paid in full from bank' : `🗓️ ${formatINR(activeCourse?.monthlyFee)}/mo EMI`}
-                          </span>
-                        </div>
-                      ) : hasOtherActive ? (
+                        <span className="px-3 py-1.5 bg-blue-600 text-white text-xs font-mono font-bold tracking-wider uppercase border-2 border-slate-900">
+                          Enrolled
+                        </span>
+                      ) : (
                         <button
                           type="button"
-                          disabled
-                          className="px-4 py-2 text-xs font-mono font-bold tracking-wider uppercase bg-slate-200 text-slate-400 cursor-not-allowed border-2 border-slate-400"
+                          onClick={() => handleEnroll(course.id)}
+                          disabled={hasOtherActive}
+                          className={`px-4 py-2 text-xs font-mono font-bold tracking-wider uppercase btn-press border-2 border-slate-900 transition-all ${
+                            hasOtherActive
+                              ? 'bg-slate-200 text-slate-400 cursor-not-allowed border-slate-400'
+                              : isAffordable
+                              ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                              : 'bg-amber-400 hover:bg-amber-500 text-slate-900'
+                          }`}
                         >
-                          Course in Progress
+                          {hasOtherActive ? 'Course in Progress' : 'Enroll Now'}
                         </button>
-                      ) : (
-                        <div className="flex flex-col sm:items-end gap-1.5 w-full">
-                          {/* Action Buttons Row */}
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 w-full">
-                            {/* Option 1: Monthly EMI (Auto-contracts SIPs from surplus) */}
-                            <button
-                              type="button"
-                              onClick={() => handleEnroll(course.id, 'monthly')}
-                              className={`px-3.5 py-1.5 text-xs font-mono font-bold tracking-wider uppercase btn-press border-2 border-slate-900 transition-all ${
-                                isAffordable
-                                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
-                                  : 'bg-amber-400 hover:bg-amber-500 text-slate-900'
-                              }`}
-                              title="Enroll with monthly installment. Automatically reduces SIPs from monthly surplus."
-                            >
-                              Enroll Now ({formatINR(course.monthlyFee)}/mo)
-                            </button>
-
-                            {/* Option 2: Pay Upfront with Bank Cash */}
-                            <button
-                              type="button"
-                              onClick={() => handleEnroll(course.id, 'upfront')}
-                              disabled={!canPayUpfront}
-                              className={`px-3 py-1.5 text-xs font-mono font-bold tracking-wider uppercase btn-press border-2 border-slate-900 transition-all flex items-center justify-center gap-1 ${
-                                canPayUpfront
-                                  ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                                  : 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed'
-                              }`}
-                              title={
-                                canPayUpfront
-                                  ? `Pay ₹${course.totalCost.toLocaleString('en-IN')} upfront from bank cash. Zero monthly deductions.`
-                                  : `Insufficient bank balance (Need ₹${course.totalCost.toLocaleString('en-IN')}, Bank has ₹${liquidCash.toLocaleString('en-IN')})`
-                              }
-                            >
-                              <span>💵 Pay Upfront ({formatINR(course.totalCost)})</span>
-                            </button>
-                          </div>
-
-                          {/* Helper footnotes */}
-                          <div className="text-[10px] font-mono text-left sm:text-right space-y-0.5">
-                            {isAffordable ? (
-                              <span className="text-emerald-700 font-bold block">
-                                ✓ Auto-adjusts SIPs from monthly surplus
-                              </span>
-                            ) : (
-                              <span className="text-amber-700 font-bold block">
-                                ⚠️ Low surplus: Auto-adjusts SIPs to ₹0; deficit draws from bank
-                              </span>
-                            )}
-                            {canPayUpfront ? (
-                              <span className="text-blue-700 font-medium block">
-                                💡 Or use bank cash upfront to keep monthly surplus &amp; SIPs untouched
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 block">
-                                Bank cash: {formatINR(liquidCash)} / {formatINR(course.totalCost)} needed for upfront
-                              </span>
-                            )}
-                          </div>
-                        </div>
+                      )}
+                      {!isAffordable && !hasOtherActive && !isCurrentlyEnrolled && (
+                        <span className="text-[9px] font-mono text-amber-700 font-bold">
+                          ⚠️ Exceeds surplus
+                        </span>
                       )}
                     </div>
                   </div>
