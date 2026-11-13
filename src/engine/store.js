@@ -21,6 +21,11 @@ import {
   EVICTION_SHOCK_RELOCATION_FEE,
   EVICTION_SHOCK_RENT_HIKE,
 } from './realEstateEngine.js';
+import {
+  calculateLiquidationPenalty,
+  isMarketInCorrection,
+  processLiquidationFromGoal,
+} from './compoundingEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -554,6 +559,8 @@ export const useGameStore = create((set, get) => ({
     let updatedLoans = [...(character.loans || [])];
     let updatedLiquidCash = character.liquidCash;
     let updatedGoals = goals.map((g) => ({ ...g }));
+    let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+    let marketLossesRealized = character.marketLossesRealized || 0;
 
     if (shortfall > 0) {
       if (resolutionType === 'loan') {
@@ -577,11 +584,17 @@ export const useGameStore = create((set, get) => ({
           updatedLiquidCash = 0;
           const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
           if (emgIndex >= 0) {
-            updatedGoals[emgIndex].currentAmount = Math.max(
-              0,
-              (updatedGoals[emgIndex].currentAmount || 0) - remainingFromEmergency
-            );
-            updatedGoals[emgIndex].status = 'refill_needed';
+            const emgGoal = updatedGoals[emgIndex];
+            const res = processLiquidationFromGoal(emgGoal, remainingFromEmergency, simulation.currentMonthIndex, character.seed);
+            updatedGoals[emgIndex] = {
+              ...res.updatedGoal,
+              status: 'refill_needed',
+            };
+            penaltiesPaidFD += (res.penalty || 0);
+            marketLossesRealized += (res.realizedLoss || 0);
+            if (res.unfundedPenalty > 0) {
+              updatedLiquidCash = Math.max(0, updatedLiquidCash - res.unfundedPenalty);
+            }
           }
         }
       }
@@ -621,6 +634,8 @@ export const useGameStore = create((set, get) => ({
         totalLoanEMIs: nextTotalLoanEMIs,
         totalMonthlyOutflow: nextTotalMonthlyOutflow,
         monthlySurplus: character.monthlyTakeHome - nextTotalMonthlyOutflow,
+        penaltiesPaidFD,
+        marketLossesRealized,
       },
       goals: updatedGoals,
       simulation: {
@@ -649,6 +664,8 @@ export const useGameStore = create((set, get) => ({
     let updatedLoans = [...(character.loans || [])];
     let updatedLiquidCash = character.liquidCash;
     let updatedGoals = goals.map((g) => ({ ...g }));
+    let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+    let marketLossesRealized = character.marketLossesRealized || 0;
     const currentAge = simulation.currentAge;
 
     if (resolutionType === 'postpone') {
@@ -673,11 +690,17 @@ export const useGameStore = create((set, get) => ({
       let drawnFromEmergency = 0;
       const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
       if (emgIndex >= 0 && remainingShortfall > 0) {
-        const emgBal = updatedGoals[emgIndex].currentAmount || 0;
-        drawnFromEmergency = Math.min(emgBal, remainingShortfall);
-        updatedGoals[emgIndex].currentAmount = Math.max(0, emgBal - drawnFromEmergency);
-        if (drawnFromEmergency > 0) {
-          updatedGoals[emgIndex].status = 'refill_needed';
+        const emgGoal = updatedGoals[emgIndex];
+        const res = processLiquidationFromGoal(emgGoal, remainingShortfall, simulation.currentMonthIndex, character.seed);
+        drawnFromEmergency = res.drawnAmount;
+        updatedGoals[emgIndex] = {
+          ...res.updatedGoal,
+          status: drawnFromEmergency > 0 ? 'refill_needed' : updatedGoals[emgIndex].status,
+        };
+        penaltiesPaidFD += (res.penalty || 0);
+        marketLossesRealized += (res.realizedLoss || 0);
+        if (res.unfundedPenalty > 0) {
+          updatedLiquidCash = Math.max(0, updatedLiquidCash - res.unfundedPenalty);
         }
       }
       // Milestone is 100% completed
@@ -745,6 +768,8 @@ export const useGameStore = create((set, get) => ({
       totalFixedExpenses: character.totalFixedExpenses,
       totalMonthlyOutflow: character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee,
       monthlySurplus: (character.monthlyTakeHome || 0) + (character.spouseTakeHome || 0) + (character.ventureIncome || 0) - (character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee),
+      penaltiesPaidFD,
+      marketLossesRealized,
     };
 
     let finalGoals = updatedGoals;
@@ -1077,6 +1102,8 @@ export const useGameStore = create((set, get) => ({
 
       let liquidCash = character.liquidCash;
       let updatedGoals = goals.map((g) => ({ ...g }));
+      let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+      let marketLossesRealized = character.marketLossesRealized || 0;
 
       const fromCash = Math.min(liquidCash, shortfall);
       liquidCash -= fromCash;
@@ -1085,13 +1112,17 @@ export const useGameStore = create((set, get) => ({
       if (remShortfall > 0) {
         const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
         if (emgIdx >= 0) {
-          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
-          const fromEmg = Math.min(emgBal, remShortfall);
+          const emgGoal = updatedGoals[emgIdx];
+          const res = processLiquidationFromGoal(emgGoal, remShortfall, simulation.currentMonthIndex, character.seed);
           updatedGoals[emgIdx] = {
-            ...updatedGoals[emgIdx],
-            currentAmount: emgBal - fromEmg,
+            ...res.updatedGoal,
             status: 'refill_needed',
           };
+          penaltiesPaidFD += (res.penalty || 0);
+          marketLossesRealized += (res.realizedLoss || 0);
+          if (res.unfundedPenalty > 0) {
+            liquidCash = Math.max(0, liquidCash - res.unfundedPenalty);
+          }
         }
       }
 
@@ -1100,7 +1131,7 @@ export const useGameStore = create((set, get) => ({
       );
 
       set({
-        character: { ...character, liquidCash },
+        character: { ...character, liquidCash, penaltiesPaidFD, marketLossesRealized },
         goals: updatedGoals,
       });
 
@@ -1140,6 +1171,8 @@ export const useGameStore = create((set, get) => ({
 
       let liquidCash = character.liquidCash;
       let updatedGoals = goals.map((g) => ({ ...g }));
+      let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+      let marketLossesRealized = character.marketLossesRealized || 0;
 
       const fromCash = Math.min(liquidCash, shortfall);
       liquidCash -= fromCash;
@@ -1148,18 +1181,22 @@ export const useGameStore = create((set, get) => ({
       if (remShortfall > 0) {
         const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
         if (emgIdx >= 0) {
-          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
-          const fromEmg = Math.min(emgBal, remShortfall);
+          const emgGoal = updatedGoals[emgIdx];
+          const res = processLiquidationFromGoal(emgGoal, remShortfall, simulation.currentMonthIndex, character.seed);
           updatedGoals[emgIdx] = {
-            ...updatedGoals[emgIdx],
-            currentAmount: emgBal - fromEmg,
+            ...res.updatedGoal,
             status: 'refill_needed',
           };
+          penaltiesPaidFD += (res.penalty || 0);
+          marketLossesRealized += (res.realizedLoss || 0);
+          if (res.unfundedPenalty > 0) {
+            liquidCash = Math.max(0, liquidCash - res.unfundedPenalty);
+          }
         }
       }
 
       set({
-        character: { ...character, liquidCash },
+        character: { ...character, liquidCash, penaltiesPaidFD, marketLossesRealized },
         goals: updatedGoals,
       });
 
@@ -1175,6 +1212,8 @@ export const useGameStore = create((set, get) => ({
       const relocationFee = EVICTION_SHOCK_RELOCATION_FEE;
       let liquidCash = character.liquidCash;
       let updatedGoals = goals.map((g) => ({ ...g }));
+      let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+      let marketLossesRealized = character.marketLossesRealized || 0;
 
       const fromCash = Math.min(liquidCash, relocationFee);
       liquidCash -= fromCash;
@@ -1183,13 +1222,17 @@ export const useGameStore = create((set, get) => ({
       if (rem > 0) {
         const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
         if (emgIdx >= 0) {
-          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
-          const fromEmg = Math.min(emgBal, rem);
+          const emgGoal = updatedGoals[emgIdx];
+          const res = processLiquidationFromGoal(emgGoal, rem, simulation.currentMonthIndex, character.seed);
           updatedGoals[emgIdx] = {
-            ...updatedGoals[emgIdx],
-            currentAmount: emgBal - fromEmg,
+            ...res.updatedGoal,
             status: 'refill_needed',
           };
+          penaltiesPaidFD += (res.penalty || 0);
+          marketLossesRealized += (res.realizedLoss || 0);
+          if (res.unfundedPenalty > 0) {
+            liquidCash = Math.max(0, liquidCash - res.unfundedPenalty);
+          }
         }
       }
 
@@ -1208,6 +1251,8 @@ export const useGameStore = create((set, get) => ({
         totalMonthlyOutflow: updatedMonthlyOutflow,
         monthlySurplus: updatedMonthlySurplus,
         lastShockMonthIndex: simulation.currentMonthIndex,
+        penaltiesPaidFD,
+        marketLossesRealized,
       };
 
       const queue = simulation.modalQueue || [];
@@ -1428,6 +1473,33 @@ export const useGameStore = create((set, get) => ({
         loans: updatedLoans,
       },
     }));
+  },
+
+  liquidateGoalFunds: ({ goalId, amount }) => {
+    const { character, goals, simulation } = get();
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal || !amount || amount <= 0) return { drawnAmount: 0, penalty: 0, realizedLoss: 0 };
+
+    const res = processLiquidationFromGoal(goal, amount, simulation.currentMonthIndex, character.seed);
+    const updatedGoals = goals.map((g) => (g.id === goalId ? res.updatedGoal : g));
+    let liquidCash = (character.liquidCash || 0) + res.drawnAmount;
+    if (res.unfundedPenalty > 0) {
+      liquidCash = Math.max(0, liquidCash - res.unfundedPenalty);
+    }
+    const penaltiesPaidFD = (character.penaltiesPaidFD || 0) + res.penalty;
+    const marketLossesRealized = (character.marketLossesRealized || 0) + res.realizedLoss;
+
+    set({
+      character: {
+        ...character,
+        liquidCash,
+        penaltiesPaidFD,
+        marketLossesRealized,
+      },
+      goals: updatedGoals,
+    });
+
+    return res;
   },
 
   navigateTo: (screen) => set({ currentScreen: screen }),

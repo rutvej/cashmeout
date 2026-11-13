@@ -206,6 +206,9 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
     // Phase 5: Life Event Outflows & Asset Maintenance
     assetMaintenanceState: getInitialAssetMaintenanceState(),
     spouseTakeHome: 0,
+    // Phase 8: Investment Risk & Penalty Tracking
+    penaltiesPaidFD: 0,
+    marketLossesRealized: 0,
     // Phase 1: Employment & Shock tracking
     employmentStatus: 'employed',
     unemploymentDurationMonths: 0,

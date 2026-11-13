@@ -1,4 +1,5 @@
 // Investment instruments, compounding math, and waterfall engine
+import { createPRNG } from './prng.js';
 
 export const INSTRUMENTS = {
   savings: {
@@ -210,4 +211,108 @@ export function calculateEffectiveSIPs(goals) {
   }
 
   return effective;
+}
+
+/**
+ * Calculates liquidation penalty when breaking an asset early.
+ * - Fixed Deposit (FD): 1.5% penalty on the withdrawn amount.
+ * - Liquid Savings, Gold, Equity: 0% penalty.
+ */
+export function calculateLiquidationPenalty(instrumentId, withdrawalAmount) {
+  const amt = Number(withdrawalAmount) || 0;
+  if (amt <= 0) return 0;
+  if (instrumentId === 'fd') {
+    return Math.round(amt * 0.015);
+  }
+  return 0;
+}
+
+/**
+ * Calculates the equity macro market cycle multiplier M(t) with deterministic monthly noise.
+ * M(t) = 1.0 + 0.08 * Math.sin((2 * Math.PI * monthIndex) / 72) + noise_equity
+ */
+export function getEquityMarketMultiplier(monthIndex, seed = 'default') {
+  const m = Number(monthIndex) || 0;
+  const rng = createPRNG(`${seed}_equity_${m}`);
+  const noise_equity = (rng() * 2 - 1) * 1.05;
+  return 1.0 + 0.08 * Math.sin((2 * Math.PI * m) / 72) + noise_equity;
+}
+
+/**
+ * Checks whether equity market is in correction (M(t) < 0.95).
+ */
+export function isMarketInCorrection(monthIndex, seed = 'default') {
+  return getEquityMarketMultiplier(monthIndex, seed) < 0.95;
+}
+
+/**
+ * Calculates monthly return rate for an instrument taking into account PRNG seed and month.
+ * - savings: 0.04 / 12 (flat, 0 volatility, 100% liquid safe)
+ * - fd: 0.07 / 12 (flat guaranteed return)
+ * - gold: (0.085 / 12) + noise where noise is bounded within +- 0.008
+ * - equity: Models gentle 6-year macro cycle + bounded monthly noise around 12% p.a. mean,
+ *   strictly bounded between -0.015 (-1.5%) and +0.025 (+2.5%), preserving ~12% p.a. CAGR.
+ */
+export function getMonthlyInstrumentReturnRate(instrumentId, monthIndex = 0, seed = 'default') {
+  const m = Number(monthIndex) || 0;
+
+  if (instrumentId === 'savings') {
+    return 0.04 / 12;
+  }
+
+  if (instrumentId === 'fd') {
+    return 0.07 / 12;
+  }
+
+  if (instrumentId === 'gold') {
+    const rng = createPRNG(`${seed}_gold_${m}`);
+    const noise = (rng() * 2 - 1) * 0.008;
+    return (0.085 / 12) + noise;
+  }
+
+  if (instrumentId === 'equity') {
+    const M_t = getEquityMarketMultiplier(m, seed);
+    const rawRate = (0.12 / 12) * M_t;
+    return Math.max(-0.015, Math.min(0.025, rawRate));
+  }
+
+  // Fallback to INSTRUMENTS registry or savings
+  const inst = INSTRUMENTS[instrumentId];
+  return inst ? inst.monthlyRate : 0.04 / 12;
+}
+
+/**
+ * Processes a liquidation / withdrawal from a goal's balance, applying FD penalty or equity market loss if applicable.
+ */
+export function processLiquidationFromGoal(goal, requestedAmount, monthIndex = 0, seed = 'default') {
+  const currentAmount = goal?.currentAmount || 0;
+  const drawnAmount = Math.min(currentAmount, Math.max(0, Number(requestedAmount) || 0));
+  const instrumentId = goal?.instrumentId || 'savings';
+
+  const penalty = calculateLiquidationPenalty(instrumentId, drawnAmount);
+
+  let realizedLoss = 0;
+  if (instrumentId === 'equity' && isMarketInCorrection(monthIndex, seed)) {
+    const M_t = getEquityMarketMultiplier(monthIndex, seed);
+    const dipRatio = Math.max(0.05, 1.0 - M_t);
+    realizedLoss = Math.round(drawnAmount * dipRatio);
+  }
+
+  const totalDeduction = drawnAmount + penalty;
+  let remainingInGoal = Math.max(0, currentAmount - totalDeduction);
+  let unfundedPenalty = 0;
+  if (totalDeduction > currentAmount) {
+    unfundedPenalty = totalDeduction - currentAmount;
+  }
+
+  return {
+    drawnAmount,
+    penalty,
+    realizedLoss,
+    unfundedPenalty,
+    updatedGoal: {
+      ...goal,
+      currentAmount: remainingInGoal,
+    },
+  };
 }

@@ -1,5 +1,12 @@
 // Pure deterministic simulation loop engine
-import { INSTRUMENTS, calculateEffectiveSIPs } from './compoundingEngine.js';
+import {
+  INSTRUMENTS,
+  calculateEffectiveSIPs,
+  getMonthlyInstrumentReturnRate,
+  calculateLiquidationPenalty,
+  isMarketInCorrection,
+  processLiquidationFromGoal,
+} from './compoundingEngine.js';
 import { createPRNG } from './prng.js';
 import { calculateVentureMonthlyCashFlow } from './ventureEngine.js';
 import { generateSpouseProfile, getInitialAssetMaintenanceState } from './lifeEventsEngine.js';
@@ -133,17 +140,27 @@ function rollShockEvent(seed, monthIndex, character, insurance) {
 
 /**
  * Applies a shock's financial impact to liquidCash and emergency fund.
- * Returns { liquidCash, updatedGoals, drawnFromCash, drawnFromEmergency, unfundedDeficit }.
+ * Returns { liquidCash, updatedGoals, drawnFromCash, drawnFromEmergency, unfundedDeficit, penaltiesPaidFD, marketLossesRealized }.
  */
-function applyShockCost(netOutflow, liquidCash, updatedGoals) {
+function applyShockCost(netOutflow, liquidCash, updatedGoals, monthIndex = 0, seed = 'default') {
   let drawnFromCash = 0;
   let drawnFromEmergency = 0;
   let unfundedDeficit = 0;
+  let penaltiesPaidFD = 0;
+  let marketLossesRealized = 0;
   let lc = liquidCash;
   let goals = updatedGoals.map(g => ({ ...g }));
 
   if (netOutflow <= 0) {
-    return { liquidCash: lc, updatedGoals: goals, drawnFromCash, drawnFromEmergency, unfundedDeficit };
+    return {
+      liquidCash: lc,
+      updatedGoals: goals,
+      drawnFromCash,
+      drawnFromEmergency,
+      unfundedDeficit,
+      penaltiesPaidFD,
+      marketLossesRealized,
+    };
   }
 
   // First draw from liquid cash
@@ -158,29 +175,39 @@ function applyShockCost(netOutflow, liquidCash, updatedGoals) {
     // Draw remainder from emergency fund
     const emgIdx = goals.findIndex(g => g.id === 'goal_emergency');
     if (emgIdx >= 0) {
-      const emgBalance = goals[emgIdx].currentAmount || 0;
+      const emgGoal = goals[emgIdx];
+      const emgBalance = emgGoal.currentAmount || 0;
       if (emgBalance >= remaining) {
         drawnFromEmergency = remaining;
-        goals[emgIdx] = {
-          ...goals[emgIdx],
-          currentAmount: emgBalance - remaining,
-          status: 'refill_needed',
-        };
       } else {
         drawnFromEmergency = emgBalance;
         unfundedDeficit = remaining - emgBalance;
-        goals[emgIdx] = {
-          ...goals[emgIdx],
-          currentAmount: 0,
-          status: 'refill_needed',
-        };
+      }
+
+      const res = processLiquidationFromGoal(emgGoal, drawnFromEmergency, monthIndex, seed);
+      goals[emgIdx] = {
+        ...res.updatedGoal,
+        status: 'refill_needed',
+      };
+      penaltiesPaidFD += res.penalty;
+      marketLossesRealized += res.realizedLoss;
+      if (res.unfundedPenalty > 0) {
+        lc = Math.max(0, lc - res.unfundedPenalty);
       }
     } else {
       unfundedDeficit = remaining;
     }
   }
 
-  return { liquidCash: lc, updatedGoals: goals, drawnFromCash, drawnFromEmergency, unfundedDeficit };
+  return {
+    liquidCash: lc,
+    updatedGoals: goals,
+    drawnFromCash,
+    drawnFromEmergency,
+    unfundedDeficit,
+    penaltiesPaidFD,
+    marketLossesRealized,
+  };
 }
 
 /**
@@ -223,6 +250,8 @@ export function tickMonthlySimulation(state) {
   let isPaused = simulation.isPaused;
   let modalQueue = [...(simulation.modalQueue || [])];
   let liquidCash = character.liquidCash;
+  let penaltiesPaidFD = character.penaltiesPaidFD || 0;
+  let marketLossesRealized = character.marketLossesRealized || 0;
 
   // Phase 3: Active Course & Career Ladder tracking
   let activeCourse = character.activeCourse ? { ...character.activeCourse } : null;
@@ -333,14 +362,18 @@ export function tickMonthlySimulation(state) {
           emergencyFundTarget: emgGoal?.targetAmount || 0,
         };
       } else {
-        const shockResult = applyShockCost(shockPayload.netOutflow, liquidCash, updatedGoals);
+        const shockResult = applyShockCost(shockPayload.netOutflow, liquidCash, updatedGoals, nextMonthIndex, character.seed);
         liquidCash = shockResult.liquidCash;
         updatedGoals = shockResult.updatedGoals;
+        penaltiesPaidFD += (shockResult.penaltiesPaidFD || 0);
+        marketLossesRealized += (shockResult.marketLossesRealized || 0);
         modalData = {
           ...modalData,
           drawnFromCash: shockResult.drawnFromCash,
           drawnFromEmergency: shockResult.drawnFromEmergency,
           unfundedDeficit: shockResult.unfundedDeficit,
+          penaltiesPaidFD: shockResult.penaltiesPaidFD || 0,
+          marketLossesRealized: shockResult.marketLossesRealized || 0,
         };
       }
 
@@ -495,11 +528,19 @@ export function tickMonthlySimulation(state) {
       // Draw from Emergency Fund
       const emgIndex = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
       if (emgIndex >= 0) {
-        updatedGoals[emgIndex].currentAmount = Math.max(
-          0,
-          (updatedGoals[emgIndex].currentAmount || 0) - remainingDeficit
-        );
-        updatedGoals[emgIndex].status = 'refill_needed';
+        const emgGoal = updatedGoals[emgIndex];
+        const emgBal = emgGoal.currentAmount || 0;
+        const drawn = Math.min(emgBal, remainingDeficit);
+        const res = processLiquidationFromGoal(emgGoal, drawn, nextMonthIndex, character.seed);
+        updatedGoals[emgIndex] = {
+          ...res.updatedGoal,
+          status: 'refill_needed',
+        };
+        penaltiesPaidFD += (res.penalty || 0);
+        marketLossesRealized += (res.realizedLoss || 0);
+        if (res.unfundedPenalty > 0) {
+          liquidCash = Math.max(0, liquidCash - res.unfundedPenalty);
+        }
       }
     }
     monthlySurplus = 0;
@@ -690,12 +731,12 @@ export function tickMonthlySimulation(state) {
     }
 
     const inst = INSTRUMENTS[g.instrumentId] || INSTRUMENTS.savings;
-    const monthlyRate = inst.monthlyRate;
+    const monthlyRate = getMonthlyInstrumentReturnRate(g.instrumentId, nextMonthIndex, character.seed);
     const balance = g.currentAmount || 0;
     const target = g.targetAmount || 1;
     const growth = Math.round(balance * monthlyRate);
 
-    let newBalance = balance + growth;
+    let newBalance = Math.max(0, balance + growth);
     let excessGrowth = 0;
     let status = g.status;
 
@@ -919,6 +960,8 @@ export function tickMonthlySimulation(state) {
     homePropertyAssetValue: currentHomeValue,
     lastShockMonthIndex,
     lastJobLossMonthIndex,
+    penaltiesPaidFD,
+    marketLossesRealized,
   };
 
   return {

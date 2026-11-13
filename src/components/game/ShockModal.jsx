@@ -301,6 +301,16 @@ export default function ShockModal({ data, onReviewAllocations }) {
                     ⚠️ Buffer below target — SIP will auto-refill before redirecting to other goals.
                   </p>
                 )}
+                {data?.penaltiesPaidFD > 0 && (
+                  <p className="text-[10px] text-amber-900 font-bold pt-1 bg-amber-100 p-1 border border-amber-400">
+                    ⚠️ Premature FD Penalty: ₹{data.penaltiesPaidFD.toLocaleString('en-IN')} (1.5%) deducted for breaking Fixed Deposit early.
+                  </p>
+                )}
+                {data?.marketLossesRealized > 0 && (
+                  <p className="text-[10px] text-rose-900 font-bold pt-1 bg-rose-100 p-1 border border-rose-400">
+                    ⚠️ Forced Equity Liquidation: Crystallized ₹{data.marketLossesRealized.toLocaleString('en-IN')} market loss during a correction dip.
+                  </p>
+                )}
               </div>
             </div>
           )}
