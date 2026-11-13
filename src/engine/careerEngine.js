@@ -289,3 +289,73 @@ export function evaluateJobApplication(job, character, monthIndex = 0) {
     roll: Number(roll.toFixed(3)),
   };
 }
+
+/**
+ * Calculates dynamic annual career appraisal for employed characters.
+ * Handles tenure stagnation (>=3 years without job hopping), recent upskilling boosts,
+ * and deterministic variable raises (freeze 0-2%, normal 4-7%, boom 10-16%).
+ *
+ * @param {object} character - Character object containing tenure and course history
+ * @param {number} monthIndex - Simulation month index (e.g. 12, 24, 36)
+ * @param {string} seed - PRNG seed for deterministic outcome
+ * @returns {{ hikeRate: number, category: 'freeze' | 'normal' | 'boom', headline: string, reason: string, isStagnated: boolean }}
+ */
+export function calculateAnnualAppraisal(character, monthIndex = 0, seed = 'default') {
+  const actualSeed = seed !== 'default' && seed ? seed : (character?.seed || 'default');
+  const tenureAtCurrentCompany = character?.tenureYearsAtCurrentCompany || 0;
+  const isStagnated = tenureAtCurrentCompany >= 3;
+  const monthsSinceLastCourse = character?.monthsSinceLastCourseCompletion ?? 999;
+  const hasUpskilledRecently = monthsSinceLastCourse <= 24;
+
+  const rng = createPRNG(`${actualSeed}_appraisal_m${monthIndex}`);
+  const roll = rng();
+
+  // If stagnated at same employer for 3+ years: 70% chance of freeze/minimal raise (0.5-2%)
+  if (isStagnated && roll < 0.70) {
+    const hikeRate = Number((0.005 + rng() * 0.015).toFixed(3)); // 0.5% to 2.0%
+    return {
+      hikeRate,
+      category: 'freeze',
+      headline: 'Company Salary Freeze / Minimal Raise',
+      reason: 'Tenure Stagnation: Staying at the same company without switching has plateaued your pay.',
+      isStagnated: true,
+    };
+  }
+
+  // Upskilling boost: increases probability of high appraisal
+  const boomThreshold = hasUpskilledRecently ? 0.35 : 0.20;
+  const freezeThreshold = isStagnated ? 0.35 : 0.15;
+
+  if (roll < freezeThreshold) {
+    // 0% to 2% (Freeze / Modest)
+    const hikeRate = Number((0.00 + rng() * 0.02).toFixed(3));
+    return {
+      hikeRate,
+      category: 'freeze',
+      headline: 'Modest Raise / Cost-of-Living Adjustment',
+      reason: 'Company-wide budget tightening. Market rates are significantly higher on the Job Market!',
+      isStagnated: Boolean(isStagnated),
+    };
+  } else if (roll < freezeThreshold + (1.0 - freezeThreshold - boomThreshold)) {
+    // 4% to 7% (Normal)
+    const hikeRate = Number((0.04 + rng() * 0.03).toFixed(3));
+    return {
+      hikeRate,
+      category: 'normal',
+      headline: 'Standard Performance Appraisal',
+      reason: 'Solid corporate contribution meeting standard expectations.',
+      isStagnated: Boolean(isStagnated),
+    };
+  } else {
+    // 10% to 16% (High / Boom)
+    const hikeRate = Number((0.10 + rng() * 0.06).toFixed(3));
+    return {
+      hikeRate,
+      category: 'boom',
+      headline: 'Top-Tier Performance Hike & Bonus',
+      reason: 'Outstanding contribution and high skill execution rewarded with top-bracket appraisal!',
+      isStagnated: false,
+    };
+  }
+}
+

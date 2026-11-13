@@ -10,6 +10,7 @@ import {
 import { createPRNG } from './prng.js';
 import { calculateVentureMonthlyCashFlow } from './ventureEngine.js';
 import { generateSpouseProfile, getInitialAssetMaintenanceState } from './lifeEventsEngine.js';
+import { calculateAnnualAppraisal } from './careerEngine.js';
 
 // ─── Phase 1: Shock resolution helper ───────────────────────────────────────
 
@@ -253,10 +254,12 @@ export function tickMonthlySimulation(state) {
   let penaltiesPaidFD = character.penaltiesPaidFD || 0;
   let marketLossesRealized = character.marketLossesRealized || 0;
 
-  // Phase 3: Active Course & Career Ladder tracking
+  // Phase 3 & 9: Active Course & Career Ladder tracking
   let activeCourse = character.activeCourse ? { ...character.activeCourse } : null;
   let skillLevel = character.skillLevel ?? 1.2;
   let completedCourses = [...(character.completedCourses || [])];
+  let tenureYearsAtCurrentCompany = character.tenureYearsAtCurrentCompany || 0;
+  let monthsSinceLastCourseCompletion = character.monthsSinceLastCourseCompletion ?? 999;
   const courseFee = activeCourse ? activeCourse.monthlyFee : 0;
 
   // ─── 1. Unemployment State Tracking (No Automatic Rehire) ────────────────
@@ -389,12 +392,25 @@ export function tickMonthlySimulation(state) {
   // ─── 5. Annual Salary Appraisal Check (Evaluated after shock roll) ────────
   // CRITICAL RULE: If currently unemployed or experienced a job loss within the past 12 months, NO HIKE!
   if (isAnnualAnniversary) {
+    // Phase 9: Increment tenure years at current firm and months since last completed course
+    tenureYearsAtCurrentCompany = (tenureYearsAtCurrentCompany || 0) + 1;
+    monthsSinceLastCourseCompletion = (monthsSinceLastCourseCompletion || 0) + 12;
+
     const isUnemployedOrRecentlyLaidOff =
       employmentStatus === 'unemployed' ||
       (lastJobLossMonthIndex !== null && (nextMonthIndex - lastJobLossMonthIndex) < 12);
 
     if (!isUnemployedOrRecentlyLaidOff) {
-      const hikeRate = 0.06;
+      const appraisal = calculateAnnualAppraisal(
+        {
+          ...character,
+          tenureYearsAtCurrentCompany,
+          monthsSinceLastCourseCompletion,
+        },
+        nextMonthIndex,
+        character.seed
+      );
+      const hikeRate = appraisal.hikeRate;
       grossSalary = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
       const taxRate = grossSalary * 12 > 700000 ? 0.12 : 0.06;
       const taxAndPF = Math.round(grossSalary * taxRate);
@@ -405,7 +421,11 @@ export function tickMonthlySimulation(state) {
       isPaused = true;
       const raiseModal = {
         type: 'raise',
-        hikeRate,
+        hikeRate: appraisal.hikeRate,
+        category: appraisal.category,
+        headline: appraisal.headline,
+        reason: appraisal.reason,
+        isStagnated: appraisal.isStagnated,
         oldTakeHome: character.monthlyTakeHome,
         newTakeHome: newRaisedTakeHome,
         deltaSurplus,
@@ -856,6 +876,7 @@ export function tickMonthlySimulation(state) {
       const boost = activeCourse.skillBoostReward || 0.4;
       skillLevel = Math.min(5.0, Number((skillLevel + boost).toFixed(2)));
       completedCourses.push(activeCourse.courseId);
+      monthsSinceLastCourseCompletion = 0; // Phase 9: Course completed resets months to 0!
 
       const courseCompletedModal = {
         type: 'course_completed',
@@ -938,6 +959,8 @@ export function tickMonthlySimulation(state) {
     ...character,
     assetMaintenanceState: assetMaintenance,
     yearsOfExperience,
+    tenureYearsAtCurrentCompany,
+    monthsSinceLastCourseCompletion,
     skillLevel,
     activeCourse,
     completedCourses,

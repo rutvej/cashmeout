@@ -13,7 +13,8 @@
     "test:phase5": "node tests/test-phase5-life-events.mjs",
     "test:phase6": "node tests/test-phase6-real-estate.mjs",
     "test:phase7": "node tests/test-phase7-financial-setup.mjs",
-    "test:phase8": "node tests/test-phase8-investment-risk.mjs"
+    "test:phase8": "node tests/test-phase8-investment-risk.mjs",
+    "test:phase9": "node tests/test-phase9-career-appraisals.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

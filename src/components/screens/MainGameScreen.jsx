@@ -1167,6 +1167,10 @@ export default function MainGameScreen() {
         <RaiseModal
           data={simulation.activeModal}
           onAdjustAllocations={() => setIsAdjustingAllocations(true)}
+          onOpenJobMarket={() => {
+            pause();
+            setIsJobMarketModalOpen(true);
+          }}
         />
       )}
       {simulation.activeModal?.type === 'milestone' && (

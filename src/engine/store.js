@@ -1404,6 +1404,8 @@ export const useGameStore = create((set, get) => ({
         employmentStatus: 'employed',
         unemploymentDurationMonths: 0,
         preLayoffTakeHome: null,
+        // Phase 9: Reset company tenure on job switch to clear stagnation
+        tenureYearsAtCurrentCompany: 0,
       },
       simulation: {
         ...state.simulation,
