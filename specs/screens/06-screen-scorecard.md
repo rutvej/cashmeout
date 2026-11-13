@@ -1,96 +1,99 @@
-# Screen 6: Scorecard & Endgame Dashboard (`specs/screens/06-screen-scorecard.md`)
+# Screen 6: Scorecard & Financial Life Retrospective (`specs/screens/06-screen-scorecard.md`)
 
-## 1. Purpose & User Objective
-This is the final screen of the simulation, reached upon arriving at Age 60. It reveals the player's lifetime financial scorecard, assigns an overall letter grade (A+ down to F), evaluates the 4% Safe Withdrawal Rule for retirement, and celebrates achieved life milestones.
+## 1. Overview & Objective
+This screen is the **Grand Finale** of the simulation upon reaching Age 60. It replaces static score numbers with an engaging, story-driven **Financial Life Retrospective & Strategic Debrief** presented in simple, relatable terms.
 
 ---
 
-## 2. Layout & Visual Hierarchy (Wireframe)
+## 2. Layout & Wireframe
 
 ```
-+-------------------------------------------------------------+
-|                     RETIREMENT SCORECARD                    |
-|      Aarav (Age 60)  •  37 Years Simulated  •  Seed #491823 |
-+-------------------------------------------------------------+
-|                                                             |
-|  [ GRADE HERO BANNER ]                                      |
-|  +-------------------------------------------------------+  |
-|  |                🌟 GRADE: A (86 / 100)                  |  |
-|  |           "Comfortable Financial Independence"        |  |
-|  +-------------------------------------------------------+  |
-|                                                             |
-|  [ FINANCIAL INDEPENDENCE SNAPSHOT ]                        |
-|  +----------------------------+  +------------------------+ |
-|  | FINAL NET WORTH            |  | 4% SAFE WITHDRAWAL     | |
-|  | ₹2,45,00,000 (2.45 Cr)     |  | Passive: ₹81,600 / mo  | |
-|  | Liquid Bank: ₹14,20,000    |  | Expenses: ₹68,000 / mo | |
-|  | Debt: ₹0 (100% Debt-Free!) |  | Coverage: 120% (SAFE)  | |
-|  +----------------------------+  +------------------------+ |
-|                                                             |
-|  [ THE 4 SCORING PILLARS ]                                  |
-|  • FI/RE Ratio (4% Rule):                 35 / 40 pts       |
-|  • Milestones Achieved (5 of 6 goals):    25 / 30 pts       |
-|  • Debt-Free Retirement:                  15 / 15 pts       |
-|  • Liquid Safety Buffer:                  15 / 15 pts       |
-|                                                             |
-|  [ LIFE GOALS AUDIT ]                                       |
-|  [✓] 🛡️ Emergency Fund:       100% Protected (₹3.15L)       |
-|  [✓] 🚗 Buy First Car:          Bought at Age 27 (₹6.5L)    |
-|  [✓] 💍 Marriage & Wedding:     Celebrated at Age 29 (₹8L)  |
-|  [✓] 🏠 Home Down Payment:      Owned at Age 34 (₹22L)      |
-|  [✗] 🎓 Child College:          Partially funded (82%)      |
-|  [✓] 🌴 Retirement Corpus:      Fully funded (₹2.10 Cr)     |
-|                                                             |
-|  +-------------------------------------------------------+  |
-|  | [Play Again (Same Seed)]  [Roll New Life]  [View Graph] | |
-|  +-------------------------------------------------------+  |
-|                                                             |
-+-------------------------------------------------------------+
++-------------------------------------------------------------------------+
+|                  FINANCIAL LIFE RETROSPECTIVE (AGE 60)                  |
+|          Aarav • Age 23 to 60 • 37 Years Simulated • Seed #491823       |
++-------------------------------------------------------------------------+
+|                                                                         |
+|  [ GRADE HERO BANNER ]                                                  |
+|  +-------------------------------------------------------------------+  |
+|  |  🌟 GRADE A (84 / 100) — Comfortable Financial Independence       |  |
+|  |  Net Worth: ₹2.42 Cr  •  Passive: ₹80,500/mo  •  Debt: ₹0 (Free)   |  |
+|  +-------------------------------------------------------------------+  |
+|                                                                         |
+|  [ RETROSPECTIVE TABS ]                                                 |
+|  [ 🎯 Milestones & Decisions ]  [ 💼 Career & What-Ifs ]  [ 📊 Asset Audit ] |
+|                                                                         |
+|  ---------------------------------------------------------------------  |
+|                                                                         |
+|  SECTION 1: MILESTONES & DECISION AUDIT                                 |
+|                                                                         |
+|  🚗 First Car (Target: ₹6,00,000)                                       |
+|  • Outcome: Shortfall of ₹1,20,000 at Age 27                            |
+|  • Decision Taken: Postponed by +2 Years                                |
+|  • Verdict: 🟢 Smart Move! Postponing avoided a 9.5% loan and let your   |
+|    early surplus compound uninterrupted.                                |
+|                                                                         |
+|  💍 Wedding & Marriage (Target: ₹8,00,000)                              |
+|  • Outcome: Funded 100% On-Time at Age 29                               |
+|  • Verdict: 🟢 Perfect Execution! Married debt-free.                   |
+|                                                                         |
+|  🏠 Home Down Payment (Target: ₹22,00,000)                              |
+|  • Outcome: Filled 14 Months Early!                                    |
+|  • Verdict: 🌟 Outstanding! Early completion unlocked lower mortgage.   |
+|                                                                         |
+|  ---------------------------------------------------------------------  |
+|                                                                         |
+|  SECTION 2: "WHAT COULD YOU HAVE DONE?" (CAREER & WHAT-IF ENGINE)       |
+|                                                                         |
+|  💡 Career Leap Opportunity:                                            |
+|  "You stayed 7 years in Junior Specialist. Enrolling in a 3-month       |
+|  Bootcamp at Age 26 and job hopping would have earned an estimated     |
+|  +₹32,00,000 in additional lifetime income!"                            |
+|                                                                         |
+|  💡 Debt Avoidance:                                                     |
+|  "By choosing not to take a personal loan for vacation, you saved       |
+|  ₹38,000 in interest charges."                                          |
+|                                                                         |
+|  ---------------------------------------------------------------------  |
+|                                                                         |
+|  SECTION 3: ASSET ALLOCATION SUITABILITY AUDIT                          |
+|                                                                         |
+|  🛡️ Emergency Fund: Kept in Liquid Savings (4%)                        |
+|  • Verdict: 🟢 Optimal! Instant access with zero market risk.           |
+|                                                                         |
+|  🌴 Retirement Corpus: Kept in Equity Mutual Funds (12%)                |
+|  • Verdict: 🟢 Optimal! Long horizon absorbed market volatility and     |
+|    compounded to ₹2.10 Cr.                                              |
+|                                                                         |
++-------------------------------------------------------------------------+
+|  [ 🔁 PLAY AGAIN (SAME SEED) ]     [ 🎲 ROLL NEW LIFE ]                 |
++-------------------------------------------------------------------------+
 ```
 
 ---
 
-## 3. Data Contract
+## 3. UI Sections & Interaction Details
 
-### A. Inputs (Read from Store)
-- `character: CharacterState`
-- `goals: GoalItem[]`
-- `insurance: Record<string, InsurancePolicy>`
-- `simulation: SimulationState`
+1. **Grade Hero Banner**:
+   - Displays Letter Grade (`A+`, `A`, `B`, `C`, `D`, `F`), Score `/100`, and Narrative Title.
+   - Summarizes retirement sustainability: **Net Worth**, **Monthly Passive Income (4% Rule)**, and **Living Expense Coverage Ratio**.
 
-### B. Outputs (Mutations on State)
-- Evaluates `ScorecardResult` using `evaluateScorecard(state)`.
-- Option to reset game or replay with same seed.
+2. **Milestone & Decision Cards**:
+   - For every life milestone:
+     - Badge: `Filled Early (+N mos)`, `On-Time`, or `Shortfall (-₹X)`.
+     - Details on how shortfall was resolved (Loan, Emergency Buffer, or Postponed).
+     - **Clear Educational Verdict**: Plain-language assessment explaining whether postponing or taking the loan was a good or bad financial choice for the character.
 
----
+3. **Career & Counterfactuals Tab ("What You Could Have Done")**:
+   - Highlights actionable financial lessons from the simulation:
+     - Missed earnings from career stagnation.
+     - Upskilling returns (course fee vs. lifelong salary gains).
+     - Debt cost vs. disciplined savings comparison.
 
-## 4. UI Controls & User Interactions
+4. **Asset Suitability Tab**:
+   - Audits whether instruments were matched properly to time horizons:
+     - Flags placing Emergency Fund in FD (lock-in/penalties) or Equities (crash risk).
+     - Flags keeping 30-year retirement funds in low-yield savings.
 
-1. **Grade Hero Banner:**
-   - Prominently styled based on grade:
-     - A+ / A: Emerald / Gold gradient with star icons.
-     - B: Amber tint.
-     - C / D / F: Rose tint.
-   - Total score (e.g. `86 / 100`) and narrative title.
-
-2. **Financial Freedom Metric Cards:**
-   - Final Net Worth formatted in Indian Rupees (e.g. `₹2.45 Cr`).
-   - Monthly Passive Income generated by the 4% withdrawal rule vs. monthly living expenses.
-   - Status badge: `100% Self-Sustaining` or `Shortfall`.
-
-3. **Scoring Breakdown Meters:**
-   - 4 visual progress bars showing points earned across each pillar.
-
-4. **Life Milestones Audit:**
-   - Grid or list showing each goal, target vs actual, and green checkmark or warning indicator.
-
-5. **Action Buttons:**
-   - **"Play Again (Same Seed)":** Starts new game with the identical seed so the player can test an alternate financial strategy!
-   - **"Roll New Random Life":** Clears seed and returns to Screen 1.
-   - **"Review Main Dashboard":** Temporarily returns to Screen 5 to inspect final tabs and charts.
-
----
-
-## 6. Exit Criteria & Navigation
-- **Play Again:** Resets state, keeps `config.seed`, navigates to `landing`.
-- **Roll New:** Resets state, generates new random seed, navigates to `landing`.
+5. **Action Controls**:
+   - **Play Again (Same Seed)**: Re-runs the exact same life scenario so the player can test if upskilling earlier or changing their asset mix produces a higher grade.
+   - **Roll New Life**: Resets save state and begins a new character.

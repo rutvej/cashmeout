@@ -1,129 +1,101 @@
-# Screen 4: Financial Setup & Allocation Module (`specs/screens/04-screen-financial-setup.md`)
+# Screen 4: Financial Setup & Surplus Allocation (`specs/screens/04-screen-financial-setup.md`)
 
-## 1. Purpose & Reusability Objective
-This screen is the **Financial Command Center** where the player allocates their monthly surplus cash across their goals, assigns investment instruments, configures insurance protection, and sets up automated **Waterfall Redirections**.
+## 1. Overview & Minimal UX Principles
+This screen is the **Financial Command Center** where the player allocates monthly surplus cash across active goals, selects investment vehicles, and configures insurance.
 
-Directly adapted from the canonical carousel UX in `backup-old-mess:src/components/screens/FinancialSetup.jsx`, upgraded with clean modern state management and light CRED NeoPOP design aesthetics.
-
-### Reusable Across the Entire Simulation:
-1. **Onboarding Mode (Screen 4):** Initial setup before launching life simulation.
-2. **Promotion / Salary Raise Mode:** Allocating new surplus delta (+Δ ₹/mo).
-3. **Emergency Fund Refill Mode:** Triggered automatically if unexpected shocks drain the safety buffer.
-4. **Mid-Game Strategic Rebalance:** Accessible anytime via "Adjust SIPs & Redirections" on the main game dashboard.
+### Core Redesign Principles (Clean & Minimal):
+1. **No Long Paragraphs or Intrusive Warnings**: All lengthy educational copy, policy explanations, and loud alarmist warning banners are removed.
+2. **Slidable Goal Cards**: Goals are presented as sleek, slidable cards (horizontal sliding track / swipeable carousel) with instant smooth transitions.
+3. **Auto-Removal of Achieved One-Time Goals**: Once a one-time milestone goal is completed (`status === 'completed'` or `isCompleted`), it is **automatically removed** from the surplus distribution screen so it never clutters the interface.
+4. **Zero-Scroll Viewport**: Essential controls (allocation input, presets, instrument pills, status pill, and next/action CTA) fit comfortably on standard laptop and mobile viewports without forcing the user to scroll vertically to proceed.
 
 ---
 
-## 2. Layout & Visual Hierarchy (Wireframe)
+## 2. Layout & Wireframe (Minimal Single-Screen Design)
 
 ```
-+-----------------------------------------------------------------------+
-|  [ PERSISTENT TOP BAR - FIXED ]                                       |
-|  [← Back to Dashboard] (if mid-game)            Day 142 / Age 24      |
-|                                                                       |
-|  MONTHLY SURPLUS                           ALLOCATED                  |
-|  ₹32,500 / mo                              ₹28,000 / ₹32,500          |
-|  [████████████████████████████████████████░░░░░] 86% Allocated        |
-|                                                                       |
-|  Goal Stepper: [ •  •  ▬  •  •  • ]              [+ New Life Goal]    |
-+-----------------------------------------------------------------------+
-|                                                                       |
-|  [ MAIN GOAL FOCUS CARD ]                                             |
-|  +-----------------------------------------------------------------+  |
-|  | 🛡️ Emergency Safety Buffer       Target: ₹1,80,000 (6 Mo Buffer) |  |
-|  | [CORE SHIELD]                     Evaluated against living costs|  |
-|  |                                                                 |  |
-|  | (If 100% full: "✓ 100% Buffered! Set ₹0 to redirect surplus")    |  |
-|  |                                                                 |  |
-|  | Monthly Allocation:                                             |  |
-|  | [ ₹ 6,000 / mo                                                ] |  |
-|  | Quick Presets: [+₹500] [+₹1k] [+₹2k] [+₹5k] [Fill Remaining]    |  |
-|  |                                                                 |  |
-|  | Investment Instrument:                                          |  |
-|  | [Liquid Savings 4%] [Fixed Deposit 7%] [Gold 8.5%] [Equity 12%]|  |
-|  |                                                                 |  |
-|  | [ LIVE RECHARTS PROJECTION AREA CHART ]                         |  |
-|  |   ₹1.8L --------------------- Target Line (Dashed)              |  |
-|  |   ₹1.2L        .-~*~-.                                          |  |
-|  |   ₹0.6L    _.-~        (Compound Growth Curve)                  |  |
-|  |   ₹0L   .-~                                                     |  |
-|  |         M0     M6     M12    M18    M24                         |  |
-|  |   Status: 🟢 On Track (Projected ₹1,95,000)                      |  |
-|  |                                                                 |  |
-|  | ↪️ When Complete, Redirect SIP to: [🚗 First Car ▼]             |  |
-|  |                                                                 |  |
-|  | [← Prev]                   [Skip Goal]                 [Next →] |  |
-|  +-----------------------------------------------------------------+  |
-|                                                                       |
-+-----------------------------------------------------------------------+
-|  [ FIXED BOTTOM ACTION BAR ]                                          |
-|  6 Planned · 1 Skipped                    + ₹4,500 / mo Cash Buffer   |
-|  [ START LIFE SIMULATION 🚀 ]                                         |
-+-----------------------------------------------------------------------+
++-------------------------------------------------------------------------+
+|  SURPLUS: ₹35,000/mo      ALLOCATED: ₹28,000      REMAINING: ₹7,000     |
+|  [████████████████████████████████████████░░░░░░░░] 80% Allocated       |
++-------------------------------------------------------------------------+
+|                                                                         |
+|  [ SLIDABLE GOAL CHIPS TRACK ]                                          |
+|  [ 🛡️ Emergency ₹5k ] [ 🚗 Car ₹5k ] [ 🏠 Home ₹10k ] [ 🏖️ Vacation ₹0 ] |
+|                                                                         |
+|  ---------------------------------------------------------------------  |
+|                                                                         |
+|  [ SLIDABLE ACTIVE GOAL CARD ]  (Swipe / ◄ ► Controls)                  |
+|                                                                         |
+|  🚗 FIRST CAR                             Target: ₹6,00,000 (Age 27)    |
+|                                                                         |
+|  Monthly Allocation:                                                    |
+|  [ − ]   ₹ 5,000 / month   [ + ]                                        |
+|  Quick Presets: [+₹1,000]  [+₹2,000]  [+₹5,000]  [Fill Leftover ₹7k]    |
+|                                                                         |
+|  Investment Instrument:                                                 |
+|  [ Liquid 4% ]  [ FD 7% ]  [ Gold 8.5% ]  [★ Mutual Fund 12% ]          |
+|                                                                         |
+|  Status: 🟢 On Track (Projected ₹6,15,000 by Age 27)                   |
+|                                                                         |
+|  [ 📈 View Growth Chart ▾ ] (Collapsible toggle)                        |
+|                                                                         |
++-------------------------------------------------------------------------+
+|  [◄ PREV GOAL]            [NEXT GOAL ►]     [ START SIMULATION 🚀 ]     |
++-------------------------------------------------------------------------+
 ```
 
 ---
 
-## 3. Data Contract & Engine Bindings
+## 3. Data Contract & Filtering Rules
 
-### A. Inputs (Read from Store)
-- `character: CharacterState` (reads `character.monthlySurplus`, `character.totalFixedExpenses`, `character.loans`)
-- `goals: GoalItem[]` (reads list of active recurring and milestone goals)
-- `insurance: Record<string, InsurancePolicy>` (reads health and term life policies)
-- `simulation: SimulationState` (reads `currentMonthIndex`, `isPaused`, `activeModal`)
+### Active Goal Filtering (Auto-Remove Completed Goals)
+```typescript
+// Only incomplete goals or recurring active goals are presented for allocation
+export function getActiveAllocatableGoals(goals: GoalItem[]): GoalItem[] {
+  return goals.filter((g) => {
+    // Active cash-flow ventures generate income; they don't take monthly SIPs
+    if (g.isLaunched) return false;
 
-### B. Outputs (Mutations on State)
+    // One-time milestone goals (e.g. Car, Home Down Payment, Wedding):
+    // Once achieved or finalized, REMOVE from the allocation list completely!
+    if (g.kind === 'milestone' && (g.status === 'completed' || (g.currentAmount || 0) >= (g.targetAmount || 1))) {
+      return false;
+    }
+
+    // Recurring goals (e.g. Emergency Refill, Annual Vacation) remain if active
+    return true;
+  });
+}
+```
+
+### State Mutations
 - `setGoalAllocation(goalId, { baseMonthlySIP, instrumentId, redirectGoalId })`
 - `toggleInsurance(policyKey)`
 - `updateGoal(goalId, partialGoal)`
-- Custom goal creation via `goals.push(...)`
 - `navigateTo('main_game')`
 
 ---
 
-## 4. UI Controls & Interactive Features
+## 4. Component Architecture & UI Elements
 
-1. **Top Persistent Header:**
-   - Real-time surplus tracker displaying exact monthly surplus vs committed SIPs.
-   - Dynamic progress bar transitioning from Emerald to Rose if over-allocated.
-   - Stepper dot row: Active goal shown as elongated pill (`w-6`), allocated goals in Emerald, skipped in gray.
-   - **+ New Life Goal Button:** Opens a quick modal to create custom milestones (e.g., *Wealth Multiplier Fund*, *Early Retirement*, *Luxury Travel*).
+1. **Top Persistent Surplus Header (Compact)**:
+   - Displays 3 numbers in clean monospace: **Monthly Surplus**, **Total Allocated**, and **Remaining Surplus**.
+   - Single slim progress bar (Emerald if $\le 100\%$, Rose if over-allocated).
+   - Slidable Chip Strip: Horizontal track of goal pills allowing 1-tap jump to any goal.
 
-2. **Goal Full & Redirect Banner:**
-   - When a goal reaches 100% of its target (`currentAmount >= targetAmount`), a prominent banner alerts the player.
-   - Includes a one-click action: `Set ₹0 (Redirect)` to instantly free up the surplus or route it downstream.
+2. **Slidable Goal Card**:
+   - Smooth horizontal slide animation (Framer Motion `x: 0, opacity: 1` transition).
+   - Minimal header: Icon, Goal Name, Target Amount, and Target Age/Months.
+   - Clean Rupee Input with `+ / −` stepper buttons and fast preset chips (`+₹1k`, `+₹2k`, `+₹5k`, `Fill Remaining`).
+   - Compact 4-pill instrument selector:
+     - **Liquid Savings (4% p.a.)** — Instant & Safe.
+     - **Fixed Deposit (7% p.a.)** — Guaranteed return (1.5% penalty if broken early).
+     - **Gold / SGB (8.5% p.a.)** — Inflation hedge.
+     - **Equity Mutual Funds (12% p.a.)** — High growth long-term.
+   - 1-line Status Pill: 🟢 On Track / 🟡 Borderline / 🔴 Needs +₹X/mo.
+   - **Collapsible Projection Chart**: Closed by default to keep the card compact; opens a clean Recharts AreaChart on tap without disrupting the layout.
 
-3. **Dynamic Emergency Fund Evaluation:**
-   - 6-month safety buffer dynamically benchmarked against active living expenses:
-     $$\text{Target} = (\text{totalFixedExpenses} + \text{totalLoanEMIs}) \times 6$$
-   - Displays real-time refill deficit if emergency expenses drain the fund.
-
-4. **Monthly SIP Input & Preset Steppers:**
-   - Prominent currency input with large `₹` prefix.
-   - Quick one-click increments: `+₹500`, `+₹1,000`, `+₹2,000`, `+₹5,000`.
-   - `Fill Remaining (+₹X)` button to allocate all remaining unallocated surplus to the active goal with 1 click.
-
-5. **Investment Instrument Selector:**
-   - Horizontal scrollable instrument cards:
-     - **Equity Mutual Funds** (~12-15% p.a., High Growth)
-     - **Gold / SGB** (~8.5% p.a., Inflation Hedge)
-     - **Fixed Deposit** (~7% p.a., Guaranteed Return)
-     - **Liquid Savings** (~4% p.a., Safe & Instant)
-   - Visual selection highlight with interest rate badges.
-
-6. **Interactive Recharts AreaChart Projection:**
-   - Renders future compounding annuity projection:
-     $$FV(t) = \text{PV} \times (1 + r)^t + \text{PMT} \times \left[ \frac{(1 + r)^t - 1}{r} \right]$$
-   - Target reference line (dashed).
-   - Feasibility status indicator:
-     - 🟢 **On Track** ($FV \ge \text{Target}$)
-     - 🟡 **Borderline** ($FV \ge 80\% \text{ of Target}$)
-     - 🔴 **Behind / Underfunded** ($FV < 80\% \text{ of Target}$)
-
-7. **The Cascading Waterfall Selector:**
-   - Dropdown specifying `redirectGoalId` when target is satisfied.
-   - Engine ensures SIP flows forward automatically upon completion.
-
-8. **Fixed Bottom Action Bar:**
-   - Summarizes planned vs skipped goals.
-   - Highlights liquid cash buffer.
-   - High-contrast tactile CTA button to start or resume simulation.
+3. **Bottom Navigation Bar**:
+   - `◄ Prev Goal` and `Next Goal ►` buttons.
+   - Primary high-contrast CTA button (`Start Life Simulation` or `Save & Resume`).
+   - Always visible without scrolling.

@@ -1,7 +1,12 @@
-# Mechanism Spec: Scoring & Financial Independence Evaluation (`specs/mechanics/06-scoring-and-endgame.md`)
+# Mechanism Spec: Scoring, Decision Debrief & Financial Retrospective (`specs/mechanics/06-scoring-and-endgame.md`)
 
 ## 1. Overview & Objective
-This mechanism evaluates the player's entire lifetime simulation at retirement (Age 60). It measures real-world financial health: the 4% Safe Withdrawal Rule (FI/RE), goal completion rate, debt freedom, and liquidity reserves. It generates a final numeric score (0 to 100), a letter grade (A+ down to F), and key personalized insights.
+This mechanism evaluates the player's lifetime simulation at retirement (Age 60). Rather than merely reporting an abstract score, it delivers a comprehensive **Financial Life Retrospective & Strategic Debrief**:
+1. **Milestone Timing & Shortfall Audit**: Were goals filled early, on time, or short of target (and by how much)?
+2. **Shortfall Decision Evaluation**: When a shortfall occurred, did the player take a loan, drain buffers, or postpone? Was postponing a good decision for the character?
+3. **Asset Allocation & Suitability Audit**: Did the player match goals to appropriate instruments (e.g., Emergency Fund in Liquid Savings vs. dangerous Mutual Funds or penalized FDs)?
+4. **Career & Upskilling Opportunity Cost**: Did the player stagnate in low-tier jobs or upskill early to multiply earnings? What could have been done differently?
+5. **FI/RE & Wealth Summary**: Safe withdrawal rate (4% rule), debt freedom, and overall financial grade.
 
 ---
 
@@ -10,103 +15,172 @@ This mechanism evaluates the player's entire lifetime simulation at retirement (
 ```typescript
 export type GradeLetter = 'A+' | 'A' | 'B' | 'C' | 'D' | 'F';
 
-export interface ScoreBreakdown {
-  financialIndependenceScore: number; // Max 40 points
-  milestoneCompletionScore: number;   // Max 30 points
-  debtFreeScore: number;              // Max 15 points
-  safetyBufferScore: number;          // Max 15 points
-  totalScore: number;                 // Sum (0 to 100)
+export interface MilestoneAuditItem {
+  goalId: string;
+  name: string;
+  icon: string;
+  targetAmount: number;
+  finalAccumulated: number;
+  status: 'filled_early' | 'filled_on_time' | 'shortfall' | 'dropped';
+  monthsDifference: number; // Positive = completed N months early, Negative = delayed
+  shortfallAmount: number;  // 0 if filled, >0 if short
+  resolutionTaken?: 'loan' | 'other_fund' | 'postpone' | 'none';
+  postponeEvaluation?: {
+    wasGoodDecision: boolean;
+    rating: 'excellent' | 'acceptable' | 'poor';
+    reason: string;
+  };
+  instrumentUsed: string;
+  instrumentSuitability: {
+    isOptimal: boolean;
+    verdict: 'optimal' | 'suboptimal' | 'dangerous';
+    critique: string;
+  };
+}
+
+export interface AssetAllocationAudit {
+  emergencyFundInstrument: string;
+  emergencyFundCritique: {
+    status: 'optimal' | 'suboptimal' | 'dangerous';
+    message: string;
+  };
+  longTermEquityRatio: number; // % of long-term goals placed in Equity
+  penaltiesPaidFD: number;     // Total early FD exit penalties incurred
+  marketLossesRealized: number;// Losses from selling equities during drawdowns
+}
+
+export interface CareerOpportunityAudit {
+  yearsInTier1: number;
+  totalUpskillingCoursesCompleted: number;
+  totalJobSwitches: number;
+  careerStagnationDetected: boolean;
+  estimatedMissedEarnings: number; // Potential ₹ gain if upskilled & switched early
+  advice: string;
+}
+
+export interface CounterfactualInsight {
+  title: string;
+  impactType: 'positive' | 'negative' | 'opportunity';
+  potentialNetWorthDelta: number;
+  description: string;
 }
 
 export interface ScorecardResult {
   finalAge: number;                   // 60
   totalNetWorth: number;              // Final Net Worth in ₹
-  totalInvestments: number;           // Total goal corpus in ₹
+  totalInvestments: number;           // Total portfolio corpus in ₹
   liquidBankBalance: number;          // Cash in bank in ₹
-  outstandingDebt: number;            // Any unpaid loans at age 60 in ₹
-  
+  outstandingDebt: number;            // Unpaid loans at age 60 in ₹
+
   // FI/RE Metrics (The 4% Safe Withdrawal Rule)
-  annualLivingExpenses: number;       // totalFixedExpenses * 12
-  annualPassiveIncome: number;        // retirementCorpus * 0.04
-  monthlyPassiveIncome: number;       // annualPassiveIncome / 12
-  fiRatio: number;                    // annualPassiveIncome / annualLivingExpenses
-  isFinanciallyIndependent: boolean;  // fiRatio >= 1.0
-  
-  // Scoring & Grade
-  breakdown: ScoreBreakdown;
+  annualLivingExpenses: number;
+  annualPassiveIncome: number;
+  monthlyPassiveIncome: number;
+  fiRatio: number;
+  isFinanciallyIndependent: boolean;
+
+  // Quantitative Pillars
+  breakdown: {
+    financialIndependenceScore: number; // Max 35 pts
+    milestoneCompletionScore: number;   // Max 25 pts
+    decisionQualityScore: number;       // Max 20 pts (audits loan/buffer/postpone choices)
+    assetSuitabilityScore: number;      // Max 10 pts (portfolio suitability & liquidity)
+    debtFreeScore: number;              // Max 10 pts
+    totalScore: number;                 // Sum (0 to 100)
+  };
   grade: GradeLetter;
-  title: string;                      // e.g. "Financially Independent"
-  
-  // Life Highlights
-  goalsCompletedCount: number;
-  totalGoalsCount: number;
-  bestDecision: string;
-  criticalLesson: string;
+  title: string;
+
+  // Detailed Audits
+  milestoneAudits: MilestoneAuditItem[];
+  assetAudit: AssetAllocationAudit;
+  careerAudit: CareerOpportunityAudit;
+  topCounterfactuals: CounterfactualInsight[];
 }
 ```
 
 ---
 
-## 3. The 4 Scoring Pillars (100 Points Total)
+## 3. Decision Evaluation Logic
 
-### Pillar 1: Financial Independence / FI/RE Ratio (40 Points Max)
-Based on the Trinity Study (4% safe annual withdrawal rate from the retirement corpus):
-$$\text{Annual Passive Income} = \text{RetirementCorpus} \times 0.04$$
-$$\text{FI Ratio} = \frac{\text{Annual Passive Income}}{\text{Annual Living Expenses}}$$
+### A. Milestone Timing & Shortfall Resolution
+1. **Filled Early**: Goal reached 100% capacity before target age/month. Commended with a bonus to Decision Quality.
+2. **Filled On-Time**: Reached 100% at the target milestone age.
+3. **Shortfall**: Reached target date with `currentAmount < targetAmount`. Evaluated based on resolution:
+   - **Loan Taken**:
+     - Auto/Car loan at 9.5% or Personal loan at 12%: Assessed against debt service capacity. Penalized if resulting EMIs exceeded 25% of monthly surplus.
+   - **Drawn from Bank Cash / Emergency Buffer**:
+     - Acceptable if remaining emergency reserve covers $\ge 6\text{ months}$ of expenses.
+     - Dangerous if it depleted emergency buffer below 3 months, leaving character exposed to life shocks.
+   - **Postpone**: Evaluated by the **Postpone Decision Quality Algorithm**.
 
-* **Calculation:**
-  * $\text{FI Ratio} \ge 1.25$: **40 Points** (Abundant passive surplus).
-  * $1.0 \le \text{FI Ratio} < 1.25$: **35 Points** (100% self-sustaining).
-  * $0.8 \le \text{FI Ratio} < 1.0$: **25 Points** (Slight deficit, minor budget cut needed).
-  * $0.5 \le \text{FI Ratio} < 0.8$: **15 Points** (Moderate shortfall).
-  * $\text{FI Ratio} < 0.5$: $\text{round}(\text{FI Ratio} \times 20)$ **Points**.
+### B. "Was Postponing a Smart Decision?" Algorithm
+```typescript
+export function evaluatePostponeDecision(goal, character, state, shortfall): PostponeEvaluation {
+  const isLuxuryOrDiscretionary = goal.id === 'goal_car' || goal.id === 'goal_vacation' || goal.kind === 'custom';
+  const hasIdleBankCash = (character.liquidCash || 0) >= shortfall * 1.2;
+  const isEssentialHousing = goal.id === 'goal_home';
 
----
+  // Case 1: Postponing discretionary milestones when young without debt
+  if (isLuxuryOrDiscretionary && character.age < 30) {
+    return {
+      wasGoodDecision: true,
+      rating: 'excellent',
+      reason: 'Smart move! Delaying a discretionary milestone avoided high-interest debt and allowed early surplus to compound unimpeded.',
+    };
+  }
 
-### Pillar 2: Life Milestones Completed (30 Points Max)
-Evaluates non-retirement goals (Emergency Fund, Vacation, Car, Wedding, Home Down Payment, Child College):
-$$\text{Milestone Score} = 30 \times \left( \frac{\text{Goals Funded 100\%}}{\text{Total Non-Retirement Goals}} \right)$$
+  // Case 2: Postponing despite having ample idle liquid cash
+  if (hasIdleBankCash) {
+    return {
+      wasGoodDecision: false,
+      rating: 'poor',
+      reason: 'Unnecessary delay: You had sufficient idle bank cash to fund this milestone debt-free without delaying life progression.',
+    };
+  }
 
----
+  // Case 3: Postponing home purchase during property inflation
+  if (isEssentialHousing) {
+    return {
+      wasGoodDecision: true,
+      rating: 'acceptable',
+      reason: 'Prudent defense: Prevented an overleveraged mortgage crisis, though property inflation increased future acquisition costs.',
+    };
+  }
 
-### Pillar 3: Debt-Free Retirement (15 Points Max)
-Entering retirement with high-interest or active debt severely compromises safety:
-* **Outstanding Debt = ₹0:** **15 Points** (100% Debt-Free).
-* **Outstanding Debt > ₹0:** **0 Points** (minus penalty of 1 point per ₹50,000 outstanding debt, min 0).
-
----
-
-### Pillar 4: Liquid Safety Buffer (15 Points Max)
-Measures emergency cash in bank + emergency buffer at age 60:
-* $\ge 12 \text{ months}$ of living expenses: **15 Points**.
-* $\ge 6 \text{ months}$ of living expenses: **10 Points**.
-* $\ge 3 \text{ months}$ of living expenses: **5 Points**.
-* $< 3 \text{ months}$: **0 Points**.
-
----
-
-## 4. Letter Grade Scale
-
-| Score Range | Grade | Title | Description |
-| :--- | :--- | :--- | :--- |
-| **90 – 100** | 🌟 **A+** | **Generational Wealth** | Complete financial freedom. Passive income covers lifestyle with heavy surplus. |
-| **80 – 89** | 🟢 **A** | **Comfortable FI/RE** | 100% self-sufficient retirement, fully debt-free, all major goals achieved. |
-| **70 – 79** | 🟡 **B** | **Solid Foundation** | Retirement is secure with minor budget adjustments. Most key milestones met. |
-| **55 – 69** | 🟠 **C** | **Tight Retirement** | Underfunded corpus. Player must downscale lifestyle or rely on part-time income. |
-| **< 55** | 🔴 **D / F** | **Financially Fragile** | Severe shortfall or unresolved debts at age 60. Dependent on family or state support. |
-
----
-
-## 5. Pure Function Interface
-
-```javascript
-/**
- * Evaluates the final game state and returns the scorecard.
- * 
- * @param {GameState} state
- * @returns {ScorecardResult}
- */
-export function evaluateScorecard(state) {
-  // Pure evaluation math
+  return {
+    wasGoodDecision: true,
+    rating: 'acceptable',
+    reason: 'Delayed milestone to accumulate sufficient capital naturally without debt stress.',
+  };
 }
 ```
+
+---
+
+## 4. Asset Allocation & Suitability Evaluation
+
+### A. Emergency Fund Placement Rules
+- **In Liquid Savings**: **Optimal (10/10)** — Instant liquidity, zero market risk, 0 penalty.
+- **In Fixed Deposit (FD)**: **Sub-Optimal (5/10)** — FDs have lock-in terms; premature withdrawal incurs a 1.5% interest penalty.
+- **In Equity Mutual Funds**: **Dangerous (1/10)** — High risk of capital loss during market corrections. When an emergency shock strikes during a market dip, selling equities locks in losses.
+
+### B. Long-Term Goals (Retirement & 10+ Year Goals)
+- **In Equity Mutual Funds**: **Optimal** — Outpaces inflation, compounding at ~12% p.a.
+- **In Liquid Savings or FD**: **Sub-Optimal** — Purchasing power eroded by inflation; missed ~12% compounding upside.
+
+---
+
+## 5. Career Stagnation & Counterfactual Engine ("What You Could Have Done")
+
+The engine compares the player's actual trajectory against counterfactual models:
+1. **Upskilling & Job Switching**:
+   - If player remained in Tier 1 or Tier 2 for $\ge 6$ years without taking an upskilling course:
+     $$\text{Estimated Missed Earnings} = \sum (\text{Tier } (N+1) \text{ Net Salary} - \text{Actual Net Salary}) \times \text{Stagnant Months}$$
+   - Generates counterfactual card: *"Career Leap: Completing a 3-month Bootcamp at Age 26 and applying for Senior Specialist would have increased lifetime take-home by +₹28,50,000."*
+2. **Debt vs. Discipline**:
+   - If player took personal/auto loans instead of postponing or saving:
+     - Calculates total interest paid: *"Interest Savings: Saving up for the car rather than taking a 48-month loan would have saved ₹1,42,000 in interest."*
+3. **Emergency Fund Discipline**:
+   - If emergency fund was parked in FD or Equities during a shock:
+     - Highlights exact penalties or realized market losses incurred.

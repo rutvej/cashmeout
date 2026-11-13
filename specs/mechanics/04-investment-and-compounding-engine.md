@@ -1,106 +1,80 @@
-# Mechanism Spec: Investment Instruments & Compounding Engine (`specs/mechanics/04-investment-and-compounding-engine.md`)
+# Mechanism Spec: Investment Instruments, Realistic Risk & Compounding Engine (`specs/mechanics/04-investment-and-compounding-engine.md`)
 
 ## 1. Overview & Objective
-This mechanism governs how surplus money grows over time. It models 4 real-world asset classes in India (Liquid Savings, Fixed Deposits, Gold, and Equity Mutual Funds). It handles:
-1. **The Monthly Compounding Loop:** Adding monthly SIPs and crediting interest/returns to each active goal bucket.
-2. **Deterministic vs. Volatile Assets:** Guaranteed returns for debt/cash vs realistic market cycles for equity and gold.
-3. **Future Value (FV) Projections:** Computing mathematical feasibility (Red/Yellow/Green) for any combination of monthly SIP, instrument, and deadline.
+This mechanism models 4 real-world Indian asset classes (Liquid Savings, Fixed Deposits, Gold/SGB, and Equity Mutual Funds). It introduces **realistic market behavior and liquidity constraints without breaking game progression**:
+1. **Guaranteed vs. Volatile Assets**: Fixed guaranteed yields for bank instruments vs. realistic market cycles for equities.
+2. **FD Premature Withdrawal Penalty**: Liquidating a Fixed Deposit before maturity incurs a real-world **1.5% interest/principal penalty**.
+3. **Equity Market Cycles**: Long-term average remains ~12% p.a., but includes natural market oscillations and periodic mild corrections (-10% to -15%) followed by recoveries.
+4. **Liquidity Matching**: Teaches the core financial principle that **Emergency Funds belong in Liquid Savings**, not volatile equities or locked FDs.
 
 ---
 
-## 2. Global Type Schema (`Instrument` & `AllocationItem`)
+## 2. Asset Class Specifications
 
-```typescript
-export type InstrumentId = 'savings' | 'fd' | 'gold' | 'equity';
-
-export interface InstrumentDefinition {
-  id: InstrumentId;
-  name: string;                   // e.g. "Equity Mutual Funds"
-  annualReturnRate: number;       // e.g. 0.12 (12% p.a.)
-  monthlyReturnRate: number;      // nominal r / 12
-  volatilityMonthlyStdDev: number;// 0 for fixed, 0.025 for equity
-  minTenureRecommendedMonths: number;
-  riskRating: 'low' | 'moderate' | 'high';
-  tag: string;
-}
-
-export interface GoalAllocation {
-  goalId: string;                 // References GoalItem.id
-  monthlySIP: number;             // Allocated ₹ per month
-  instrumentId: InstrumentId;     // Chosen asset class
-}
-```
+| Asset Class | Long-Term Return | Monthly Volatility ($\sigma_m$) | Liquidity / Exit Rules | Realistic Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **Liquid Savings** (`savings`) | **4.0% p.a.** | **0% (Zero)** | Instant (0% penalty) | Safe haven. No market drops. Always available for emergencies. |
+| **Fixed Deposit** (`fd`) | **7.0% p.a.** | **0% (Guaranteed)** | **1.5% Premature Exit Penalty** | Zero market volatility. If broken early for shocks/shortfalls, deducts 1.5% from the withdrawn amount. |
+| **Gold / SGB** (`gold`) | **8.5% p.a.** | **$\pm 0.8\%$** | Moderate liquidity | Inflation hedge. Stays resilient or slightly gains during stock market drawdowns. |
+| **Equity Mutual Funds** (`equity`) | **12.0% p.a.** (mean) | **$\pm 1.8\%$** monthly noise | Market-priced redemption | Long-term wealth multiplier (~12% p.a. over 20+ years). Subject to periodic market cycles. |
 
 ---
 
-## 3. Mathematical Models & Formulas
+## 3. Mathematical Models & Return Formulas
 
-### A. Asset Class Parameters
-1. **Liquid Savings Account (`savings`):**
-   - Annual Return: $4.0\%$ p.a. ($r_m = 0.04 / 12 = 0.00333$)
-   - Volatility: $0\%$ (Guaranteed capital)
-   - Liquidity: Immediate (0 exit load)
-   - Best for: Emergency Fund, Vacation
-
-2. **Fixed Deposit (`fd`):**
-   - Annual Return: $7.0\%$ p.a. ($r_m = 0.07 / 12 = 0.00583$)
-   - Volatility: $0\%$ (Guaranteed)
-   - Liquidity: Redeemable anytime without market loss
-   - Best for: Short/medium goals (Car, Wedding)
-
-3. **Gold / Sovereign Gold Bonds (`gold`):**
-   - Annual Return: $8.5\%$ p.a. ($r_m = 0.085 / 12 = 0.00708$)
-   - Monthly Volatility: $\sigma_m = \pm 0.8\%$
-   - Best for: Long-term hedge, Marriage, Home Down Payment
-
-4. **Equity / Index Mutual Funds (`equity`):**
-   - Annual Return: $12.0\%$ p.a. ($r_m = 0.12 / 12 = 0.010$)
-   - Monthly Volatility: $\sigma_m = \pm 2.5\%$
-   - Best for: Long-term wealth creation (Child College, Retirement)
-
-### B. Monthly Compounding Tick
-When month advances by 1:
-$$\text{newBalance} = \text{currentBalance} \times (1 + r_{\text{effective}}) + \text{monthlySIP}$$
-
-Where:
-- For `savings` and `fd`: $r_{\text{effective}} = r_m$
-- For `gold` and `equity`: $r_{\text{effective}} = r_m + \text{noise}(t)$ (bounded within realistic guardrails)
-
-### C. Future Value (FV) Projection Formula
-To predict if an allocation is enough to hit a goal:
-$$FV = \text{CurrentBalance} \times (1 + r)^n + \text{SIP} \times \left[ \frac{(1 + r)^n - 1}{r} \right]$$
-*(If $r = 0$, $FV = \text{CurrentBalance} + \text{SIP} \times n$).*
-
-- $n = \text{targetMonthsRemaining}$
-- $r = r_{\text{nominal\_monthly}}$
-
-**Feasibility Status:**
-- $\mathbf{FV \ge \text{Target}:}$ `on_track` (🟢 Green)
-- $\mathbf{0.80 \times \text{Target} \le FV < \text{Target}:}$ `borderline` (🟡 Yellow, slight shortfall)
-- $\mathbf{FV < 0.80 \times \text{Target}:}$ `underfunded` (🔴 Red, severe shortfall)
+### A. Monthly Return Calculations
+For each month $m$ in simulation:
+1. **Savings**:
+   $$r_{\text{savings}}(m) = \frac{0.04}{12} = 0.003333$$
+2. **Fixed Deposit (FD)**:
+   $$r_{\text{fd}}(m) = \frac{0.07}{12} = 0.005833$$
+3. **Gold / SGB**:
+   $$r_{\text{gold}}(m) = \frac{0.085}{12} + \text{noise}_{\text{gold}}(m)$$
+   where $\text{noise}_{\text{gold}}$ is a bounded deterministic PRNG gaussian offset ($\pm 0.8\%$).
+4. **Equity Mutual Funds (Market Cycles)**:
+   $$\text{Market Cycle Multiplier } M(t) = 1.0 + 0.08 \times \sin\left(\frac{2\pi \cdot t}{72}\right) + \text{noise}_{\text{equity}}(t)$$
+   - Generates a natural 6-year macro cycle ($72\text{ months}$):
+     - **Bull Run Phase**: Returns average $+1.2\%$ to $+1.6\%$ monthly ($+15\%$ to $+18\%$ annualized).
+     - **Mild Correction Phase**: Returns pull back by $-0.8\%$ to $-1.5\%$ monthly for 4–6 months (total $-10\%$ to $-15\%$ dip), before recovering.
+     - **Long-term mean**: Strictly maintains the 12.0% p.a. CAGR over 20–35 simulation years.
 
 ---
 
-## 4. Pure Function Interfaces
+## 4. Forced Liquidation & Penalty Mechanics
+
+When a life shock (medical, job loss, eviction) or milestone shortfall draws from goal balances:
+
+1. **Drawing from Liquid Savings**:
+   - `amountDrawn = requested`
+   - `penalty = 0`
+2. **Drawing from Fixed Deposit (FD)**:
+   - Incurs a **1.5% early-break penalty**:
+     $$\text{Penalty} = \text{amountDrawn} \times 0.015$$
+   - The penalty is deducted from the player's capital and recorded in the decision journal.
+3. **Drawing from Equity Mutual Funds**:
+   - Redeemed at current market NAV.
+   - If redeemed during a market dip ($M(t) < 0.95$), the player crystallizes an irreversible market loss.
+   - The endgame audit flags: *"Forced Selling in Market Dip: Liquidated ₹X of equities at a loss during an emergency shock."*
+
+---
+
+## 5. Pure Function Interfaces
 
 ```javascript
 /**
- * Calculates projected future value of a SIP.
+ * Calculates monthly return rate for an instrument taking into account PRNG seed and month.
  */
-export function calculateProjectedFV(currentBalance, monthlySIP, annualRate, months) {
-  // Pure math formula
+export function getMonthlyInstrumentReturnRate(instrumentId, monthIndex, seed) {
+  // Pure deterministic function
 }
 
 /**
- * Checks feasibility signal for a goal.
+ * Calculates liquidation penalty and net proceeds when breaking an asset early.
  */
-export function evaluateGoalFeasibility(goal, monthlySIP, instrumentId) {
-  // Returns { projectedAmount, status: 'on_track'|'borderline'|'underfunded', shortfall }
+export function calculateLiquidationPenalty(instrumentId, withdrawalAmount) {
+  if (instrumentId === 'fd') {
+    return Math.round(withdrawalAmount * 0.015);
+  }
+  return 0;
 }
 ```
-
----
-
-## 5. Global Invariants
-1. **Surplus Conservation:** $\sum \text{monthlySIP}_i \le \text{monthlySurplus}$. Total allocated SIPs can never exceed monthly surplus.
-2. **Emergency Shield Priority:** Emergency fund must have a non-zero monthly allocation until fully funded.
