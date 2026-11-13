@@ -1,11 +1,12 @@
 // Pure deterministic goal generator engine
+import { getPropertyTierData } from './realEstateEngine.js';
 
 const TIER_TARGETS = {
   tier1: {
     car: 800000,
     weddingMin: 1000000,
     weddingMax: 1400000,
-    homeDownPayment: 2800000,
+    homeDownPayment: 1500000,
     childEdu: 3200000,
     domesticTrip: 60000,
     intlTrip: 180000,
@@ -14,7 +15,7 @@ const TIER_TARGETS = {
     car: 650000,
     weddingMin: 700000,
     weddingMax: 1000000,
-    homeDownPayment: 1800000,
+    homeDownPayment: 1100000,
     childEdu: 2200000,
     domesticTrip: 45000,
     intlTrip: 140000,
@@ -23,7 +24,7 @@ const TIER_TARGETS = {
     car: 500000,
     weddingMin: 500000,
     weddingMax: 700000,
-    homeDownPayment: 1100000,
+    homeDownPayment: 800000,
     childEdu: 1500000,
     domesticTrip: 35000,
     intlTrip: 110000,
@@ -56,8 +57,9 @@ export function generateInitialGoals(character) {
   ) * 25000;
 
   // 5. Home Down Payment (Milestone • Age 34)
+  const tierProperty = getPropertyTierData(character.cityTier);
   const homeTargetAge = Math.max(startAge + 5, 34);
-  const homeTarget = tier.homeDownPayment;
+  const homeTarget = tierProperty.targetDownPayment;
 
   // 6. Child Higher Education (Milestone • Age 46)
   const childTargetAge = 46;
@@ -161,8 +163,10 @@ export function generateInitialGoals(character) {
       name: 'Home Down Payment',
       kind: 'milestone',
       category: 'asset',
-      description: '25% down payment on apartment. Eliminates rent and starts real estate equity.',
+      description: '20% down payment on apartment. Eliminates rent and starts real estate equity.',
       targetAmount: homeTarget,
+      propertyCost: tierProperty.propertyCost,
+      minDownPaymentPct: 20,
       currentAmount: 0,
       targetAge: homeTargetAge,
       targetMonthsRemaining: (homeTargetAge - startAge) * 12,

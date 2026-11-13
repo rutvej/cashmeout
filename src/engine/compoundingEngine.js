@@ -125,7 +125,7 @@ export function calculateEffectiveSIPs(goals) {
       if (!targetGoal) return null;
 
       const isTargetFull =
-        (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1) || targetGoal.isLaunched;
+        (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1) || targetGoal.isLaunched || targetGoal.isLocked;
       // Emergency fund is only full when at 100%
       if (currentId === 'goal_emergency' && isEmergencyDepleted) {
         return currentId;
@@ -146,7 +146,7 @@ export function calculateEffectiveSIPs(goals) {
 
   // Process completed goals
   goals.forEach((goal) => {
-    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1) || goal.isLaunched;
+    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1) || goal.isLaunched || goal.isLocked;
 
     // Emergency fund that is depleted cannot redirect its SIP
     if (goal.id === 'goal_emergency' && isEmergencyDepleted) {

@@ -229,11 +229,14 @@ export function applyCarOwnership(character, goals = [], insurance = {}) {
  * optionally adds mortgage loan, expands Emergency Fund accordingly, and updates outflows/surplus.
  * Idempotent: safe to call multiple times without duplicating costs.
  */
-export function applyHomeOwnership(character, goals = [], insurance = {}, mortgageLoan = null) {
+export function applyHomeOwnership(character, goals = [], insurance = {}, mortgageLoan = null, options = {}) {
   const currentAsset = character.assetMaintenanceState || getInitialAssetMaintenanceState();
   if (currentAsset.hasOwnedHome) {
     return { character, goals }; // Idempotent
   }
+
+  const propertyCost = options.propertyCost || character.homePropertyAssetValue || 7500000;
+  const shouldEliminateRent = options.eliminateRent === true;
 
   const updatedAsset = {
     ...currentAsset,
@@ -246,7 +249,15 @@ export function applyHomeOwnership(character, goals = [], insurance = {}, mortga
     updatedLoans.push(mortgageLoan);
   }
 
-  const updatedFixedExpenses = character.totalFixedExpenses + HOME_MONTHLY_MAINTENANCE;
+  // When moving into owned home with financing: eliminate rent (if tracked and enabled)
+  let currentRent = 0;
+  let updatedExpenses = character.expenses ? { ...character.expenses } : null;
+  if (shouldEliminateRent && updatedExpenses && updatedExpenses.rent) {
+    currentRent = updatedExpenses.rent;
+    updatedExpenses.rent = 0;
+  }
+
+  const updatedFixedExpenses = Math.max(0, character.totalFixedExpenses - currentRent + HOME_MONTHLY_MAINTENANCE);
   const totalLoanEMIs = updatedLoans.reduce((s, l) => s + (l.emi || 0), 0);
   const totalInsurance =
     ((insurance?.health?.isPurchased ? insurance.health.monthlyPremium : 0) || 0) +
@@ -287,6 +298,8 @@ export function applyHomeOwnership(character, goals = [], insurance = {}, mortga
   const updatedCharacter = {
     ...character,
     assetMaintenanceState: updatedAsset,
+    homePropertyAssetValue: propertyCost,
+    expenses: updatedExpenses || character.expenses,
     loans: updatedLoans,
     totalLoanEMIs,
     totalFixedExpenses: updatedFixedExpenses,

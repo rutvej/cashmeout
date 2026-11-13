@@ -29,6 +29,14 @@ const SHOCK_META = {
     borderColor: 'border-blue-500',
     accentBg: 'bg-blue-50',
   },
+  shock_landlord_eviction: {
+    icon: '🚨',
+    iconBg: 'bg-rose-100',
+    label: 'LANDLORD EVICTION & RENT SPIKE',
+    labelColor: 'text-rose-800',
+    borderColor: 'border-rose-600',
+    accentBg: 'bg-rose-50',
+  },
 };
 
 function BarMeter({ value, max, color = 'bg-emerald-500' }) {
@@ -44,7 +52,13 @@ function BarMeter({ value, max, color = 'bg-emerald-500' }) {
 }
 
 export default function ShockModal({ data, onReviewAllocations }) {
-  const { acknowledgeShock, pause } = useGameStore();
+  const {
+    acknowledgeShock,
+    resolveHousingEvictionShock,
+    pause,
+    goals,
+    character,
+  } = useGameStore();
   const meta = SHOCK_META[data?.shockId] || SHOCK_META.shock_home_repair;
 
   const handleReview = () => {
@@ -57,6 +71,15 @@ export default function ShockModal({ data, onReviewAllocations }) {
 
   const isJobLoss = data?.shockId === 'shock_job_loss';
   const isMedical = data?.shockId === 'shock_medical';
+  const isEviction = data?.shockId === 'shock_landlord_eviction';
+
+  const homeGoal = (goals || []).find((g) => g.id === 'goal_home');
+  const propertyCost = homeGoal?.propertyCost || 7500000;
+  const targetDP = homeGoal?.targetAmount || Math.round(propertyCost * 0.20);
+  const currentSavedDP = homeGoal?.currentAmount || 0;
+  const savedDPPct = targetDP > 0 ? Math.round((currentSavedDP / targetDP) * 100) : 0;
+  const isEmergencyBuyEligible = savedDPPct >= 70;
+  const bridgeCashNeeded = Math.max(0, targetDP - currentSavedDP);
 
   const emergencyTarget = data?.emergencyFundTarget || 0;
   const emergencyBefore = data?.emergencyFundBefore ?? (data?.drawnFromEmergency !== undefined
@@ -99,8 +122,80 @@ export default function ShockModal({ data, onReviewAllocations }) {
             {data?.description}
           </p>
 
-          {/* ── Damage Assessment Card ── */}
-          <div className="p-3 sm:p-4 bg-slate-50 border-2 border-slate-900 space-y-2 font-mono text-xs">
+          {isEviction ? (
+            /* ── Housing Eviction Shock Choices ── */
+            <div className="space-y-3 font-mono">
+              <div className="p-3 bg-rose-50 border-2 border-rose-500 space-y-1 text-xs">
+                <span className="text-[10px] font-black uppercase text-rose-800 block">
+                  🚨 Eviction &amp; Steep Rent Spike
+                </span>
+                <p className="text-slate-800 leading-snug">
+                  Your landlord is selling the flat. You must vacate within 30 days or relocate to a new rental at higher market rates!
+                </p>
+              </div>
+
+              {/* Choice 1: Emergency Home Purchase */}
+              <div
+                className={`p-3.5 border-2 transition-all ${
+                  isEmergencyBuyEligible
+                    ? 'border-emerald-600 bg-emerald-50 hover:shadow-[3px_3px_0px_#059669]'
+                    : 'border-slate-300 bg-slate-50 opacity-60'
+                }`}
+              >
+                <div className="flex justify-between items-center pb-1">
+                  <span className="text-[10px] font-black uppercase px-1.5 py-0.5 bg-emerald-200 border border-emerald-700 text-emerald-900">
+                    Choice 1 · Emergency Buy
+                  </span>
+                  <span className="text-xs font-bold text-emerald-900">
+                    {savedDPPct}% DP Ready
+                  </span>
+                </div>
+                <p className="text-xs text-slate-800 leading-snug">
+                  Execute emergency home purchase for {formatINR(propertyCost)} flat. Uses your accumulated {formatINR(currentSavedDP)}, bridges shortfall ({formatINR(bridgeCashNeeded)}) from liquid cash, takes 80% mortgage, and eliminates rent immediately!
+                </p>
+                {isEmergencyBuyEligible ? (
+                  <button
+                    type="button"
+                    onClick={() => resolveHousingEvictionShock({ decision: 'emergency_buy' })}
+                    className="w-full mt-2.5 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-display font-black text-xs uppercase tracking-wider border border-slate-900 shadow-[2px_2px_0px_#0f172a] active:translate-x-[1px] active:translate-y-[1px] cursor-pointer"
+                  >
+                    Choice 1: Emergency Home Purchase 🏠
+                  </button>
+                ) : (
+                  <div className="mt-2 p-1.5 bg-slate-200 border border-slate-400 text-[10px] text-slate-700 font-bold">
+                    🔒 Locked: Requires at least 70% down payment saved (currently {savedDPPct}%).
+                  </div>
+                )}
+              </div>
+
+              {/* Choice 2: Relocate to New Rental */}
+              <div className="p-3.5 border-2 border-slate-900 bg-white space-y-2 hover:shadow-[3px_3px_0px_#0f172a] transition-all">
+                <div className="flex justify-between items-center pb-1">
+                  <span className="text-[10px] font-black uppercase px-1.5 py-0.5 bg-slate-100 border border-slate-700 text-slate-900">
+                    Choice 2 · Relocate
+                  </span>
+                  <span className="text-xs font-bold text-slate-900">New Rental</span>
+                </div>
+                <p className="text-xs text-slate-800 leading-snug">
+                  Move to a new rental apartment. Incurs a -₹60,000 moving, brokerage &amp; security deposit hit, and permanently raises monthly fixed rent by +₹3,000/month.
+                </p>
+                <div className="text-[10px] text-slate-600 space-y-0.5 pt-0.5">
+                  <div>• One-time moving fee: -₹60,000 (from liquid/emergency)</div>
+                  <div>• Ongoing market rent hike: +₹3,000/mo</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => resolveHousingEvictionShock({ decision: 'relocate' })}
+                  className="w-full mt-2.5 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs uppercase tracking-wider border border-slate-900 shadow-[2px_2px_0px_#0f172a] active:translate-x-[1px] active:translate-y-[1px] cursor-pointer"
+                >
+                  Choice 2: Relocate to New Rental (-₹60k &amp; +₹3k/mo) 🚚
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ── Damage Assessment Card ── */}
+              <div className="p-3 sm:p-4 bg-slate-50 border-2 border-slate-900 space-y-2 font-mono text-xs">
             <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
               Damage Assessment
             </span>
@@ -223,23 +318,25 @@ export default function ShockModal({ data, onReviewAllocations }) {
             </div>
           )}
 
-          {/* ── Action Buttons ── */}
-          <div className="space-y-2 pt-1">
-            <button
-              type="button"
-              onClick={acknowledgeShock}
-              className="w-full py-3 sm:py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs sm:text-sm tracking-wider uppercase btn-press cursor-pointer transition-colors"
-            >
-              Acknowledge &amp; Mobilize Funds ➔
-            </button>
-            <button
-              type="button"
-              onClick={handleReview}
-              className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs btn-press-sm transition-colors cursor-pointer"
-            >
-              Review Allocations ⚙️
-            </button>
-          </div>
+              {/* ── Action Buttons ── */}
+              <div className="space-y-2 pt-1">
+                <button
+                  type="button"
+                  onClick={acknowledgeShock}
+                  className="w-full py-3 sm:py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-display font-black text-xs sm:text-sm tracking-wider uppercase btn-press cursor-pointer transition-colors"
+                >
+                  Acknowledge &amp; Mobilize Funds ➔
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReview}
+                  className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs btn-press-sm transition-colors cursor-pointer"
+                >
+                  Review Allocations ⚙️
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </motion.div>
     </motion.div>

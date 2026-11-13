@@ -12,6 +12,15 @@ import {
   generateSpouseProfile,
   getInitialAssetMaintenanceState,
 } from './lifeEventsEngine.js';
+import {
+  calculateMortgageDetails,
+  calculateMortgageEMI,
+  MORTGAGE_ANNUAL_RATE,
+  getPropertyTierData,
+  getDownsizedTierData,
+  EVICTION_SHOCK_RELOCATION_FEE,
+  EVICTION_SHOCK_RENT_HIKE,
+} from './realEstateEngine.js';
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -810,9 +819,12 @@ export const useGameStore = create((set, get) => ({
       updatedCharacter = applied.character;
       updatedGoals = applied.goals;
     } else if (goal.id === 'goal_home') {
-      const applied = applyHomeOwnership(updatedCharacter, updatedGoals, insurance);
-      updatedCharacter = applied.character;
-      updatedGoals = applied.goals;
+      get().finalizeHomePurchase({
+        goalId: goal.id,
+        downPaymentAmount: goal.currentAmount || Math.round((goal.propertyCost || 7500000) * 0.20),
+        propertyCost: goal.propertyCost || 7500000,
+      });
+      return;
     } else {
       updatedGoals = updatedGoals.map((g) =>
         g.id === goalId ? { ...g, status: 'completed', milestoneTriggered: true } : g
@@ -874,6 +886,346 @@ export const useGameStore = create((set, get) => ({
       character: applied.character,
       goals: applied.goals,
     });
+  },
+
+  // Phase 6: Finalize realistic home purchase with authentic down payment + mortgage loan
+  finalizeHomePurchase: ({ goalId = 'goal_home', downPaymentAmount, tenureMonths = 240, propertyCost = null } = {}) => {
+    const { character, goals, insurance, simulation } = get();
+    const goal = goals.find((g) => g.id === goalId) || goals.find((g) => g.id === 'goal_home');
+    const propCost = propertyCost || goal?.propertyCost || 7500000;
+    const actualDP = downPaymentAmount !== undefined ? downPaymentAmount : (goal?.currentAmount || Math.round(propCost * 0.20));
+
+    const mortgageDetails = calculateMortgageDetails({
+      propertyCost: propCost,
+      downPayment: actualDP,
+      tenureMonths,
+      annualRate: MORTGAGE_ANNUAL_RATE,
+    });
+
+    const mortgageLoan = mortgageDetails.loanPrincipal > 0 ? {
+      id: `loan_home_${Date.now()}`,
+      name: 'Home Mortgage Loan',
+      principalRemaining: mortgageDetails.loanPrincipal,
+      interestRateAnnual: MORTGAGE_ANNUAL_RATE,
+      tenureMonthsRemaining: tenureMonths,
+      emi: mortgageDetails.emi,
+    } : null;
+
+    let updatedLiquidCash = character.liquidCash;
+    const goalBalance = goal?.currentAmount || 0;
+    if (actualDP > goalBalance) {
+      const extraNeeded = actualDP - goalBalance;
+      updatedLiquidCash = Math.max(0, updatedLiquidCash - extraNeeded);
+    }
+
+    let intermediateChar = {
+      ...character,
+      liquidCash: updatedLiquidCash,
+    };
+
+    let updatedGoals = goals.map((g) =>
+      g.id === (goal?.id || 'goal_home')
+        ? {
+            ...g,
+            currentAmount: actualDP,
+            status: 'completed',
+            milestoneTriggered: true,
+          }
+        : g
+    );
+
+    const applied = applyHomeOwnership(intermediateChar, updatedGoals, insurance, mortgageLoan, { propertyCost: propCost, eliminateRent: true });
+
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set({
+      character: applied.character,
+      goals: applied.goals,
+      simulation: {
+        ...simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    });
+  },
+
+  // Phase 6: Early down payment completion decision (Options A, B, C)
+  chooseEarlyHomeDecision: ({ goalId = 'goal_home', decision }) => {
+    const { character, goals, simulation } = get();
+    const goal = goals.find((g) => g.id === goalId) || goals.find((g) => g.id === 'goal_home');
+    if (!goal) {
+      get().closeModal();
+      return;
+    }
+
+    if (decision === 'buy_now') {
+      // Option A: Open interactive purchase sheet in early buy mode
+      set({
+        simulation: {
+          ...simulation,
+          activeModal: {
+            type: 'home_purchase',
+            goal,
+            isEarly: true,
+          },
+          isPaused: true,
+        },
+      });
+      return;
+    }
+
+    let updatedGoals = goals.map((g) => ({ ...g }));
+
+    if (decision === 'scale_dp') {
+      // Option B: Keep contributing to fund 30-40% down payment
+      const propCost = goal.propertyCost || 7500000;
+      const scaledTarget = Math.round(propCost * 0.40);
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goal.id
+          ? {
+              ...g,
+              earlyDecisionMade: 'scale_down_payment',
+              isScalingDownPayment: true,
+              scaledTargetAmount: scaledTarget,
+              targetAmount: scaledTarget,
+              status: 'in_progress',
+              milestoneTriggered: false,
+            }
+          : g
+      );
+    } else if (decision === 'lock_redirect') {
+      // Option C: Lock down payment in safe liquid yield, waterfall cascades SIP to retirement
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goal.id
+          ? {
+              ...g,
+              earlyDecisionMade: 'lock_redirect',
+              isLocked: true,
+              instrumentId: 'savings',
+              status: 'in_progress',
+              milestoneTriggered: false,
+            }
+          : g
+      );
+    }
+
+    const queue = simulation.modalQueue || [];
+    const hasNextModal = queue.length > 0;
+    const nextModal = hasNextModal ? queue[0] : null;
+    const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+    set({
+      goals: updatedGoals,
+      simulation: {
+        ...simulation,
+        activeModal: nextModal,
+        modalQueue: nextQueue,
+        isPaused: hasNextModal ? true : false,
+      },
+    });
+  },
+
+  // Phase 6: Handle underfunded down payment at target age
+  resolveUnderfundedHome: ({ goalId = 'goal_home', resolution, postponeYears = 2, downsizedPropertyCost = null }) => {
+    const { character, goals, simulation } = get();
+    const goal = goals.find((g) => g.id === goalId) || goals.find((g) => g.id === 'goal_home');
+    if (!goal) {
+      get().closeModal();
+      return;
+    }
+
+    if (resolution === 'postpone') {
+      const currentAge = simulation.currentAge;
+      const nextTargetAge = currentAge + postponeYears;
+      const updatedGoals = goals.map((g) =>
+        g.id === goal.id
+          ? {
+              ...g,
+              targetAge: nextTargetAge,
+              targetMonthsRemaining: postponeYears * 12,
+              milestoneTriggered: false,
+            }
+          : g
+      );
+
+      const queue = simulation.modalQueue || [];
+      const hasNextModal = queue.length > 0;
+      const nextModal = hasNextModal ? queue[0] : null;
+      const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+      set({
+        goals: updatedGoals,
+        simulation: {
+          ...simulation,
+          activeModal: nextModal,
+          modalQueue: nextQueue,
+          isPaused: hasNextModal ? true : false,
+        },
+      });
+      return;
+    }
+
+    if (resolution === 'dip_funds') {
+      const propCost = goal.propertyCost || 7500000;
+      const requiredDP = Math.round(propCost * 0.20);
+      const currentFund = goal.currentAmount || 0;
+      const shortfall = Math.max(0, requiredDP - currentFund);
+
+      let liquidCash = character.liquidCash;
+      let updatedGoals = goals.map((g) => ({ ...g }));
+
+      const fromCash = Math.min(liquidCash, shortfall);
+      liquidCash -= fromCash;
+      const remShortfall = shortfall - fromCash;
+
+      if (remShortfall > 0) {
+        const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+        if (emgIdx >= 0) {
+          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
+          const fromEmg = Math.min(emgBal, remShortfall);
+          updatedGoals[emgIdx] = {
+            ...updatedGoals[emgIdx],
+            currentAmount: emgBal - fromEmg,
+            status: 'refill_needed',
+          };
+        }
+      }
+
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === goal.id ? { ...g, currentAmount: requiredDP } : g
+      );
+
+      set({
+        character: { ...character, liquidCash },
+        goals: updatedGoals,
+      });
+
+      get().finalizeHomePurchase({
+        goalId: goal.id,
+        downPaymentAmount: requiredDP,
+        propertyCost: propCost,
+      });
+      return;
+    }
+
+    if (resolution === 'downsize') {
+      const propCost = downsizedPropertyCost || 5000000;
+      const requiredDP = Math.round(propCost * 0.20);
+      const currentFund = goal.currentAmount || 0;
+      const actualDP = Math.min(propCost, Math.max(requiredDP, currentFund));
+
+      get().finalizeHomePurchase({
+        goalId: goal.id,
+        downPaymentAmount: actualDP,
+        propertyCost: propCost,
+      });
+      return;
+    }
+  },
+
+  // Phase 6: Housing Pressure Shocks (Emergency Buy vs Relocate)
+  resolveHousingEvictionShock: ({ decision }) => {
+    const { character, goals, simulation } = get();
+    const homeGoal = goals.find((g) => g.id === 'goal_home');
+    const propCost = homeGoal?.propertyCost || 7500000;
+    const requiredDP = Math.round(propCost * 0.20);
+
+    if (decision === 'emergency_buy') {
+      const currentFund = homeGoal?.currentAmount || 0;
+      const shortfall = Math.max(0, requiredDP - currentFund);
+
+      let liquidCash = character.liquidCash;
+      let updatedGoals = goals.map((g) => ({ ...g }));
+
+      const fromCash = Math.min(liquidCash, shortfall);
+      liquidCash -= fromCash;
+      const remShortfall = shortfall - fromCash;
+
+      if (remShortfall > 0) {
+        const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+        if (emgIdx >= 0) {
+          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
+          const fromEmg = Math.min(emgBal, remShortfall);
+          updatedGoals[emgIdx] = {
+            ...updatedGoals[emgIdx],
+            currentAmount: emgBal - fromEmg,
+            status: 'refill_needed',
+          };
+        }
+      }
+
+      set({
+        character: { ...character, liquidCash },
+        goals: updatedGoals,
+      });
+
+      get().finalizeHomePurchase({
+        goalId: 'goal_home',
+        downPaymentAmount: requiredDP,
+        propertyCost: propCost,
+      });
+      return;
+    }
+
+    if (decision === 'relocate') {
+      const relocationFee = EVICTION_SHOCK_RELOCATION_FEE;
+      let liquidCash = character.liquidCash;
+      let updatedGoals = goals.map((g) => ({ ...g }));
+
+      const fromCash = Math.min(liquidCash, relocationFee);
+      liquidCash -= fromCash;
+      const rem = relocationFee - fromCash;
+
+      if (rem > 0) {
+        const emgIdx = updatedGoals.findIndex((g) => g.id === 'goal_emergency');
+        if (emgIdx >= 0) {
+          const emgBal = updatedGoals[emgIdx].currentAmount || 0;
+          const fromEmg = Math.min(emgBal, rem);
+          updatedGoals[emgIdx] = {
+            ...updatedGoals[emgIdx],
+            currentAmount: emgBal - fromEmg,
+            status: 'refill_needed',
+          };
+        }
+      }
+
+      const rentHike = EVICTION_SHOCK_RENT_HIKE;
+      let updatedExpenses = character.expenses ? { ...character.expenses } : {};
+      updatedExpenses.rent = (updatedExpenses.rent || 0) + rentHike;
+      const updatedFixedExpenses = character.totalFixedExpenses + rentHike;
+      const updatedMonthlyOutflow = character.totalMonthlyOutflow + rentHike;
+      const updatedMonthlySurplus = character.monthlySurplus - rentHike;
+
+      const updatedCharacter = {
+        ...character,
+        liquidCash,
+        expenses: updatedExpenses,
+        totalFixedExpenses: updatedFixedExpenses,
+        totalMonthlyOutflow: updatedMonthlyOutflow,
+        monthlySurplus: updatedMonthlySurplus,
+        lastShockMonthIndex: simulation.currentMonthIndex,
+      };
+
+      const queue = simulation.modalQueue || [];
+      const hasNextModal = queue.length > 0;
+      const nextModal = hasNextModal ? queue[0] : null;
+      const nextQueue = hasNextModal ? queue.slice(1) : [];
+
+      set({
+        character: updatedCharacter,
+        goals: updatedGoals,
+        simulation: {
+          ...simulation,
+          activeModal: nextModal,
+          modalQueue: nextQueue,
+          isPaused: hasNextModal ? true : false,
+        },
+      });
+    }
   },
 
   // ─── Phase 3: Career & Upskilling Actions ────────────────────────────────

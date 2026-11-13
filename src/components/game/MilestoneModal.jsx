@@ -3,8 +3,13 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
+import HomePurchaseModal from './HomePurchaseModal.jsx';
 
 export default function MilestoneModal({ goal }) {
+  if (goal?.id === 'goal_home') {
+    return <HomePurchaseModal goal={goal} />;
+  }
+
   const { resolveMilestoneShortfall, finalizeMilestone, closeModal, character, simulation, goals } = useGameStore();
 
   const current = goal?.currentAmount || 0;

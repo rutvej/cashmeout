@@ -17,6 +17,8 @@ import UnemploymentRunwayToast from '../game/UnemploymentRunwayToast.jsx';
 import VentureIncubatorModal from '../game/VentureIncubatorModal.jsx';
 import LaunchVentureModal from '../game/LaunchVentureModal.jsx';
 import WeddingModal from '../game/WeddingModal.jsx';
+import HomePurchaseModal from '../game/HomePurchaseModal.jsx';
+import EarlyHomeDecisionModal from '../game/EarlyHomeDecisionModal.jsx';
 import { getOutflowItemization } from '../../engine/lifeEventsEngine.js';
 import {
   pageTransition,
@@ -1169,6 +1171,18 @@ export default function MainGameScreen() {
       )}
       {simulation.activeModal?.type === 'milestone' && (
         <MilestoneModal goal={simulation.activeModal.goal} />
+      )}
+      {simulation.activeModal?.type === 'early_home_decision' && (
+        <EarlyHomeDecisionModal
+          goal={simulation.activeModal.goal}
+          currentAge={simulation.activeModal.currentAge}
+        />
+      )}
+      {simulation.activeModal?.type === 'home_purchase' && (
+        <HomePurchaseModal
+          goal={simulation.activeModal.goal}
+          isEarly={simulation.activeModal.isEarly}
+        />
       )}
       {simulation.activeModal?.type === 'wedding' && (
         <WeddingModal data={simulation.activeModal} goal={simulation.activeModal.goal} />

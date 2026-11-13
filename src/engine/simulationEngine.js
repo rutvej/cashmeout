@@ -40,12 +40,27 @@ function rollShockEvent(seed, monthIndex, character, insurance) {
   // Pick shock type
   const typeRoll = rng();
   let shockType;
-  if (typeRoll < 0.40) {
-    shockType = 'shock_medical';
-  } else if (typeRoll < 0.70) {
-    shockType = 'shock_job_loss';
+  const currentAge = character.age + Math.floor(monthIndex / 12);
+  const isRenting = !character.assetMaintenanceState?.hasOwnedHome;
+
+  if (currentAge >= 28 && currentAge <= 36 && isRenting) {
+    if (typeRoll < 0.25) {
+      shockType = 'shock_medical';
+    } else if (typeRoll < 0.50) {
+      shockType = 'shock_job_loss';
+    } else if (typeRoll < 0.75) {
+      shockType = 'shock_home_repair';
+    } else {
+      shockType = 'shock_landlord_eviction';
+    }
   } else {
-    shockType = 'shock_home_repair';
+    if (typeRoll < 0.40) {
+      shockType = 'shock_medical';
+    } else if (typeRoll < 0.70) {
+      shockType = 'shock_job_loss';
+    } else {
+      shockType = 'shock_home_repair';
+    }
   }
 
   const hasHealth = insurance.health?.isPurchased;
@@ -85,6 +100,20 @@ function rollShockEvent(seed, monthIndex, character, insurance) {
       usedInsurance: false,
       unemploymentDuration: durationMonths,
       severancePaid,
+    };
+  }
+
+  if (shockType === 'shock_landlord_eviction') {
+    return {
+      type: 'shock_event',
+      shockId: 'shock_landlord_eviction',
+      title: 'Landlord Eviction & Rent Spike!',
+      description: 'Your landlord is selling the flat! You must vacate within 30 days or relocate to a new rental at higher market rates.',
+      grossAmount: 60000,
+      relocationCost: 60000,
+      rentHikeMonthly: 3000,
+      netOutflow: 60000,
+      usedInsurance: false,
     };
   }
 
@@ -163,7 +192,8 @@ export function calculateNetWorth(character, goals, liquidCash, hasHomeAsset = f
     (sum, l) => sum + (l.principalRemaining || 0),
     0
   );
-  const homeValue = hasHomeAsset ? (character.homePropertyAssetValue || 0) : 0;
+  const hasHome = hasHomeAsset || !!character?.assetMaintenanceState?.hasOwnedHome;
+  const homeValue = hasHome ? (character.homePropertyAssetValue || 0) : 0;
   return Math.round(liquidCash + totalInvestments + homeValue - totalDebt);
 }
 
@@ -387,6 +417,25 @@ export function tickMonthlySimulation(state) {
           } else {
             modalQueue.push(milestoneModal);
           }
+        }
+      } else if (pendingMilestone.id === 'goal_home') {
+        const isOwned = !!(character.assetMaintenanceState?.hasOwnedHome);
+        if (isOwned) {
+          // Already bought early
+          updatedGoals = updatedGoals.map((g) =>
+            g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true, status: 'completed' } : g
+          );
+          return;
+        }
+        const homeModal = {
+          type: 'home_purchase',
+          goal: pendingMilestone,
+          character,
+        };
+        if (!activeModal) {
+          activeModal = homeModal;
+        } else {
+          modalQueue.push(homeModal);
         }
       } else {
         const milestoneModal = {
@@ -653,7 +702,7 @@ export function tickMonthlySimulation(state) {
     const isFixedCap =
       g.id === 'goal_emergency' ||
       g.id === 'goal_vacation' ||
-      (g.kind === 'milestone' && balance >= target) ||
+      (g.kind === 'milestone' && balance >= target && !g.isScalingDownPayment) ||
       (g.category === 'venture' && balance >= target);
 
     if (isFixedCap) {
@@ -669,7 +718,11 @@ export function tickMonthlySimulation(state) {
     if (g.id === 'goal_emergency') {
       status = newBalance >= target ? 'buffer_full' : (newBalance > 0 ? 'refill_needed' : 'in_progress');
     } else if (newBalance >= target) {
-      status = g.category === 'venture' ? 'launch_ready' : 'completed';
+      if (g.id === 'goal_home' && g.isScalingDownPayment) {
+        status = 'in_progress';
+      } else {
+        status = g.category === 'venture' ? 'launch_ready' : 'completed';
+      }
     }
 
     if (excessGrowth > 0) {
@@ -708,6 +761,35 @@ export function tickMonthlySimulation(state) {
         g.id === v.id ? { ...g, launchModalTriggered: true, status: 'launch_ready' } : g
       );
     });
+  }
+
+  // ─── 8c. Phase 6: Check for Early Down Payment Completion ─────────────────
+  const earlyHomeGoal = updatedGoals.find(
+    (g) =>
+      g.id === 'goal_home' &&
+      !character.assetMaintenanceState?.hasOwnedHome &&
+      !g.earlyDecisionMade &&
+      !g.earlyPromptTriggered &&
+      !g.milestoneTriggered &&
+      currentAge < g.targetAge &&
+      (g.currentAmount || 0) >= (g.targetAmount || 1)
+  );
+
+  if (earlyHomeGoal) {
+    isPaused = true;
+    const earlyModal = {
+      type: 'early_home_decision',
+      goal: earlyHomeGoal,
+      currentAge,
+    };
+    if (!activeModal) {
+      activeModal = earlyModal;
+    } else {
+      modalQueue.push(earlyModal);
+    }
+    updatedGoals = updatedGoals.map((g) =>
+      g.id === earlyHomeGoal.id ? { ...g, earlyPromptTriggered: true } : g
+    );
   }
 
   // ─── 9. Service Loans ────────────────────────────────────────────────────
@@ -769,8 +851,15 @@ export function tickMonthlySimulation(state) {
   }
 
   // ─── 11. Net Worth Snapshot & Character State ────────────────────────────
+  let currentHomeValue = character.homePropertyAssetValue;
+  if (assetMaintenance?.hasOwnedHome) {
+    const baseHomeVal = currentHomeValue || 7500000;
+    const monthlyAppreciation = Math.round(baseHomeVal * (0.065 / 12));
+    currentHomeValue = baseHomeVal + monthlyAppreciation;
+  }
+
   const netWorth = calculateNetWorth(
-    { ...character, loans: updatedLoans },
+    { ...character, loans: updatedLoans, homePropertyAssetValue: currentHomeValue },
     updatedGoals,
     liquidCash
   );
@@ -827,6 +916,7 @@ export function tickMonthlySimulation(state) {
     employmentStatus,
     unemploymentDurationMonths,
     preLayoffTakeHome: employmentStatus === 'unemployed' ? preLayoffTakeHome : null,
+    homePropertyAssetValue: currentHomeValue,
     lastShockMonthIndex,
     lastJobLossMonthIndex,
   };

@@ -10,7 +10,8 @@
     "test:e2e": "node tests/test-e2e-playwright.mjs",
     "test:phase3": "node tests/test-phase3-career.mjs",
     "test:phase4": "node tests/test-phase4-ventures.mjs",
-    "test:phase5": "node tests/test-phase5-life-events.mjs"
+    "test:phase5": "node tests/test-phase5-life-events.mjs",
+    "test:phase6": "node tests/test-phase6-real-estate.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
