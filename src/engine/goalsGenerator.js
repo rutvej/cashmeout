@@ -225,3 +225,25 @@ export function generateInitialGoals(character) {
     },
   ];
 }
+
+// Auto-remove completed milestone goals and launched ventures from active surplus allocation
+export function getActiveAllocatableGoals(goals) {
+  if (!Array.isArray(goals)) return [];
+  return goals.filter((g) => {
+    // Active cash-flow ventures generate recurring income; they don't take monthly SIPs
+    if (g.isLaunched) return false;
+
+    // One-time milestone goals (e.g. Car, Home Down Payment, Wedding):
+    // Once achieved or finalized, REMOVE from the allocation list completely!
+    if (
+      g.kind === 'milestone' &&
+      (g.status === 'completed' || g.isCompleted || (g.currentAmount || 0) >= (g.targetAmount || 1))
+    ) {
+      return false;
+    }
+
+    // Recurring goals (e.g. Emergency Refill, Annual Vacation) remain if active
+    return true;
+  });
+}
+
