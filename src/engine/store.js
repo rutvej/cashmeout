@@ -26,6 +26,58 @@ import {
   isMarketInCorrection,
   processLiquidationFromGoal,
 } from './compoundingEngine.js';
+import {
+  saveActiveGameSession,
+  loadActiveGameSession,
+  clearActiveGameSession,
+  hasActiveGameSession,
+} from './storageEngine.js';
+
+export const serializeGameState = (state) => {
+  if (!state || !state.character) return null;
+
+  const isCompleted =
+    state.currentScreen === 'scorecard' ||
+    ((state.character?.age || 0) >= (state.character?.retirementAge || 60));
+
+  return {
+    version: 1,
+    lastSavedAt: new Date().toISOString(),
+    status: isCompleted ? 'completed' : 'in_progress',
+    currentScreen: state.currentScreen === 'landing' ? 'main_game' : state.currentScreen,
+    config: {
+      seed: state.config?.seed || 'seed',
+      cityTier: state.config?.cityTier || 'tier1',
+      careerField: state.config?.careerField || 'science',
+    },
+    character: state.character,
+    goals: state.goals || [],
+    insurance: state.insurance || {},
+    surplusAllocation: state.surplusAllocation || {},
+    simulation: {
+      currentMonthIndex: state.simulation?.currentMonthIndex || 0,
+      currentAge: state.simulation?.currentAge || 23,
+      currentMonthOfYear: state.simulation?.currentMonthOfYear || 1,
+      isPaused: true,
+      gameSpeed: state.simulation?.gameSpeed || 1,
+      activeModal: state.simulation?.activeModal || null,
+      modalQueue: state.simulation?.modalQueue || [],
+      autoVacation: state.simulation?.autoVacation || false,
+      history: state.simulation?.history || [],
+      decisionJournal: state.simulation?.decisionJournal || [],
+    },
+  };
+};
+
+const triggerAutoSave = (state) => {
+  if (!state || !state.character) return;
+  const payload = serializeGameState(state);
+  if (payload) {
+    saveActiveGameSession(payload).catch((err) => {
+      console.warn('Auto-save error:', err);
+    });
+  }
+};
 
 export const useGameStore = create((set, get) => ({
   // Active screen state: 'landing' | 'spawn_reveal' | 'goal_setup' | 'financial_setup' | 'main_game' | 'scorecard'
@@ -135,6 +187,7 @@ export const useGameStore = create((set, get) => ({
         decisionJournal: [],
       },
     });
+    triggerAutoSave(get());
   },
 
   updateGoal: (goalId, updates) =>
@@ -143,7 +196,7 @@ export const useGameStore = create((set, get) => ({
     })),
 
   // Phase 2: Bidirectionally synced goal allocation (₹ ↔ %)
-  setGoalAllocation: (goalId, allocationUpdates) =>
+  setGoalAllocation: (goalId, allocationUpdates) => {
     set((state) => {
       const surplus = state.character?.monthlySurplus || 0;
       return {
@@ -160,10 +213,12 @@ export const useGameStore = create((set, get) => ({
           return { ...g, ...updates };
         }),
       };
-    }),
+    });
+    triggerAutoSave(get());
+  },
 
   // Phase 2: Switch allocation mode for a goal (percentage vs fixed)
-  setAllocationMode: (goalId, mode) =>
+  setAllocationMode: (goalId, mode) => {
     set((state) => {
       const isMidGame = (state.simulation?.currentMonthIndex || 0) > 0;
       const healthPremium = state.insurance?.health?.isPurchased ? state.insurance.health.monthlyPremium : 0;
@@ -198,7 +253,9 @@ export const useGameStore = create((set, get) => ({
           };
         }),
       };
-    }),
+    });
+    triggerAutoSave(get());
+  },
 
   setSurplusAllocation: (partial) =>
     set((state) => ({
@@ -303,6 +360,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNext ? true : false,
       },
     });
+    triggerAutoSave(get());
   },
 
   addCustomGoal: ({ name, targetAmount, instrumentId = 'equity', icon = '💎' }) => {
@@ -433,6 +491,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal,
       },
     }));
+    triggerAutoSave(get());
   },
 
   dismissLaunchVentureModal: () => {
@@ -450,6 +509,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     }));
+    triggerAutoSave(get());
   },
 
   scaleVenture: (goalId) => {
@@ -478,6 +538,7 @@ export const useGameStore = create((set, get) => ({
       },
       goals: updatedGoals,
     }));
+    triggerAutoSave(get());
     return true;
   },
 
@@ -520,6 +581,7 @@ export const useGameStore = create((set, get) => ({
     const currentState = get();
     const nextState = tickMonthlySimulation(currentState);
     set(nextState);
+    triggerAutoSave(get());
   },
 
   closeModal: () =>
@@ -537,7 +599,7 @@ export const useGameStore = create((set, get) => ({
     }),
 
   // Phase 1: Acknowledge shock event and resume (or move to next queued modal)
-  acknowledgeShock: () =>
+  acknowledgeShock: () => {
     set((state) => {
       const queue = state.simulation.modalQueue || [];
       if (queue.length > 0) {
@@ -549,7 +611,9 @@ export const useGameStore = create((set, get) => ({
       return {
         simulation: { ...state.simulation, activeModal: null, isPaused: false },
       };
-    }),
+    });
+    triggerAutoSave(get());
+  },
 
   // Vacation resolution with 3 options: Loan / Other Fund / Acquired Only + Auto-vacation toggle
   resolveVacationShortfall: ({ resolutionType, nextYearTripOption = 'domestic', autoVacation = false }) => {
@@ -648,6 +712,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     });
+    triggerAutoSave(get());
   },
 
   // Milestone resolution: Postpone Event / Other Fund / Take a Loan
@@ -831,6 +896,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     });
+    triggerAutoSave(get());
   },
 
   // Phase 5: Finalize milestone completion when 100% funded
@@ -873,6 +939,7 @@ export const useGameStore = create((set, get) => ({
           isPaused: true,
         },
       });
+      triggerAutoSave(get());
       return;
     }
 
@@ -912,6 +979,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal,
       },
     });
+    triggerAutoSave(get());
   },
 
   // Phase 5: Confirm wedding & apply household economics
@@ -934,6 +1002,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal,
       },
     });
+    triggerAutoSave(get());
   },
 
   completeCarPurchase: () => {
@@ -943,6 +1012,7 @@ export const useGameStore = create((set, get) => ({
       character: applied.character,
       goals: applied.goals,
     });
+    triggerAutoSave(get());
   },
 
   completeHomePurchase: (mortgageLoan = null) => {
@@ -952,6 +1022,7 @@ export const useGameStore = create((set, get) => ({
       character: applied.character,
       goals: applied.goals,
     });
+    triggerAutoSave(get());
   },
 
   // Phase 6: Finalize realistic home purchase with authentic down payment + mortgage loan
@@ -1035,6 +1106,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     });
+    triggerAutoSave(get());
   },
 
   // Phase 6: Early down payment completion decision (Options A, B, C)
@@ -1111,6 +1183,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     });
+    triggerAutoSave(get());
   },
 
   // Phase 6: Handle underfunded down payment at target age
@@ -1175,6 +1248,7 @@ export const useGameStore = create((set, get) => ({
           isPaused: hasNextModal ? true : false,
         },
       });
+      triggerAutoSave(get());
       return;
     }
 
@@ -1364,6 +1438,7 @@ export const useGameStore = create((set, get) => ({
           isPaused: hasNextModal ? true : false,
         },
       });
+      triggerAutoSave(get());
     }
   },
 
@@ -1395,6 +1470,7 @@ export const useGameStore = create((set, get) => ({
         monthlySurplus: nextSurplus,
       },
     }));
+    triggerAutoSave(get());
     return true;
   },
 
@@ -1414,6 +1490,7 @@ export const useGameStore = create((set, get) => ({
         monthlySurplus: nextSurplus,
       },
     }));
+    triggerAutoSave(get());
   },
 
   applyForJob: (job) => {
@@ -1519,6 +1596,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     }));
+    triggerAutoSave(get());
   },
 
   declineJobOffer: () => {
@@ -1536,6 +1614,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     }));
+    triggerAutoSave(get());
   },
 
   dismissCourseCompletion: () => {
@@ -1553,6 +1632,7 @@ export const useGameStore = create((set, get) => ({
         isPaused: hasNextModal ? true : false,
       },
     }));
+    triggerAutoSave(get());
   },
 
   prepayLoan: (loanId, amount) => {
@@ -1579,6 +1659,7 @@ export const useGameStore = create((set, get) => ({
         loans: updatedLoans,
       },
     }));
+    triggerAutoSave(get());
   },
 
   liquidateGoalFunds: ({ goalId, amount }) => {
@@ -1604,13 +1685,57 @@ export const useGameStore = create((set, get) => ({
       },
       goals: updatedGoals,
     });
+    triggerAutoSave(get());
 
     return res;
   },
 
-  navigateTo: (screen) => set({ currentScreen: screen }),
+  navigateTo: (screen) => {
+    set({ currentScreen: screen });
+    if (screen === 'main_game') {
+      triggerAutoSave(get());
+    }
+  },
 
-  resetGame: () =>
+  // Phase 11: Convenience aliases & persistence actions
+  enrollCourse: (courseId) => get().enrollInCourse(courseId),
+  celebrateWedding: (spouseProfile) => get().confirmWedding(spouseProfile),
+  buyCar: () => get().completeCarPurchase(),
+
+  resumeSavedGame: async () => {
+    const session = await loadActiveGameSession();
+    if (!session || !session.character) {
+      return false;
+    }
+
+    const screenToNavigate =
+      session.currentScreen && session.currentScreen !== 'landing'
+        ? session.currentScreen
+        : 'main_game';
+
+    set({
+      config: session.config || get().config,
+      character: session.character,
+      goals: session.goals || [],
+      insurance: session.insurance || get().insurance,
+      surplusAllocation: session.surplusAllocation || get().surplusAllocation,
+      simulation: {
+        ...(session.simulation || {}),
+        isPaused: true,
+      },
+      currentScreen: screenToNavigate,
+    });
+
+    return true;
+  },
+
+  clearSavedGame: async () => {
+    await clearActiveGameSession();
+    get().resetGame();
+  },
+
+  resetGame: () => {
+    clearActiveGameSession().catch(() => {});
     set({
       currentScreen: 'landing',
       config: {
@@ -1638,7 +1763,8 @@ export const useGameStore = create((set, get) => ({
         history: [],
         decisionJournal: [],
       },
-    }),
+    });
+  },
 }));
 
 if (typeof window !== 'undefined') {

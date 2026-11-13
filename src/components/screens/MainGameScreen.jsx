@@ -271,6 +271,16 @@ export default function MainGameScreen() {
               >
                 {simulation.autoVacation ? '✈️ AUTO: ON' : '✈️ AUTO: OFF'}
               </button>
+
+              {/* Auto-Saved Status Indicator */}
+              <div
+                className="hidden sm:inline-flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 text-[10px] font-mono font-bold bg-slate-50 border-2 border-slate-900 text-slate-700 shrink-0"
+                title="Simulation state is auto-saved to browser storage"
+                data-testid="auto-save-indicator"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Auto-Saved</span>
+              </div>
             </div>
           </div>
 

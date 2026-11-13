@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
+import { hasActiveGameSession, loadActiveGameSession } from '../../engine/storageEngine.js';
+import { calculateNetWorth } from '../../engine/simulationEngine.js';
+import { formatINR } from '../../utils/format.js';
 import {
   pageTransition,
   staggerContainer,
@@ -64,7 +67,41 @@ const CAREER_FIELDS = [
 ];
 
 export default function LandingScreen() {
-  const { config, setConfig, randomizeSeed, generateAndSetCharacter } = useGameStore();
+  const {
+    config,
+    setConfig,
+    randomizeSeed,
+    generateAndSetCharacter,
+    resumeSavedGame,
+    clearSavedGame,
+  } = useGameStore();
+
+  const [activeSession, setActiveSession] = useState(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [isOverwriteModalOpen, setIsOverwriteModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function checkSession() {
+      try {
+        const hasSession = await hasActiveGameSession();
+        if (hasSession && isMounted) {
+          const session = await loadActiveGameSession();
+          if (isMounted && session && session.character && session.status === 'in_progress') {
+            setActiveSession(session);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed checking active session:', err);
+      } finally {
+        if (isMounted) setIsCheckingSession(false);
+      }
+    }
+    checkSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSeedChange = (e) => {
     setConfig({ seed: e.target.value.trim() });
@@ -74,8 +111,39 @@ export default function LandingScreen() {
 
   const handleGenerate = () => {
     if (!isSeedValid) return;
+    if (activeSession) {
+      setIsOverwriteModalOpen(true);
+      return;
+    }
     generateAndSetCharacter();
   };
+
+  const handleResume = async () => {
+    await resumeSavedGame();
+  };
+
+  const handleConfirmOverwrite = async () => {
+    await clearSavedGame();
+    setActiveSession(null);
+    setIsOverwriteModalOpen(false);
+    generateAndSetCharacter();
+  };
+
+  // Calculated session attributes if active session exists
+  const sessionAge = activeSession?.simulation?.currentAge || activeSession?.character?.age || 23;
+  const sessionMonth = activeSession?.simulation?.currentMonthIndex || 0;
+  const sessionNetWorth = activeSession
+    ? calculateNetWorth(
+        activeSession.character,
+        activeSession.goals || [],
+        activeSession.character?.liquidCash || 0
+      )
+    : 0;
+  const sessionCompany =
+    activeSession?.character?.company ||
+    activeSession?.character?.companyName ||
+    activeSession?.character?.city ||
+    'TechCorp';
 
   return (
     <motion.div
@@ -107,6 +175,84 @@ export default function LandingScreen() {
             Deterministic seed ensures 100% reproducible outcomes.
           </p>
         </motion.div>
+
+        {/* ─── Phase 11: NeoPOP "Resume Active Life" Card ─── */}
+        {activeSession && (
+          <motion.div
+            className="card-neopop p-4 sm:p-6 bg-gradient-to-br from-emerald-50 via-white to-blue-50 border-2 border-slate-900 shadow-hard-lg space-y-4"
+            variants={fadeInUp}
+            data-testid="resume-active-life-card"
+          >
+            {/* Header Badge */}
+            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-3">
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 bg-emerald-100 border border-slate-900 text-[10px] sm:text-[11px] font-mono font-black uppercase tracking-wider text-emerald-950">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Active Life in Progress
+              </div>
+              <span className="text-[10px] font-mono font-bold text-slate-500">
+                Month {sessionMonth} (Year {Math.floor(sessionMonth / 12) + 1})
+              </span>
+            </div>
+
+            {/* Character & Career Summary */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display font-black text-xl sm:text-2xl text-slate-900 leading-tight">
+                  {activeSession.character?.name}
+                </h2>
+                <div className="text-xs sm:text-sm font-bold text-slate-700 mt-0.5">
+                  {activeSession.character?.jobTitle}{' '}
+                  <span className="text-slate-400 font-normal">at</span>{' '}
+                  <span className="text-blue-700 font-bold">{sessionCompany}</span>
+                </div>
+              </div>
+
+              {/* Net Worth & Age Badges */}
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="px-3 py-1.5 bg-white border-2 border-slate-900 text-right">
+                  <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                    Net Worth
+                  </span>
+                  <span className="text-sm sm:text-base font-mono font-black text-slate-900">
+                    {formatINR(sessionNetWorth)}
+                  </span>
+                </div>
+                <div className="px-3 py-1.5 bg-white border-2 border-slate-900 text-center">
+                  <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                    Age
+                  </span>
+                  <span className="text-sm sm:text-base font-mono font-black text-blue-600">
+                    {sessionAge}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleResume}
+                className="w-full py-3.5 sm:py-4 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-display font-black text-sm sm:text-base tracking-wider uppercase btn-press shadow-hard flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                ▶ RESUME LIFE (Age {sessionAge}, Month {sessionMonth})
+              </button>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[10px] font-mono text-slate-500">
+                  Seed: <strong className="font-bold text-slate-800">{activeSession.config?.seed || activeSession.character?.seed}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsOverwriteModalOpen(true)}
+                  className="text-xs font-mono font-bold text-rose-600 hover:text-rose-800 underline uppercase tracking-wider cursor-pointer"
+                >
+                  Start New Life
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* ─── Seed Input ─── */}
         <motion.div className="space-y-1.5 card-neopop p-3.5 sm:p-5 bg-white" variants={fadeInUp}>
@@ -242,6 +388,46 @@ export default function LandingScreen() {
         </motion.div>
 
       </motion.div>
+
+      {/* ─── Overwrite Confirmation Modal ─── */}
+      {isOverwriteModalOpen && activeSession && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          data-testid="overwrite-confirmation-modal"
+        >
+          <div className="bg-white border-2 border-slate-900 shadow-hard-lg max-w-md w-full p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">⚠️</span>
+              <h3 className="font-display font-black text-lg text-slate-900 tracking-tight">
+                Overwrite Saved Life?
+              </h3>
+            </div>
+
+            <p className="text-xs sm:text-sm font-body text-slate-700 leading-relaxed">
+              You have an active ongoing life for{' '}
+              <strong className="font-bold text-slate-900">{activeSession.character?.name}</strong>{' '}
+              (Age {sessionAge}). Starting a new life will overwrite your saved progress. Proceed?
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsOverwriteModalOpen(false)}
+                className="flex-1 py-2.5 px-4 bg-white border-2 border-slate-900 font-mono font-bold text-xs uppercase tracking-wider text-slate-800 hover:bg-slate-50 btn-press"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmOverwrite}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white border-2 border-slate-900 font-mono font-black text-xs uppercase tracking-wider btn-press shadow-hard-sm"
+              >
+                Overwrite & Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
