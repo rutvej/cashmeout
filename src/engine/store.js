@@ -85,6 +85,7 @@ export const useGameStore = create((set, get) => ({
     modalQueue: [],
     autoVacation: false, // automated annual vacation without pausing
     history: [],
+    decisionJournal: [],
   },
 
   // Actions
@@ -131,6 +132,7 @@ export const useGameStore = create((set, get) => ({
             totalDebt: (character.loans || []).reduce((s, l) => s + l.principalRemaining, 0),
           },
         ],
+        decisionJournal: [],
       },
     });
   },
@@ -660,6 +662,25 @@ export const useGameStore = create((set, get) => ({
     const current = goal.currentAmount || 0;
     const target = goal.targetAmount || 1;
     const shortfall = Math.max(0, target - current);
+    const liquidCashAvailable = character.liquidCash || 0;
+    const hadIdleCash = liquidCashAvailable >= shortfall * 1.2;
+
+    const milestoneDecision = {
+      type: 'milestone',
+      goalId,
+      goalName: goal.name,
+      icon: goal.icon,
+      targetAmount: target,
+      currentAmount: current,
+      shortfall,
+      resolution: resolutionType,
+      postponeYears: resolutionType === 'postpone' ? postponeYears : 0,
+      age: simulation.currentAge,
+      monthIndex: simulation.currentMonthIndex,
+      liquidCashAvailable,
+      hadIdleCash,
+    };
+    const updatedJournal = [...(simulation.decisionJournal || []), milestoneDecision];
 
     let updatedLoans = [...(character.loans || [])];
     let updatedLiquidCash = character.liquidCash;
@@ -804,6 +825,7 @@ export const useGameStore = create((set, get) => ({
       goals: finalGoals,
       simulation: {
         ...simulation,
+        decisionJournal: updatedJournal,
         activeModal: nextModal,
         modalQueue: nextQueue,
         isPaused: hasNextModal ? true : false,
@@ -820,11 +842,29 @@ export const useGameStore = create((set, get) => ({
       return;
     }
 
+    const milestoneDecision = {
+      type: 'milestone',
+      goalId: goal.id,
+      goalName: goal.name,
+      icon: goal.icon,
+      targetAmount: goal.targetAmount,
+      currentAmount: goal.currentAmount,
+      shortfall: 0,
+      resolution: 'none',
+      postponeYears: 0,
+      age: simulation.currentAge,
+      monthIndex: simulation.currentMonthIndex,
+      liquidCashAvailable: character.liquidCash,
+      hadIdleCash: false,
+    };
+    const updatedJournal = [...(simulation.decisionJournal || []), milestoneDecision];
+
     if (goal.id === 'goal_marriage') {
       const spouseProfile = generateSpouseProfile(character.seed);
       set({
         simulation: {
           ...simulation,
+          decisionJournal: updatedJournal,
           activeModal: {
             type: 'wedding',
             goal,
@@ -866,6 +906,7 @@ export const useGameStore = create((set, get) => ({
       goals: updatedGoals,
       simulation: {
         ...simulation,
+        decisionJournal: updatedJournal,
         activeModal: nextModal,
         modalQueue: nextQueue,
         isPaused: hasNextModal,
@@ -961,6 +1002,23 @@ export const useGameStore = create((set, get) => ({
 
     const applied = applyHomeOwnership(intermediateChar, updatedGoals, insurance, mortgageLoan, { propertyCost: propCost, eliminateRent: true });
 
+    const homeDecision = {
+      type: 'milestone',
+      goalId: goal?.id || 'goal_home',
+      goalName: goal?.name || 'Home Down Payment',
+      icon: goal?.icon || '🏠',
+      targetAmount: goal?.targetAmount || Math.round(propCost * 0.2),
+      currentAmount: actualDP,
+      shortfall: Math.max(0, (goal?.targetAmount || Math.round(propCost * 0.2)) - actualDP),
+      resolution: mortgageLoan ? 'loan' : 'none',
+      postponeYears: 0,
+      age: simulation.currentAge,
+      monthIndex: simulation.currentMonthIndex,
+      liquidCashAvailable: character.liquidCash,
+      hadIdleCash: false,
+    };
+    const updatedJournal = [...(simulation.decisionJournal || []), homeDecision];
+
     const queue = simulation.modalQueue || [];
     const hasNextModal = queue.length > 0;
     const nextModal = hasNextModal ? queue[0] : null;
@@ -971,6 +1029,7 @@ export const useGameStore = create((set, get) => ({
       goals: applied.goals,
       simulation: {
         ...simulation,
+        decisionJournal: updatedJournal,
         activeModal: nextModal,
         modalQueue: nextQueue,
         isPaused: hasNextModal ? true : false,
@@ -1066,6 +1125,30 @@ export const useGameStore = create((set, get) => ({
     if (resolution === 'postpone') {
       const currentAge = simulation.currentAge;
       const nextTargetAge = currentAge + postponeYears;
+      const propCost = goal.propertyCost || 7500000;
+      const requiredDP = Math.round(propCost * 0.20);
+      const currentFund = goal.currentAmount || 0;
+      const shortfall = Math.max(0, requiredDP - currentFund);
+      const liquidCashAvailable = character.liquidCash || 0;
+      const hadIdleCash = liquidCashAvailable >= shortfall * 1.2;
+
+      const postponeDecision = {
+        type: 'milestone',
+        goalId: goal.id,
+        goalName: goal.name,
+        icon: goal.icon,
+        targetAmount: requiredDP,
+        currentAmount: currentFund,
+        shortfall,
+        resolution: 'postpone',
+        postponeYears,
+        age: currentAge,
+        monthIndex: simulation.currentMonthIndex,
+        liquidCashAvailable,
+        hadIdleCash,
+      };
+      const updatedJournal = [...(simulation.decisionJournal || []), postponeDecision];
+
       const updatedGoals = goals.map((g) =>
         g.id === goal.id
           ? {
@@ -1086,6 +1169,7 @@ export const useGameStore = create((set, get) => ({
         goals: updatedGoals,
         simulation: {
           ...simulation,
+          decisionJournal: updatedJournal,
           activeModal: nextModal,
           modalQueue: nextQueue,
           isPaused: hasNextModal ? true : false,
@@ -1260,11 +1344,21 @@ export const useGameStore = create((set, get) => ({
       const nextModal = hasNextModal ? queue[0] : null;
       const nextQueue = hasNextModal ? queue.slice(1) : [];
 
+      const shockDecision = {
+        type: 'shock',
+        shockId: 'shock_landlord_eviction',
+        netLoss: relocationFee,
+        usedInsurance: false,
+        age: simulation.currentAge,
+      };
+      const updatedJournal = [...(simulation.decisionJournal || []), shockDecision];
+
       set({
         character: updatedCharacter,
         goals: updatedGoals,
         simulation: {
           ...simulation,
+          decisionJournal: updatedJournal,
           activeModal: nextModal,
           modalQueue: nextQueue,
           isPaused: hasNextModal ? true : false,
@@ -1388,6 +1482,15 @@ export const useGameStore = create((set, get) => ({
     const nextModal = hasNextModal ? queue[0] : null;
     const nextQueue = hasNextModal ? queue.slice(1) : [];
 
+    const jobSwitchDecision = {
+      type: 'job_switch',
+      oldSalary: character.monthlyTakeHome,
+      newSalary: offer.monthlyTakeHome,
+      title: offer.title,
+      age: simulation.currentAge,
+    };
+    const updatedJournal = [...(simulation.decisionJournal || []), jobSwitchDecision];
+
     set((state) => ({
       character: {
         ...state.character,
@@ -1409,6 +1512,7 @@ export const useGameStore = create((set, get) => ({
       },
       simulation: {
         ...state.simulation,
+        decisionJournal: updatedJournal,
         unemploymentReminder: null,
         activeModal: nextModal,
         modalQueue: nextQueue,
@@ -1532,6 +1636,7 @@ export const useGameStore = create((set, get) => ({
         modalQueue: [],
         autoVacation: false,
         history: [],
+        decisionJournal: [],
       },
     }),
 }));

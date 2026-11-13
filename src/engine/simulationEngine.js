@@ -10,7 +10,7 @@ import {
 import { createPRNG } from './prng.js';
 import { calculateVentureMonthlyCashFlow } from './ventureEngine.js';
 import { generateSpouseProfile, getInitialAssetMaintenanceState } from './lifeEventsEngine.js';
-import { calculateAnnualAppraisal } from './careerEngine.js';
+import { UPSKILLING_COURSES, calculateAnnualAppraisal } from './careerEngine.js';
 
 // ─── Phase 1: Shock resolution helper ───────────────────────────────────────
 
@@ -250,6 +250,7 @@ export function tickMonthlySimulation(state) {
   let activeModal = simulation.activeModal;
   let isPaused = simulation.isPaused;
   let modalQueue = [...(simulation.modalQueue || [])];
+  let decisionJournal = [...(simulation.decisionJournal || [])];
   let liquidCash = character.liquidCash;
   let penaltiesPaidFD = character.penaltiesPaidFD || 0;
   let marketLossesRealized = character.marketLossesRealized || 0;
@@ -386,6 +387,16 @@ export function tickMonthlySimulation(state) {
       } else {
         modalQueue.push(modalData);
       }
+
+      decisionJournal.push({
+        type: 'shock',
+        shockId: shockPayload.shockId,
+        netLoss: shockPayload.shockId === 'shock_job_loss'
+          ? Math.max(0, (shockPayload.grossAmount || 0) - (shockPayload.severancePaid || 0))
+          : (shockPayload.netOutflow || 0),
+        usedInsurance: !!shockPayload.usedInsurance,
+        age: currentAge,
+      });
     }
   }
 
@@ -776,6 +787,7 @@ export function tickMonthlySimulation(state) {
       }
     }
 
+    let filledEarlyMonths = g.filledEarlyMonths;
     if (g.id === 'goal_emergency') {
       status = newBalance >= target ? 'buffer_full' : (newBalance > 0 ? 'refill_needed' : 'in_progress');
     } else if (newBalance >= target) {
@@ -783,6 +795,18 @@ export function tickMonthlySimulation(state) {
         status = 'in_progress';
       } else {
         status = g.category === 'venture' ? 'launch_ready' : 'completed';
+      }
+      if (g.kind === 'milestone' && currentAge < g.targetAge && !filledEarlyMonths) {
+        filledEarlyMonths = Math.max(1, (g.targetAge - currentAge) * 12 - (monthOfYear - 1));
+        if (!decisionJournal.some((d) => d.type === 'milestone_early' && d.goalId === g.id)) {
+          decisionJournal.push({
+            type: 'milestone_early',
+            goalId: g.id,
+            goalName: g.name,
+            monthsEarly: filledEarlyMonths,
+            age: currentAge,
+          });
+        }
       }
     }
 
@@ -794,6 +818,7 @@ export function tickMonthlySimulation(state) {
       ...g,
       currentAmount: newBalance,
       status,
+      filledEarlyMonths,
     };
   });
 
@@ -878,6 +903,15 @@ export function tickMonthlySimulation(state) {
       completedCourses.push(activeCourse.courseId);
       monthsSinceLastCourseCompletion = 0; // Phase 9: Course completed resets months to 0!
 
+      const courseDef = (UPSKILLING_COURSES || []).find((c) => c.id === activeCourse.courseId);
+      const fee = courseDef?.totalCost || ((activeCourse.monthlyFee || 0) * (activeCourse.totalDurationMonths || 1));
+      decisionJournal.push({
+        type: 'course_completed',
+        courseId: activeCourse.courseId,
+        fee,
+        age: currentAge,
+      });
+
       const courseCompletedModal = {
         type: 'course_completed',
         courseName: activeCourse.courseName,
@@ -933,6 +967,8 @@ export function tickMonthlySimulation(state) {
     liquidCash,
     totalInvestments: updatedGoals.reduce((sum, g) => sum + (g.currentAmount || 0), 0),
     totalDebt: updatedLoans.reduce((sum, l) => sum + l.principalRemaining, 0),
+    jobTier: character.jobTier || 1,
+    monthlyTakeHome: baseTakeHome,
   };
 
   const finalCourseFee = activeCourse ? activeCourse.monthlyFee : 0;
@@ -1002,6 +1038,7 @@ export function tickMonthlySimulation(state) {
       modalQueue: isRetirementReached ? [] : modalQueue,
       unemploymentReminder,
       history: [...(simulation.history || []), newHistoryEntry],
+      decisionJournal,
     },
   };
 }
