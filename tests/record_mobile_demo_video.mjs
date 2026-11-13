@@ -43,7 +43,7 @@ const SCENE_TARGETS = {
 };
 
 async function recordMobileDemo() {
-  console.log('🎥 Launching Playwright to record Mobile 9:16 CashMeOut Gameplay Demo...');
+  console.log('🎥 Launching Playwright with 1:1 Mobile Viewport (430x932 iPhone 15 Pro)...');
 
   const browser = await chromium.launch({
     executablePath: '/usr/bin/google-chrome',
@@ -51,11 +51,12 @@ async function recordMobileDemo() {
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
   });
 
+  // Use matching viewport and recording size so 100% of the frame is the actual game screen
   const context = await browser.newContext({
-    viewport: { width: 450, height: 800 },
+    viewport: { width: 430, height: 932 },
     recordVideo: {
       dir: RECORDINGS_DIR,
-      size: { width: 720, height: 1280 },
+      size: { width: 430, height: 932 },
     },
     isMobile: true,
     hasTouch: true,
@@ -64,7 +65,7 @@ async function recordMobileDemo() {
 
   const page = await context.newPage();
 
-  // Helper: Subtitle box styled for mobile screens
+  // Helper: Subtitle box styled cleanly for native mobile screens
   async function updateSubtitle(text, label = '🎙️ Christopher · Narrator') {
     await page.evaluate(({ t, l }) => {
       let el = document.getElementById('demo-subtitle-box');
@@ -72,12 +73,12 @@ async function recordMobileDemo() {
         el = document.createElement('div');
         el.id = 'demo-subtitle-box';
         el.style.position = 'fixed';
-        el.style.bottom = '12px';
+        el.style.bottom = '16px';
         el.style.left = '50%';
         el.style.transform = 'translateX(-50%)';
         el.style.zIndex = '999999';
-        el.style.width = '92%';
-        el.style.maxWidth = '420px';
+        el.style.width = '90%';
+        el.style.maxWidth = '400px';
         el.style.background = 'rgba(15, 23, 42, 0.94)';
         el.style.backdropFilter = 'blur(12px)';
         el.style.border = '2px solid #38bdf8';
@@ -143,37 +144,26 @@ async function recordMobileDemo() {
     });
   });
 
-  // Camera Zoom Helpers
-  async function zoomToLocator(locator, scale = 1.35, duration = 600) {
+  // Spotlight & Focus helper (pops out card with smooth halo without breaking DOM layout)
+  async function focusElement(locator, durationMs = 1500) {
     try {
-      const box = await locator.first().boundingBox();
-      if (!box) return;
-      const centerX = box.x + box.width / 2;
-      const centerY = box.y + box.height / 2;
-      await page.evaluate(({ cx, cy, scale, dur }) => {
-        const root = document.getElementById('root');
-        if (!root) return;
-        root.style.transformOrigin = `${cx}px ${cy}px`;
-        root.style.transition = `transform ${dur}ms cubic-bezier(0.16, 1, 0.3, 1)`;
-        root.style.transform = `scale(${scale})`;
-      }, { cx: centerX, cy: centerY, scale, dur: duration });
-      await sleep(duration);
+      const loc = locator.first();
+      if (!(await loc.isVisible())) return;
+      await loc.scrollIntoViewIfNeeded();
+      await loc.evaluate((el) => {
+        el.style.transition = 'transform 0.35s ease, box-shadow 0.35s ease';
+        el.style.transform = 'scale(1.03)';
+        el.style.boxShadow = '0 0 25px rgba(56, 189, 248, 0.7), 0 0 0 3px #38bdf8';
+        el.style.zIndex = '40';
+      });
+      await sleep(durationMs);
+      await loc.evaluate((el) => {
+        el.style.transform = '';
+        el.style.boxShadow = '';
+        el.style.zIndex = '';
+      });
     } catch (err) {
-      console.warn('zoomToLocator warning:', err.message);
-    }
-  }
-
-  async function resetZoom(duration = 500) {
-    try {
-      await page.evaluate(({ dur }) => {
-        const root = document.getElementById('root');
-        if (!root) return;
-        root.style.transition = `transform ${dur}ms cubic-bezier(0.16, 1, 0.3, 1)`;
-        root.style.transform = 'scale(1)';
-      }, { dur: duration });
-      await sleep(duration);
-    } catch (err) {
-      console.warn('resetZoom warning:', err.message);
+      console.warn('focusElement warning:', err.message);
     }
   }
 
@@ -182,12 +172,13 @@ async function recordMobileDemo() {
       const loc = locator.first();
       const isVis = await loc.isVisible();
       if (!isVis) return;
+      await loc.scrollIntoViewIfNeeded();
       const box = await loc.boundingBox();
       if (box) {
         const x = box.x + box.width / 2;
         const y = box.y + box.height / 2;
         await page.mouse.move(x, y, { steps: 3 });
-        await sleep(100);
+        await sleep(80);
       }
       await loc.click({ force: true, timeout: 3000 });
     } catch (err) {
@@ -199,7 +190,7 @@ async function recordMobileDemo() {
   await page.goto('http://localhost:4173', { waitUntil: 'networkidle' });
   await sleep(400);
 
-  // Clear previous session if any overwrite modal appears
+  // Clear previous session
   await page.evaluate(() => {
     try { localStorage.clear(); } catch(e) {}
   });
@@ -226,24 +217,22 @@ async function recordMobileDemo() {
   await sleep(1000);
 
   const tier1Btn = page.locator('button:has-text("Tier 1")').first();
-  await zoomToLocator(tier1Btn, 1.3);
+  await focusElement(tier1Btn, 1200);
   await touchTap(tier1Btn);
-  await sleep(500);
+  await sleep(600);
 
   const genBtn = page.locator('button:has-text("Generate Character")').first();
-  await zoomToLocator(genBtn, 1.35);
+  await focusElement(genBtn, 800);
   await touchTap(genBtn);
-  await sleep(700);
+  await sleep(800);
 
   // Spawn Reveal screen
   const surplusBox = page.locator('text=/Net Monthly Surplus/i').first();
   if (await surplusBox.isVisible()) {
-    await zoomToLocator(surplusBox, 1.35);
-    await sleep(2200);
+    await focusElement(surplusBox, 2200);
   }
 
   const toGoalsBtn = page.locator('button:has-text("Continue to Financial Goals")').first();
-  await resetZoom();
   await touchTap(toGoalsBtn);
   await sleepUntil(SCENE_TARGETS.scene1);
 
@@ -259,20 +248,18 @@ async function recordMobileDemo() {
 
   const carGoal = page.locator('text=/Buy First Car/i, text=/Car/i').first();
   if (await carGoal.isVisible()) {
-    await zoomToLocator(carGoal, 1.35);
-    await sleep(1800);
+    await focusElement(carGoal, 2000);
   }
 
   // Vacation option
   const intlTripBtn = page.locator('button:has-text("International")').first();
   if (await intlTripBtn.isVisible()) {
-    await zoomToLocator(intlTripBtn, 1.4);
+    await focusElement(intlTripBtn, 1000);
     await touchTap(intlTripBtn);
-    await sleep(1000);
+    await sleep(800);
   }
 
   const toAllocBtn = page.locator('button:has-text("Plan Monthly Allocations")').first();
-  await resetZoom();
   await touchTap(toAllocBtn);
   await sleepUntil(SCENE_TARGETS.scene2);
 
@@ -289,13 +276,13 @@ async function recordMobileDemo() {
   // Strategy Hint
   const hintBtn = page.locator('button:has-text("Strategy Hint")').first();
   if (await hintBtn.isVisible()) {
-    await zoomToLocator(hintBtn, 1.35);
+    await focusElement(hintBtn, 800);
     await touchTap(hintBtn);
     await sleep(800);
 
     const applyRecommendedBtn = page.locator('button:has-text("Apply Recommended")').first();
     if (await applyRecommendedBtn.isVisible()) {
-      await zoomToLocator(applyRecommendedBtn, 1.4);
+      await focusElement(applyRecommendedBtn, 1000);
       await touchTap(applyRecommendedBtn);
       await sleep(1000);
     }
@@ -303,8 +290,7 @@ async function recordMobileDemo() {
 
   // Start Life Simulation
   const startSimBtn = page.locator('button:has-text("START LIFE SIMULATION")').first();
-  await resetZoom();
-  await zoomToLocator(startSimBtn, 1.35);
+  await focusElement(startSimBtn, 1000);
   await touchTap(startSimBtn);
   await sleep(600);
 
@@ -312,7 +298,6 @@ async function recordMobileDemo() {
   await page.evaluate(() => {
     if (window.__GAME_STORE__) window.__GAME_STORE__.getState().pause();
   });
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene3);
 
   // ─────────────────────────────────────────────────────────────
@@ -325,18 +310,16 @@ async function recordMobileDemo() {
   );
   await sleep(1000);
 
-  // Zoom into Age & Net Worth
+  // Focus Age & Net Worth Card
   const netWorthElem = page.locator('text=/Net Worth/i').first();
   if (await netWorthElem.isVisible()) {
-    await zoomToLocator(netWorthElem, 1.4);
-    await sleep(2500);
+    await focusElement(netWorthElem, 2500);
   }
 
-  // Zoom into Monthly Cashflow Pulse
-  const cashflowElem = page.locator('text=/Monthly Cashflow/i, text=/Inflow/i').first();
+  // Focus Monthly Cashflow Pulse
+  const cashflowElem = page.locator('text=/Monthly Cashflow/i, text=/Take-Home/i').first();
   if (await cashflowElem.isVisible()) {
-    await zoomToLocator(cashflowElem, 1.35);
-    await sleep(2500);
+    await focusElement(cashflowElem, 2500);
   }
 
   // Tap Expenses Ledger
@@ -352,7 +335,6 @@ async function recordMobileDemo() {
     }
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene4);
 
   // ─────────────────────────────────────────────────────────────
@@ -367,31 +349,29 @@ async function recordMobileDemo() {
 
   // Tap Career Tab
   const careerTab = page.locator('button:has-text("Career")').first();
-  await zoomToLocator(careerTab, 1.3);
   await touchTap(careerTab);
   await sleep(800);
 
   // Open Upskill Hub
   const upskillBtn = page.locator('button:has-text("Upskill Hub")').first();
   if (await upskillBtn.isVisible()) {
-    await zoomToLocator(upskillBtn, 1.4);
+    await focusElement(upskillBtn, 1000);
     await touchTap(upskillBtn);
-    await sleep(1000);
+    await sleep(1200);
 
     const enrollBtn = page.locator('button:has-text("Enroll Now")').first();
     if (await enrollBtn.isVisible()) {
-      await zoomToLocator(enrollBtn, 1.35);
+      await focusElement(enrollBtn, 1200);
       await touchTap(enrollBtn);
       await sleep(1200);
     }
 
-    await resetZoom(300); const closeUpskill = page.locator('button:has-text("Close"), button:has-text("✕")').first();
+    const closeUpskill = page.locator('button:has-text("Close"), button:has-text("✕")').first();
     if (await closeUpskill.isVisible()) {
       await touchTap(closeUpskill);
     }
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene5);
 
   // ─────────────────────────────────────────────────────────────
@@ -406,26 +386,25 @@ async function recordMobileDemo() {
 
   const jobMarketBtn = page.locator('button:has-text("Job Market")').first();
   if (await jobMarketBtn.isVisible()) {
-    await zoomToLocator(jobMarketBtn, 1.35);
+    await focusElement(jobMarketBtn, 800);
     await touchTap(jobMarketBtn);
-    await sleep(1000);
+    await sleep(1200);
 
     const applyJobBtn = page.locator('button:has-text("Apply")').first();
     if (await applyJobBtn.isVisible()) {
-      await zoomToLocator(applyJobBtn, 1.35);
+      await focusElement(applyJobBtn, 1200);
       await touchTap(applyJobBtn);
-      await sleep(1200);
+      await sleep(1500);
 
       const acceptOfferBtn = page.locator('button:has-text("Accept Offer")').first();
       if (await acceptOfferBtn.isVisible()) {
-        await zoomToLocator(acceptOfferBtn, 1.4);
+        await focusElement(acceptOfferBtn, 1200);
         await touchTap(acceptOfferBtn);
         await sleep(1000);
       }
     }
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene6);
 
   // ─────────────────────────────────────────────────────────────
@@ -445,24 +424,23 @@ async function recordMobileDemo() {
 
   const newVentureBtn = page.locator('button:has-text("New Venture")').first();
   if (await newVentureBtn.isVisible()) {
-    await zoomToLocator(newVentureBtn, 1.35);
+    await focusElement(newVentureBtn, 1000);
     await touchTap(newVentureBtn);
-    await sleep(1000);
+    await sleep(1200);
 
     const incubateBtn = page.locator('button:has-text("Incubate"), button:has-text("Select")').first();
     if (await incubateBtn.isVisible()) {
-      await zoomToLocator(incubateBtn, 1.35);
+      await focusElement(incubateBtn, 1200);
       await touchTap(incubateBtn);
       await sleep(1200);
     }
 
-    await resetZoom(300); const closeVentureModal = page.locator('button:has-text("Close"), button:has-text("✕")').first();
+    const closeVentureModal = page.locator('button:has-text("Close"), button:has-text("✕")').first();
     if (await closeVentureModal.isVisible()) {
       await touchTap(closeVentureModal);
     }
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene7);
 
   // ─────────────────────────────────────────────────────────────
@@ -501,14 +479,14 @@ async function recordMobileDemo() {
 
   const rentOutOption = page.locator('button:has-text("Rent Out"), button:has-text("Rental")').first();
   if (await rentOutOption.isVisible()) {
-    await zoomToLocator(rentOutOption, 1.35);
+    await focusElement(rentOutOption, 1000);
     await touchTap(rentOutOption);
     await sleep(1000);
   }
 
   const finalizeHomeBtn = page.locator('button:has-text("Finalize Home Purchase")').first();
   if (await finalizeHomeBtn.isVisible()) {
-    await zoomToLocator(finalizeHomeBtn, 1.35);
+    await focusElement(finalizeHomeBtn, 1000);
     await touchTap(finalizeHomeBtn);
     await sleep(1000);
   } else {
@@ -516,7 +494,6 @@ async function recordMobileDemo() {
     if (await dismissHomeBtn.isVisible()) await touchTap(dismissHomeBtn);
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene8);
 
   // ─────────────────────────────────────────────────────────────
@@ -557,8 +534,7 @@ async function recordMobileDemo() {
 
   const shockBox = page.locator('text=/Emergency/i, text=/Hospitalization/i').first();
   if (await shockBox.isVisible()) {
-    await zoomToLocator(shockBox, 1.4);
-    await sleep(2500);
+    await focusElement(shockBox, 2500);
   }
 
   const ackShockBtn = page.locator('button:has-text("Acknowledge & Mobilize Funds")').first();
@@ -574,7 +550,6 @@ async function recordMobileDemo() {
     await sleep(1500);
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene9);
 
   // ─────────────────────────────────────────────────────────────
@@ -615,11 +590,9 @@ async function recordMobileDemo() {
 
   const netWorthSurge = page.locator('text=/Net Worth/i').first();
   if (await netWorthSurge.isVisible()) {
-    await zoomToLocator(netWorthSurge, 1.4);
-    await sleep(2500);
+    await focusElement(netWorthSurge, 2500);
   }
 
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene10);
 
   // ─────────────────────────────────────────────────────────────
@@ -656,22 +629,18 @@ async function recordMobileDemo() {
   });
   await sleep(1500);
 
-  // Zoom into Literacy Score
+  // Focus Literacy Score
   const scoreBadge = page.locator('h1, h2, .font-display').first();
   if (await scoreBadge.isVisible()) {
-    await zoomToLocator(scoreBadge, 1.4);
-    await sleep(3500);
+    await focusElement(scoreBadge, 3500);
   }
 
-  // Pan to Pillar bars
+  // Focus Debrief
   const pillarBars = page.locator('text=/Retrospective/i, text=/Debrief/i').first();
   if (await pillarBars.isVisible()) {
-    await zoomToLocator(pillarBars, 1.35);
-    await sleep(3000);
+    await focusElement(pillarBars, 3000);
   }
 
-  // Reset zoom for final celebratory view
-  await resetZoom();
   await sleepUntil(SCENE_TARGETS.scene11);
 
   console.log('Stopping video recording and flushing file to disk...');
@@ -691,15 +660,15 @@ async function recordMobileDemo() {
   const outputWebm = '/home/rutvej/Desktop/cashflow-game/demo-cashmeout-mobile.webm';
   const ffmpegBin = '/home/rutvej/Desktop/cashflow-game/node_modules/ffmpeg-static/ffmpeg';
 
-  console.log('Multiplexing video and male voiceover audio track with ffmpeg...');
+  console.log('Multiplexing video and male voiceover audio track with ffmpeg (100% full-screen mobile)...');
 
-  // 1. Render MP4 (H.264 + AAC)
-  const mp4Cmd = `${ffmpegBin} -y -i "${rawWebmPath}" -i "${MASTER_AUDIO}" -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest "${outputMp4}"`;
+  // 1. Render MP4 (H.264 + AAC) scaled to 2x crispness 860x1864 (Native iPhone Full HD)
+  const mp4Cmd = `${ffmpegBin} -y -i "${rawWebmPath}" -i "${MASTER_AUDIO}" -vf "scale=860:1864:flags=lanczos" -c:v libx264 -preset fast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k -shortest "${outputMp4}"`;
   execSync(mp4Cmd, { stdio: 'inherit' });
   console.log('✓ Successfully generated MP4 video at:', outputMp4);
 
   // 2. Render WebM (VP9 + Opus)
-  const webmCmd = `${ffmpegBin} -y -i "${rawWebmPath}" -i "${MASTER_AUDIO}" -c:v libvpx-vp9 -crf 28 -b:v 0 -c:a libopus -b:a 128k -shortest "${outputWebm}"`;
+  const webmCmd = `${ffmpegBin} -y -i "${rawWebmPath}" -i "${MASTER_AUDIO}" -c:v copy -c:a libopus -b:a 128k -shortest "${outputWebm}"`;
   execSync(webmCmd, { stdio: 'inherit' });
   console.log('✓ Successfully generated WebM video at:', outputWebm);
 
