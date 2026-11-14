@@ -288,8 +288,11 @@ export function applyHomeOwnership(character, goals = [], insurance = {}, mortga
     if (g.id === 'goal_home') {
       return {
         ...g,
+        downPaymentPaid: g.currentAmount || options.downPayment || 0,
+        currentAmount: 0,
         status: 'completed',
         milestoneTriggered: true,
+        downPaymentSpent: true,
       };
     }
     return g;
@@ -359,6 +362,8 @@ export function applyMarriageEconomics(character, spouseProfile, goals = [], ins
     if (g.id === 'goal_marriage') {
       return {
         ...g,
+        spentCorpus: g.currentAmount || g.targetAmount || 0,
+        currentAmount: 0,
         status: 'completed',
         milestoneTriggered: true,
         weddingCorpusSpent: true,

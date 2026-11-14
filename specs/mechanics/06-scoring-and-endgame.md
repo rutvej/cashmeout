@@ -67,8 +67,9 @@ export interface CounterfactualInsight {
 
 export interface ScorecardResult {
   finalAge: number;                   // 60
-  totalNetWorth: number;              // Final Net Worth in ₹
+  totalNetWorth: number;              // Final Net Worth in ₹ (Includes Liquid + Investments + Real Estate - Debt)
   totalInvestments: number;           // Total portfolio corpus in ₹
+  homePropertyAssetValue?: number;    // Appreciated real estate asset valuation in ₹
   liquidBankBalance: number;          // Cash in bank in ₹
   outstandingDebt: number;            // Unpaid loans at age 60 in ₹
 
@@ -184,3 +185,30 @@ The engine compares the player's actual trajectory against counterfactual models
 3. **Emergency Fund Discipline**:
    - If emergency fund was parked in FD or Equities during a shock:
      - Highlights exact penalties or realized market losses incurred.
+
+---
+
+## 6. Endgame Net Worth, Milestone Realization & Safe Withdrawal Formulas
+
+### A. Total Net Worth Model (Real Estate + Investments + Bank Liquid Cash - Debt)
+$$\text{totalNetWorth} = \text{liquidCash} + \text{totalInvestments} + \text{homePropertyAssetValue} - \text{outstandingDebt}$$
+- **Real Estate Valuation:** Home ownership is credited as an equity asset (`homePropertyAssetValue`) appreciating at 6.5% p.a. while any outstanding mortgage principal is subtracted as debt.
+- **Milestone Corpus Realization:** When milestone events like Home Down Payment (`goal_home`) or Wedding (`goal_marriage`) occur:
+  - Down payment funds convert directly into home equity:
+    $$\text{downPaymentPaid} = \text{actualDP}, \quad \text{currentAmount} = 0$$
+  - Wedding corpus is consumed for celebration expenses:
+    $$\text{spentCorpus} = \text{actualSpent}, \quad \text{currentAmount} = 0$$
+  - This prevents double-counting milestone expenses in net worth while preserving 100% completion status and timing credit in the retrospective debrief.
+
+### B. Safe Withdrawal Rate (The 4% Rule) & FI/RE Ratio
+At retirement (Age 60), sustainable passive income is calculated from the unencumbered investment corpus and active cash-flow ventures:
+$$\text{totalInvestableCorpus} = \text{retirementCorpus} + \text{otherInvestments}$$
+$$\text{annualPassiveIncome} = \text{round}(\text{totalInvestableCorpus} \times 0.04) + \text{annualVentureCashFlow}$$
+$$\text{monthlyPassiveIncome} = \text{round}\left(\frac{\text{annualPassiveIncome}}{12}\right)$$
+$$\text{fiRatio} = \frac{\text{annualPassiveIncome}}{\text{annualLivingExpenses}}$$
+
+- $\text{fiRatio} \ge 1.25$: Early financial independence / wealth surplus (Score: 35/35).
+- $\text{fiRatio} \ge 1.0$: Fully financially independent (Score: 30/35).
+- $\text{fiRatio} \ge 0.8$: Near financial independence (Score: 22/35).
+- $\text{fiRatio} \ge 0.5$: Partial retirement security (Score: 14/35).
+- $\text{fiRatio} < 0.5$: Shortfall risk (Score: Pro-rated up to 14 pts).

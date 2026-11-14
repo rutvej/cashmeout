@@ -92,10 +92,12 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
   const rawBaseGross = fieldData.baseGrossMin + rng() * (fieldData.baseGrossMax - fieldData.baseGrossMin);
   const grossMonthlySalary = Math.round((rawBaseGross * mult.salary) / 500) * 500;
 
-  // Taxes & PF
+  // Taxes & PF (Progressive marginal taxation with Section 87A rebate & 5% EPF)
   const annualGross = grossMonthlySalary * 12;
-  const taxRate = annualGross > 700000 ? 0.12 : 0.06;
-  const taxAndPFDeductions = Math.round(grossMonthlySalary * taxRate);
+  const monthlyPF = Math.round(grossMonthlySalary * 0.05);
+  const taxableExcess = Math.max(0, annualGross - 700000);
+  const monthlyTax = Math.round((taxableExcess * 0.15) / 12);
+  const taxAndPFDeductions = monthlyPF + monthlyTax;
   const monthlyTakeHome = grossMonthlySalary - taxAndPFDeductions;
 
   // 3. Loans (40% chance, scaled to salary so EMI never exceeds 18% of take-home)

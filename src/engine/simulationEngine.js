@@ -423,8 +423,11 @@ export function tickMonthlySimulation(state) {
       );
       const hikeRate = appraisal.hikeRate;
       grossSalary = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
-      const taxRate = grossSalary * 12 > 700000 ? 0.12 : 0.06;
-      const taxAndPF = Math.round(grossSalary * taxRate);
+      const annualGrossSalary = grossSalary * 12;
+      const monthlyPF = Math.round(grossSalary * 0.05);
+      const taxableExcess = Math.max(0, annualGrossSalary - 700000);
+      const monthlyTax = Math.round((taxableExcess * 0.15) / 12);
+      const taxAndPF = monthlyPF + monthlyTax;
       const newRaisedTakeHome = grossSalary - taxAndPF;
       const deltaSurplus = newRaisedTakeHome - baseTakeHome;
       baseTakeHome = newRaisedTakeHome;
@@ -704,8 +707,10 @@ export function tickMonthlySimulation(state) {
     let current = g.currentAmount || 0;
     const target = g.targetAmount || 1;
 
-    // Strict cap: If goal is already at or above target, ensure currentAmount does not exceed target
-    if (current >= target) {
+    const isRetirement = g.id === 'goal_retirement';
+
+    // Strict cap: For non-retirement milestone goals, ensure currentAmount does not exceed target
+    if (current >= target && !isRetirement) {
       const legacyExcess = current - target;
       if (legacyExcess > 0) {
         liquidCash += legacyExcess;
@@ -714,6 +719,15 @@ export function tickMonthlySimulation(state) {
         ...g,
         currentAmount: target,
         effectiveMonthlySIP: 0,
+      };
+    }
+
+    if (isRetirement) {
+      totalSIPDeductions += sip;
+      return {
+        ...g,
+        effectiveMonthlySIP: sip,
+        currentAmount: current + sip,
       };
     }
 
@@ -774,7 +788,7 @@ export function tickMonthlySimulation(state) {
     const isFixedCap =
       g.id === 'goal_emergency' ||
       g.id === 'goal_vacation' ||
-      (g.kind === 'milestone' && balance >= target && !g.isScalingDownPayment) ||
+      (g.kind === 'milestone' && g.id !== 'goal_retirement' && balance >= target && !g.isScalingDownPayment) ||
       (g.category === 'venture' && balance >= target);
 
     if (isFixedCap) {

@@ -136,11 +136,12 @@ export default function MainGameScreen() {
     { id: 'insurance', label: 'Shield', icon: '🛡️' },
   ];
 
-  const completedGoalsCount = goals.filter((g) => (g.currentAmount || 0) >= (g.targetAmount || 1)).length;
+  const isGoalDone = (g) => g.status === 'completed' || (g.currentAmount || 0) >= (g.targetAmount || 1);
+  const completedGoalsCount = goals.filter(isGoalDone).length;
   const activeGoalsCount = goals.length - completedGoalsCount;
 
   const filteredGoals = goals.filter((g) => {
-    const isDone = (g.currentAmount || 0) >= (g.targetAmount || 1);
+    const isDone = isGoalDone(g);
     if (goalFilter === 'active') return !isDone;
     if (goalFilter === 'completed') return isDone;
     return true;
@@ -514,8 +515,9 @@ export default function MainGameScreen() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {filteredGoals.map((goal) => {
                 const target = goal.targetAmount || 1;
-                const current = Math.min(target, goal.currentAmount || 0);
-                const pct = Math.min(100, Math.round((current / target) * 100));
+                const isCompleted = goal.status === 'completed';
+                const current = isCompleted ? (goal.spentCorpus || goal.downPaymentPaid || target) : Math.min(target, goal.currentAmount || 0);
+                const pct = isCompleted ? 100 : Math.min(100, Math.round((current / target) * 100));
                 const inst = INSTRUMENTS[goal.instrumentId] || INSTRUMENTS.savings;
                 const effectiveSIP = goal.effectiveMonthlySIP || goal.baseMonthlySIP || 0;
                 const bonusSIP = Math.max(0, effectiveSIP - (goal.baseMonthlySIP || 0));
@@ -763,9 +765,9 @@ export default function MainGameScreen() {
                             <span>🟠</span> REFILL IN PROGRESS
                           </span>
                         )}
-                        {goal.id !== 'goal_emergency' && current >= target && (
+                        {goal.id !== 'goal_emergency' && (isCompleted || current >= target) && (
                           <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-emerald-100 border border-slate-900 text-emerald-900">
-                            🏆 100% FUNDED
+                            🏆 {isCompleted ? 'COMPLETED' : '100% FUNDED'}
                           </span>
                         )}
                       </div>

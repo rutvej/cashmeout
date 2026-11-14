@@ -277,7 +277,7 @@ export const useGameStore = create((set, get) => ({
     if (strategy === 'proportional_split') {
       // Proportionally scales all active goal SIPs by their current % weights
       const activeGoals = updatedGoals.filter(
-        (g) => (g.currentAmount || 0) < (g.targetAmount || 1)
+        (g) => g.id === 'goal_retirement' || (g.currentAmount || 0) < (g.targetAmount || 1)
       );
       const totalWeight = activeGoals.reduce((sum, g) => {
         let w = g.allocationPercent;
@@ -290,7 +290,7 @@ export const useGameStore = create((set, get) => ({
 
       let allocatedSoFar = 0;
       updatedGoals = updatedGoals.map((g) => {
-        const isFull = (g.currentAmount || 0) >= (g.targetAmount || 1);
+        const isFull = g.id !== 'goal_retirement' && (g.currentAmount || 0) >= (g.targetAmount || 1);
         if (isFull) return g;
 
         let weight = g.allocationPercent;
@@ -302,15 +302,17 @@ export const useGameStore = create((set, get) => ({
         if (weight > 0 && currentSurplus > 0) {
           const isLastActive = g.id === activeGoals[activeGoals.length - 1]?.id;
           let newSIP = 0;
-          if (isLastActive && totalWeight === 100) {
+          if (isLastActive && totalWeight > 0) {
             newSIP = Math.max(0, currentSurplus - allocatedSoFar);
           } else {
-            newSIP = Math.round((weight / 100) * currentSurplus);
+            const frac = totalWeight > 0 ? weight / totalWeight : weight / 100;
+            newSIP = Math.round(frac * currentSurplus);
             allocatedSoFar += newSIP;
           }
+          const actualPercent = currentSurplus > 0 ? Math.round((newSIP / currentSurplus) * 100) : weight;
           return {
             ...g,
-            allocationPercent: weight,
+            allocationPercent: actualPercent,
             baseMonthlySIP: newSIP,
           };
         }
@@ -669,17 +671,21 @@ export const useGameStore = create((set, get) => ({
 
     // Reset vacation fund for upcoming year and auto-align baseMonthlySIP so shortfall doesn't repeat!
     const neededVacationSIP = Math.round((nextAmount / 12) / 500) * 500;
-    updatedGoals = updatedGoals.map((g) =>
-      g.id === 'goal_vacation'
-        ? {
-            ...g,
-            targetAmount: nextAmount,
-            selectedTierOption: nextYearTripOption,
-            currentAmount: 0,
-            baseMonthlySIP: Math.max(g.baseMonthlySIP || 0, neededVacationSIP),
-          }
-        : g
-    );
+    const maxSurplusAllowed = Math.max(0, character.monthlySurplus || 0);
+    const targetVacationSIP = maxSurplusAllowed > 0 ? Math.min(neededVacationSIP, maxSurplusAllowed) : neededVacationSIP;
+    updatedGoals = updatedGoals.map((g) => {
+      if (g.id !== 'goal_vacation') return g;
+      const newVacationSIP = Math.max(g.baseMonthlySIP || 0, targetVacationSIP);
+      const newPercent = character.monthlySurplus > 0 ? Math.round((newVacationSIP / character.monthlySurplus) * 100) : (g.allocationPercent || 0);
+      return {
+        ...g,
+        targetAmount: nextAmount,
+        selectedTierOption: nextYearTripOption,
+        currentAmount: 0,
+        baseMonthlySIP: newVacationSIP,
+        allocationPercent: newPercent,
+      };
+    });
 
     const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
     const totalInsurance =
@@ -1064,9 +1070,11 @@ export const useGameStore = create((set, get) => ({
       g.id === (goal?.id || 'goal_home')
         ? {
             ...g,
-            currentAmount: actualDP,
+            downPaymentPaid: actualDP,
+            currentAmount: 0,
             status: 'completed',
             milestoneTriggered: true,
+            downPaymentSpent: true,
           }
         : g
     );

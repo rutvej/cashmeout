@@ -235,8 +235,10 @@ export function getActiveAllocatableGoals(goals) {
 
     // One-time milestone goals (e.g. Car, Home Down Payment, Wedding):
     // Once achieved or finalized, REMOVE from the allocation list completely!
+    // Exception: Retirement is open-ended and continues to accept SIPs throughout life.
     if (
       g.kind === 'milestone' &&
+      g.id !== 'goal_retirement' &&
       (g.status === 'completed' || g.isCompleted || (g.currentAmount || 0) >= (g.targetAmount || 1))
     ) {
       return false;

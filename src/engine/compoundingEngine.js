@@ -125,6 +125,11 @@ export function calculateEffectiveSIPs(goals) {
       const targetGoal = goalMap[currentId];
       if (!targetGoal) return null;
 
+      // Retirement is never full - it's the ultimate wealth accumulator sink
+      if (currentId === 'goal_retirement') {
+        return currentId;
+      }
+
       const isTargetFull =
         (targetGoal.currentAmount || 0) >= (targetGoal.targetAmount || 1) || targetGoal.isLaunched || targetGoal.isLocked;
       // Emergency fund is only full when at 100%
@@ -147,7 +152,8 @@ export function calculateEffectiveSIPs(goals) {
 
   // Process completed goals
   goals.forEach((goal) => {
-    const isFull = (goal.currentAmount || 0) >= (goal.targetAmount || 1) || goal.isLaunched || goal.isLocked;
+    const isRetirement = goal.id === 'goal_retirement';
+    const isFull = !isRetirement && ((goal.currentAmount || 0) >= (goal.targetAmount || 1) || goal.isLaunched || goal.isLocked);
 
     // Emergency fund that is depleted cannot redirect its SIP
     if (goal.id === 'goal_emergency' && isEmergencyDepleted) {
@@ -168,7 +174,11 @@ export function calculateEffectiveSIPs(goals) {
             const activeRecipientId = findActiveRecipient(goal.redirectGoalId);
             if (activeRecipientId && effective[activeRecipientId] !== undefined) {
               effective[activeRecipientId] += outflow;
+            } else if (goalMap['goal_retirement']) {
+              effective['goal_retirement'] = (effective['goal_retirement'] || 0) + outflow;
             }
+          } else if (goalMap['goal_retirement']) {
+            effective['goal_retirement'] = (effective['goal_retirement'] || 0) + outflow;
           }
         }
       }
@@ -179,6 +189,7 @@ export function calculateEffectiveSIPs(goals) {
   if (freedPercentageSIP > 0) {
     const activeGoals = goals.filter((g) => {
       if (g.isLaunched) return false;
+      if (g.id === 'goal_retirement') return true;
       if (g.id === 'goal_emergency' && isEmergencyDepleted) return true;
       return (g.currentAmount || 0) < (g.targetAmount || 1);
     });

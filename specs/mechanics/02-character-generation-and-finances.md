@@ -80,10 +80,17 @@ export interface CharacterState {
 - **Arts / Creative:** Base range ₹38,000 – ₹55,000 / month.
   - Job Titles: *"UI/UX Designer"*, *"Brand Strategist"*, *"Digital Media Associate"*, *"Junior Architect"*
 
-### C. Tax & Deductions Formula
-- If annual gross $\le$ ₹7,00,000 (Monthly $\le$ ₹58,333): Flat 6% (PF + minimal tax).
-- If annual gross $>$ ₹7,00,000: Flat 12% (Income tax slab + 12% PF).
-$$\text{monthlyTakeHome} = \text{grossMonthlySalary} - \text{taxAndPFDeductions}$$
+### C. Tax & Deductions Formula (Progressive Marginal Tax with Section 87A Rebate)
+The game uses a progressive marginal tax calculation with Section 87A rebate and statutory Employee Provident Fund (EPF), completely eliminating tax cliffs:
+- **Employee Provident Fund (EPF):** Flat 5% across all earnings tiers:
+  $$\text{monthlyPF} = \text{round}(\text{grossMonthlySalary} \times 0.05)$$
+- **Section 87A Tax Rebate:** Annual gross earnings up to ₹7,00,000 (Monthly $\le$ ₹58,333) receive a 100% tax rebate (₹0 income tax).
+- **Marginal Tax Above ₹7,00,000/yr:** Income tax applies strictly at 15% on the incremental income exceeding ₹7,00,000/year:
+  $$\text{taxableExcess} = \max(0, \text{annualGross} - 700000)$$
+  $$\text{monthlyTax} = \text{round}\left(\frac{\text{taxableExcess} \times 0.15}{12}\right)$$
+- **Total Deductions & Net Take-Home:**
+  $$\text{taxAndPFDeductions} = \text{monthlyPF} + \text{monthlyTax}$$
+  $$\text{monthlyTakeHome} = \text{grossMonthlySalary} - \text{taxAndPFDeductions}$$
 
 ### D. Living Expenses Model
 Living expenses are calibrated as percentages of `monthlyTakeHome` to guarantee realistic budgets:

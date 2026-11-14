@@ -158,9 +158,14 @@ export function evaluateScorecard(state = {}) {
   const emergencyGoal = goals.find((g) => g.id === 'goal_emergency');
 
   const retirementCorpus = retirementGoal?.currentAmount || 0;
+  const otherInvestments = goals
+    .filter((g) => g.id !== 'goal_retirement' && g.id !== 'goal_emergency' && !g.isLaunched)
+    .reduce((sum, g) => sum + (g.currentAmount || 0), 0);
+  const totalInvestableCorpus = retirementCorpus + otherInvestments;
+
   const annualLivingExpenses = (character.totalFixedExpenses || 1) * 12;
   const annualVentureCashFlow = (character.ventureIncome || 0) * 12;
-  const annualPassiveIncome = Math.round(retirementCorpus * 0.04) + annualVentureCashFlow;
+  const annualPassiveIncome = Math.round(totalInvestableCorpus * 0.04) + annualVentureCashFlow;
   const monthlyPassiveIncome = Math.round(annualPassiveIncome / 12);
   const fiRatio = annualLivingExpenses > 0 ? annualPassiveIncome / annualLivingExpenses : 1;
 
@@ -498,12 +503,15 @@ export function evaluateScorecard(state = {}) {
 
   const liquidCash = character.liquidCash || 0;
   const totalInvestments = goals.reduce((sum, g) => sum + (g.currentAmount || 0), 0);
-  const totalNetWorth = Math.round(liquidCash + totalInvestments - outstandingDebt);
+  const hasHome = !!character?.assetMaintenanceState?.hasOwnedHome || (character.homePropertyAssetValue > 0);
+  const homePropertyAssetValue = hasHome ? (character.homePropertyAssetValue || 0) : 0;
+  const totalNetWorth = Math.round(liquidCash + totalInvestments + homePropertyAssetValue - outstandingDebt);
 
   return {
     finalAge: character.retirementAge || 60,
     totalNetWorth,
     totalInvestments,
+    homePropertyAssetValue,
     liquidBankBalance: liquidCash,
     outstandingDebt,
 

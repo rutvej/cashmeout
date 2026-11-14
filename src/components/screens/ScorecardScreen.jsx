@@ -70,6 +70,8 @@ export default function ScorecardScreen() {
     title,
     breakdown,
     totalNetWorth,
+    totalInvestments,
+    homePropertyAssetValue = 0,
     liquidBankBalance,
     outstandingDebt,
     monthlyPassiveIncome,
@@ -154,6 +156,12 @@ export default function ScorecardScreen() {
                     {outstandingDebt === 0 ? '₹0 (Free)' : formatINR(outstandingDebt)}
                   </strong>
                 </span>
+                {homePropertyAssetValue > 0 && (
+                  <>
+                    <span>•</span>
+                    <span>Real Estate: <strong className="text-blue-700">{formatINR(homePropertyAssetValue)}</strong></span>
+                  </>
+                )}
               </div>
             </div>
           </div>

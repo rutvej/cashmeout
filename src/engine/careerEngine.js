@@ -196,13 +196,24 @@ export function calculateOfferProbability(exp, skill, expReq, skillReq) {
 }
 
 /**
+ * Calculates monthly EPF and progressive income tax with Section 87A rebate.
+ * Section 87A rebate eliminates income tax for annual gross up to ₹7,00,000/yr.
+ * Above ₹7,00,000/yr, 15% marginal tax applies strictly to the excess income,
+ * with standard 5% employee provident fund (PF) deduction across all tiers.
+ */
+export function calculateTaxAndPFDeductions(grossMonthlySalary) {
+  const annualGross = grossMonthlySalary * 12;
+  const monthlyPF = Math.round(grossMonthlySalary * 0.05);
+  const taxableExcess = Math.max(0, annualGross - 700000);
+  const monthlyTax = Math.round((taxableExcess * 0.15) / 12);
+  return monthlyPF + monthlyTax;
+}
+
+/**
  * Calculates net monthly take-home salary from monthly gross salary.
  */
 export function calculateTakeHomeFromGross(grossMonthlySalary) {
-  const annualGross = grossMonthlySalary * 12;
-  const taxRate = annualGross > 700000 ? 0.12 : 0.06;
-  const taxAndPF = Math.round(grossMonthlySalary * taxRate);
-  return grossMonthlySalary - taxAndPF;
+  return grossMonthlySalary - calculateTaxAndPFDeductions(grossMonthlySalary);
 }
 
 /**

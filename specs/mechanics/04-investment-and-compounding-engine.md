@@ -58,7 +58,16 @@ When a life shock (medical, job loss, eviction) or milestone shortfall draws fro
 
 ---
 
-## 5. Pure Function Interfaces
+## 5. Uncapped Compounding & Surplus Redirection Waterfall
+
+Unlike finite milestone goals (such as Down Payment or Car), **Retirement Corpus (`goal_retirement`) is open-ended**:
+1. **Uncapped Compounding**: Retirement investments are never capped at the initial target amount. Multi-decade equity growth compounds unimpeded across the full 37-year simulation horizon to accumulate a multi-crore corpus.
+2. **Waterfall Redirection Sink**: When milestone goals (Car, Marriage, Down Payment) complete or are achieved, their active SIP allocations cascade down the redirection chain. If all intermediate downstream targets are filled or unspecified, freed capital automatically flows into `goal_retirement`, completely preventing capital leakage.
+3. **Surplus Scaling & Normalization**: On career raises, proportional surplus scaling recalculates weights across all active goals and the open retirement fund, ensuring 100% of incremental monthly surplus is allocated with zero residual penny leakage.
+
+---
+
+## 6. Pure Function Interfaces
 
 ```javascript
 /**
