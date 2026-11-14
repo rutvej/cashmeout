@@ -47,9 +47,6 @@ export default function UpskillingModal({ onClose }) {
               <h2 className="font-display font-black text-lg sm:text-xl text-slate-900 tracking-tight leading-tight">
                 Upskilling & Certifications Hub
               </h2>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-mono">
-                Level up your skills to unlock senior positions & higher compensation
-              </p>
             </div>
           </div>
           <button

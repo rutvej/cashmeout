@@ -53,13 +53,9 @@ export default function LaunchVentureModal({ goal, onAdjustAllocations }) {
 
           {/* Modal Body */}
           <div className="p-4 sm:p-6 space-y-4 font-sans">
-            <div className="p-3 bg-emerald-50 border-2 border-emerald-900 space-y-1">
-              <span className="text-[10px] font-mono font-black uppercase tracking-wider text-emerald-900 block">
-                Accumulation Phase Complete
-              </span>
-              <p className="text-xs text-emerald-950 leading-relaxed">
-                You have successfully accumulated <strong>{formatINR(goal.targetAmount)}</strong>. Launching this venture now transitions it from a savings goal into an <strong>Active Cash-Flow Asset</strong> producing recurring monthly income.
-              </p>
+            <div className="p-2.5 bg-emerald-50 border-2 border-emerald-900 text-xs font-mono text-emerald-950 flex justify-between items-center">
+              <span className="font-bold">Corpus Funded</span>
+              <span className="font-black text-emerald-700">{formatINR(goal.targetAmount)}</span>
             </div>
 
             {/* Operational Cashflow Breakdown */}

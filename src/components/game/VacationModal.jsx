@@ -50,13 +50,6 @@ export default function VacationModal({ data }) {
           </div>
         </div>
 
-        {/* Narrative */}
-        <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed font-body">
-          {wasSuccessful
-            ? 'Congratulations! Your vacation corpus was 100% funded. You took time off to recharge your mental health, preventing career burnout.'
-            : `The vacation deadline has arrived, but your corpus is short by ${formatINR(shortfall)}. Choose how you wish to handle the shortfall below:`}
-        </p>
-
         {/* Financial Numbers Bar */}
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-2 sm:p-3 bg-slate-100 border-2 border-slate-900 text-center font-mono">
           <div>
@@ -100,9 +93,6 @@ export default function VacationModal({ data }) {
                   </span>
                   <span className="font-mono text-emerald-700 shrink-0 text-[11px] sm:text-xs">₹0 Extra Spent</span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Enjoy a cozy local staycation / road trip within your saved {formatINR(savedAmount)}. Zero extra debt or savings withdrawals.
-                </p>
               </button>
 
               {/* Option 2: Pay from Bank / Emergency Fund */}
@@ -122,9 +112,6 @@ export default function VacationModal({ data }) {
                   </span>
                   <span className="font-mono text-blue-700 shrink-0 text-[11px] sm:text-xs">One-Time Draw</span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Withdraw {formatINR(shortfall)} directly from your liquid bank cash and safety buffer. No loan debt incurred.
-                </p>
               </button>
 
               {/* Option 3: Travel Loan */}
@@ -144,9 +131,6 @@ export default function VacationModal({ data }) {
                   </span>
                   <span className="font-mono text-rose-700 shrink-0 text-[11px] sm:text-xs">12 Mos @ 12% p.a.</span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Borrow the {formatINR(shortfall)} shortfall via personal travel loan. Adds a small monthly EMI to your cashflow. Full trip taken!
-                </p>
               </button>
             </div>
           </div>

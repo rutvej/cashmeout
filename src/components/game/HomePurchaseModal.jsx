@@ -155,14 +155,11 @@ export default function HomePurchaseModal({ goal: propGoal, isEarly = false }) {
 
         {/* ── UNDERFUNDED DILEMMA SECTION (If not funded & not early) ── */}
         {!isFunded && !isEarly && (
-          <div className="p-3.5 bg-amber-50 border-2 border-amber-500 space-y-3 font-mono">
-            <div className="flex items-center gap-2 text-amber-900 font-bold text-xs">
-              <span>⚠️</span>
-              <span>Down Payment Shortfall: {formatINR(shortfall)}</span>
+          <div className="p-3.5 bg-amber-50 border-2 border-amber-500 space-y-2 font-mono">
+            <div className="flex items-center justify-between text-amber-900 font-bold text-xs">
+              <span>Down Payment Shortfall</span>
+              <span>{formatINR(shortfall)}</span>
             </div>
-            <p className="text-[11px] text-slate-700 leading-snug">
-              You reached your planned purchase age of {goal?.targetAge}, but accumulated {formatINR(currentSaved)} of the required {formatINR(minRequiredDP)} (20% minimum). Choose how to proceed:
-            </p>
 
             <div className="space-y-2 pt-1">
               {/* Choice 1: Postpone */}

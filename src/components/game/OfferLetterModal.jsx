@@ -56,19 +56,6 @@ export default function OfferLetterModal({ offer, onAdjustAllocations }) {
           </div>
         </div>
 
-        {/* Layoff Recovery Callout */}
-        {isUnemployed && (
-          <div className="p-3 bg-emerald-50 border-2 border-emerald-900 text-xs font-mono text-emerald-900 space-y-0.5">
-            <div className="font-bold flex items-center gap-1.5">
-              <span>🎉</span>
-              <span>Immediate Employment Restoration!</span>
-            </div>
-            <p className="text-[11px] text-emerald-800">
-              Accepting this offer immediately terminates your layoff period and re-establishes your monthly income.
-            </p>
-          </div>
-        )}
-
         {/* Role & Position Details */}
         <div className="p-3.5 bg-slate-50 border-2 border-slate-900 space-y-1.5">
           <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 block">

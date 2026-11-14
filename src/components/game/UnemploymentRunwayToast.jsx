@@ -37,16 +37,15 @@ export default function UnemploymentRunwayToast({ reminder, onOpenJobMarket }) {
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono">
           <div className="flex items-center gap-2">
-            <span className="text-base sm:text-lg animate-pulse">⚠️</span>
             <div>
               <div className="font-bold text-amber-950 flex items-center gap-1.5 flex-wrap">
-                <span>Month {reminder.unemploymentMonth} of Unemployment</span>
+                <span>Unemployment (M{reminder.unemploymentMonth})</span>
                 <span className="text-[10px] text-amber-800 font-normal">
-                  (−{formatINR(reminder.monthlyBurn)} from reserves)
+                  (−{formatINR(reminder.monthlyBurn)}/mo)
                 </span>
               </div>
               <div className="text-[10px] text-amber-800 font-semibold">
-                Reserves: <strong>{formatINR(reminder.remainingReserves)}</strong> · ~<strong>{reminder.runwayMonths} mos</strong> runway left
+                Reserves: {formatINR(reminder.remainingReserves)} · ~{reminder.runwayMonths} mos
               </div>
             </div>
           </div>

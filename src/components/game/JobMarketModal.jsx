@@ -119,19 +119,6 @@ export default function JobMarketModal({ onClose }) {
           </div>
         </div>
 
-        {/* Layoff Alert Banner */}
-        {isUnemployed && (
-          <div className="p-3 bg-rose-50 border-2 border-rose-900 text-xs font-mono text-rose-900 space-y-1 shrink-0 animate-pulse">
-            <div className="font-bold flex items-center gap-1.5">
-              <span>⚠️</span>
-              <span>Currently Unemployed — Immediate Rehire Available!</span>
-            </div>
-            <p className="text-[11px] text-rose-800">
-              Applying for an open role matching your qualification will immediately re-hire you and stop your emergency fund burn.
-            </p>
-          </div>
-        )}
-
         {/* Application Feedback Toast if any */}
         <AnimatePresence>
           {applicationFeedback && (

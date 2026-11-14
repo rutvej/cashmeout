@@ -357,7 +357,7 @@ export default function ScorecardScreen() {
                         ) : isOnTime ? (
                           <span className="font-bold text-emerald-800 font-sans text-xs">🟢 Perfect Execution!</span>
                         ) : (
-                          <span className="font-bold text-amber-800 font-sans text-xs">⚠️ Milestone Shortfall</span>
+                          <span className="font-bold text-amber-800 font-sans text-xs">Milestone Shortfall</span>
                         )}
                       </div>
                       <p className="text-slate-700 font-mono text-[11px] leading-relaxed">
@@ -417,7 +417,6 @@ export default function ScorecardScreen() {
             {careerAudit.careerStagnationDetected ? (
               <div className="card-neopop p-4 bg-rose-50 border-rose-900 space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xl">⚠️</span>
                   <h4 className="font-display font-black text-base text-rose-900">
                     Career Stagnation Detected (≥ 6 Years in Junior Tier)
                   </h4>
@@ -469,7 +468,7 @@ export default function ScorecardScreen() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 border border-slate-900 bg-white">
-                            {isPos ? '🟢 Strength' : (isNeg ? '⚠️ Cost Drag' : '💡 Opportunity')}
+                            {isPos ? '🟢 Strength' : (isNeg ? 'Cost Drag' : '💡 Opportunity')}
                           </span>
                           <span
                             className={`text-xs font-mono font-black ${
@@ -557,7 +556,7 @@ export default function ScorecardScreen() {
               <p className="text-xs font-mono text-slate-800 leading-relaxed">
                 {assetAudit.longTermEquityRatio >= 50
                   ? '🟢 Optimal! Long horizon absorbed equity market volatility and captured ~12% p.a. multi-decade compounding.'
-                  : '⚠️ Sub-Optimal: Heavy placement of multi-decade retirement funds in low-yield cash or FDs allowed inflation to erode purchasing power.'}
+                  : 'Sub-Optimal: Heavy placement of multi-decade retirement funds in low-yield cash or FDs allowed inflation to erode purchasing power.'}
               </p>
             </div>
 

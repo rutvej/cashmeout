@@ -42,9 +42,6 @@ export default function VentureIncubatorModal({ onClose }) {
               <h2 className="font-display font-black text-xl sm:text-2xl text-slate-900 flex items-center gap-2">
                 <span>🚀 Venture Incubator & Side Hustles</span>
               </h2>
-              <p className="text-xs text-slate-600 mt-1">
-                Seed income-generating assets via monthly SIPs. Once 100% funded, each venture transitions into an active asset generating recurring monthly cash flow.
-              </p>
             </div>
             <button
               type="button"

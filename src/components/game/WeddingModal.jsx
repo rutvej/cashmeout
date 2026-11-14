@@ -69,14 +69,6 @@ export default function WeddingModal({ data, goal }) {
           </div>
         </div>
 
-        {/* Narrative & Corpus Disbursement */}
-        <div className="space-y-1.5">
-          <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed font-body">
-            You celebrated your wedding ceremony surrounded by loved ones! Your planned wedding corpus of{' '}
-            <strong className="text-slate-900 font-mono">{formatINR(weddingCorpus)}</strong> has been spent to cover the venue, reception, and ceremonies debt-free.
-          </p>
-        </div>
-
         {/* Meet Your Partner NeoPOP Card */}
         <div className="p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-900 shadow-hard-sm space-y-2.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-300 pb-2">
