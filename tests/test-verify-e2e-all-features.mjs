@@ -61,27 +61,29 @@ try {
   await page.screenshot({ path: 'tests/screenshot-main-game-collapsed-goals.png' });
   console.log('✓ Saved screenshot: tests/screenshot-main-game-collapsed-goals.png');
 
-  console.log('\n--- 4. Testing Collapsed Goals View & Opening Analytics / Seeding Drawer ---');
-  // Find a collapsed goal card
+  console.log('\n--- 4. Testing Collapsed Goals View & Opening Integrated Surplus Distribution Screen ---');
+  // Find a collapsed goal card on main game screen
   const goalCard = page.locator('div:has-text("Buy First Car")').last();
   await goalCard.waitFor({ state: 'visible', timeout: 5000 });
   await goalCard.click();
   await page.waitForTimeout(500);
 
-  // Verify Drawer elements
-  const drawerTitle = page.locator('h3:has-text("Seed Capital from Bank Cash")').first();
-  await drawerTitle.waitFor({ state: 'visible', timeout: 5000 });
-  console.log('✓ Goal Details Drawer opened successfully!');
+  // Verify Financial Setup Screen (Surplus Distribution Screen) opened in modal mode
+  const setupScreenHeader = page.locator('text=/Monthly Surplus/i').first();
+  await setupScreenHeader.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ Surplus Distribution Screen (FinancialSetupScreen) opened directly focused on goal!');
 
-  // Verify Lump-Sum Bank Seeding controls
+  // Verify Lump-Sum Bank Seeding controls inside the goal card
+  const seedingTitle = page.locator('text=/Seed Capital from Bank Cash/i').first();
+  await seedingTitle.waitFor({ state: 'visible', timeout: 5000 });
   const transferBtn = page.locator('button:has-text("Transfer")').first();
   await transferBtn.waitFor({ state: 'visible', timeout: 3000 });
-  console.log('✓ Lump-sum bank seeding transfer button is present!');
+  console.log('✓ Lump-sum bank seeding section and transfer button are present inside goal card!');
 
-  // Verify Analytics Chart & Curve elements
-  const analyticsTitle = page.locator('h3:has-text("Principal Deposited vs. Actual Fund Value")').first();
+  // Verify Multi-Curve Compounding Growth Chart elements
+  const analyticsTitle = page.locator('text=/Invested Principal vs. Compounded Fund Value/i').first();
   await analyticsTitle.waitFor({ state: 'visible', timeout: 3000 });
-  console.log('✓ Interactive Dual-Curve Analytics Chart is present!');
+  console.log('✓ Interactive Multi-Curve Growth Chart is present!');
 
   // Verify Time Horizon Toggle
   const monthlyToggle = page.locator('button:has-text("Monthly")').first();
@@ -91,12 +93,12 @@ try {
   console.log('✓ Time Horizon toggle (Monthly / Yearly) is present!');
 
   // Verify Instrument Risk Card
-  const riskCardTitle = page.locator('text=/Selected Instrument & Risk Profile/i').first();
+  const riskCardTitle = page.locator('text=/ZERO VOLATILITY|GUARANTEED COMPOUNDING|INFLATION HEDGE|WEALTH COMPOUNDER/i').first();
   await riskCardTitle.waitFor({ state: 'visible', timeout: 3000 });
-  console.log('✓ Instrument Risk Profile card is present!');
+  console.log('✓ Integrated Instrument Risk Profile card is present!');
 
-  await page.screenshot({ path: 'tests/screenshot-goal-analytics-drawer.png' });
-  console.log('✓ Saved screenshot: tests/screenshot-goal-analytics-drawer.png');
+  await page.screenshot({ path: 'tests/screenshot-financial-setup-integrated-goal.png' });
+  console.log('✓ Saved screenshot: tests/screenshot-financial-setup-integrated-goal.png');
 
   // Test executing a Lump-Sum Transfer from Bank Cash
   console.log('Executing lump-sum transfer from Bank Cash...');
@@ -107,9 +109,9 @@ try {
   await successAlert.waitFor({ state: 'visible', timeout: 3000 });
   console.log('✓ Lump-Sum Transfer executed and verified with success banner!');
 
-  // Close the drawer
-  const closeBtn = page.locator('button:has-text("Close")').first();
-  await closeBtn.click();
+  // Resume simulation to close modal
+  const resumeBtn = page.locator('button:has-text("Resume Simulation")').first();
+  await resumeBtn.click();
   await page.waitForTimeout(300);
 
   console.log('\n--- 5. Testing Non-Directive Market Crash Alert Modal ---');

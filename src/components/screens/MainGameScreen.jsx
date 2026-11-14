@@ -20,7 +20,6 @@ import WeddingModal from '../game/WeddingModal.jsx';
 import HomePurchaseModal from '../game/HomePurchaseModal.jsx';
 import EarlyHomeDecisionModal from '../game/EarlyHomeDecisionModal.jsx';
 import MarketCrashModal from '../game/MarketCrashModal.jsx';
-import GoalDetailsDrawer from '../game/GoalDetailsDrawer.jsx';
 import { getOutflowItemization } from '../../engine/lifeEventsEngine.js';
 import {
   pageTransition,
@@ -87,7 +86,7 @@ export default function MainGameScreen() {
 
   const [activeTab, setActiveTab] = useState('goals');
   const [goalFilter, setGoalFilter] = useState('all'); // 'all' | 'active' | 'completed'
-  const [selectedGoalForDrawer, setSelectedGoalForDrawer] = useState(null);
+  const [selectedGoalIdForSetup, setSelectedGoalIdForSetup] = useState(null);
   const [isAdjustingAllocations, setIsAdjustingAllocations] = useState(false);
   const [isUpskillingModalOpen, setIsUpskillingModalOpen] = useState(false);
   const [isJobMarketModalOpen, setIsJobMarketModalOpen] = useState(false);
@@ -754,7 +753,8 @@ export default function MainGameScreen() {
                     key={goal.id}
                     onClick={() => {
                       pause();
-                      setSelectedGoalForDrawer(goal);
+                      setSelectedGoalIdForSetup(goal.id);
+                      setIsAdjustingAllocations(true);
                     }}
                     className="card-neopop-sm p-3 bg-white hover:bg-slate-50 border-2 border-slate-900 cursor-pointer transition-all space-y-2 group shadow-[2px_2px_0px_#0f172a]"
                   >
@@ -803,7 +803,7 @@ export default function MainGameScreen() {
                     {/* Bottom Tap Hint */}
                     <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-0.5 border-t border-slate-100">
                       <span className="text-blue-700 font-bold group-hover:underline">
-                        📈 View Analytics & Seed Cash ➔
+                        📈 Adjust SIP, Seed Cash & Growth ➔
                       </span>
                       {goal.redirectGoalId && (
                         <span className="text-slate-400 truncate">
@@ -1245,30 +1245,20 @@ export default function MainGameScreen() {
         <VentureIncubatorModal onClose={() => setIsVentureModalOpen(false)} />
       )}
 
-      {/* ─── Allocation Adjustment Modal ─── */}
+      {/* ─── Allocation Adjustment & Goal Growth Modal ─── */}
       {isAdjustingAllocations && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto card-neopop bg-white overflow-x-hidden">
             <FinancialSetupScreen
               isModal={true}
-              onClose={() => setIsAdjustingAllocations(false)}
+              initialGoalId={selectedGoalIdForSetup}
+              onClose={() => {
+                setIsAdjustingAllocations(false);
+                setSelectedGoalIdForSetup(null);
+              }}
             />
           </div>
         </div>
-      )}
-
-      {/* ─── Per-Goal Interactive Analytics & Lump-Sum Seeding Drawer ─── */}
-      {selectedGoalForDrawer && (
-        <GoalDetailsDrawer
-          goal={goals.find((g) => g.id === selectedGoalForDrawer.id) || selectedGoalForDrawer}
-          character={character}
-          simulation={simulation}
-          isOpen={!!selectedGoalForDrawer}
-          onClose={() => setSelectedGoalForDrawer(null)}
-          onTransferLumpSum={transferLumpSumToGoal}
-          onUpdateAllocation={setGoalAllocation}
-          onUpdateGoal={updateGoal}
-        />
       )}
 
     </motion.div>

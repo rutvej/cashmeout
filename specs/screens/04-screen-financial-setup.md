@@ -36,6 +36,12 @@ Players enter Screen 4 under two scenarios:
 |  [ SLIDABLE ACTIVE GOAL CARD ]  (Swipe / ◄ ► Controls)                  |
 |                                                                         |
 |  🚗 FIRST CAR                             Target: ₹6,00,000 (Age 27)    |
+|  Accumulated: ₹1,50,000 (25% Achieved)    [==============             ]  |
+|                                                                         |
+|  [ ⚡ SEED CAPITAL FROM BANK CASH ]                                      |
+|  Available Bank Cash: ₹82,000                                           |
+|  [ − ]  ₹ 10,000  [ + ]   [+₹5k] [+₹10k] [+₹25k] [Max: ₹82k] [Transfer] |
+|                                                                         |
 |  Mode Toggle: [ ₹ Fixed Amount ]  [ % Surplus Share ]                   |
 |                                                                         |
 |  Monthly Allocation:                                                    |
@@ -44,10 +50,15 @@ Players enter Screen 4 under two scenarios:
 |                                                                         |
 |  Investment Instrument:                                                 |
 |  [ Liquid 4% ]  [ FD 7% ]  [ Gold 8.5% ]  [★ Mutual Fund 12% ]          |
+|  [ Risk Profile: Fixed Deposit · Guaranteed 7% Compounding · 1.5% Penalty]|
 |                                                                         |
 |  Status: 🟢 On Track (Projected ₹6,15,000 by Age 27)                   |
 |                                                                         |
-|  [ 📈 View Growth Chart ▾ ] (Collapsible toggle)                        |
+|  [ 📈 View Multi-Curve Growth Chart ▾ ] (Collapsible toggle)            |
+|  - Curve 1 (Invested Principal): Cumulative out-of-pocket deposits      |
+|  - Curve 2 (Compounded Value): Compounded fund value over horizon       |
+|  - Horizon Toggle: [ ● Monthly ] [ ○ Yearly ]                           |
+|  - Compounding Wealth Delta: +₹1,45,000 (31% Gain)                      |
 |                                                                         |
 +-------------------------------------------------------------------------+
 |  [◄ PREV GOAL]       [NEXT GOAL ►]     [ UNPAUSE & START SIMULATION 🚀 ]|
@@ -106,20 +117,36 @@ $$\text{Leftover Surplus} = \max(0, \text{character.monthlySurplus} - \text{Tota
 
 2. **Slidable Goal Card**:
    - Smooth horizontal slide animation (Framer Motion `x: 0, opacity: 1` transition).
-   - Mode Toggle: `[ ₹ Fixed Amount ]` vs `[ % Surplus Share ]`.
+   - Direct focus support via `initialGoalId`: Opening the screen from a specific goal card on `MainGameScreen` sets `currentIndex` directly to that goal.
    - Minimal header: Icon, Goal Name, Target Amount, and Target Age/Months.
+   - **Corpus Accumulation Progress Bar:** Displays `Accumulated ₹X` / `Target ₹Y` with a clean progress bar.
+   - **Mid-Game Lump-Sum Bank Cash Seeding:**
+     - Direct debit-credit transfer from `character.liquidCash` into `goal.currentAmount`.
+     - Controls: Stepper (`− / +`), bounded input, quick preset chips (`+₹5k`, `+₹10k`, `+₹25k`, `+₹50k`, `Max`), and `[ Transfer ]` CTA.
+     - Validation: Bounded by `[0, min(liquidCash, target - current)]` (or `liquidCash` for retirement).
+   - Mode Toggle: `[ ₹ Fixed Amount ]` vs `[ % Surplus Share ]`.
    - Clean Rupee Input with `+ / −` stepper buttons and fast preset chips (`+₹1k`, `+₹2k`, `+₹5k`, `Fill Remaining`).
    - Compact 4-pill instrument selector:
      - **Liquid Savings (4% p.a.)** — Instant & Safe liquidity.
      - **Fixed Deposit (7% p.a.)** — Guaranteed return (1.5% penalty if broken early).
      - **Gold / SGB (8.5% p.a.)** — Inflation hedge with cyclical fluctuation.
      - **Equity Mutual Funds (12% p.a.)** — High growth long-term; cyclical market volatility.
+   - **Integrated Instrument Risk Profile Card:**
+     - Displayed directly under instrument pills. Outlines exact asset behavior, volatility bounds, stress test resilience, and liquidity penalties.
    - 1-line Status Pill: 🟢 On Track / 🟡 Borderline / 🔴 Needs +₹X/mo.
-   - **Collapsible Projection Chart**: Closed by default to keep the card compact; opens a clean Recharts AreaChart on tap without disrupting the layout.
+   - **Multi-Curve Growth Chart Engine:**
+     - Recharts AreaChart rendering multiple series:
+       - **Curve 1 (Invested Principal):** Out-of-pocket deposits committed (dashed slate area `#64748B`).
+       - **Curve 2 (Compounded Value):** Real valuation compounding at instrument rate (solid emerald/amber area).
+       - **Target Reference Line:** Target corpus threshold (dashed navy `#0F172A`).
+     - **Granularity & View Toggles:**
+       - `[ ● Monthly ]` vs `[ ○ Yearly ]` time horizon.
+       - `[ Projection ]` vs `[ History ]` when historical months exist.
+     - **Summary Metrics Bar:** 4 stat cards showing Total Principal In, Projected Corpus, Net Wealth Created from Compounding ($FV - P$), and Target Corpus.
 
 3. **Bottom Navigation Bar**:
    - `◄ Prev Goal` and `Next Goal ►` navigation buttons.
-   - **Primary Action CTA (`[ UNPAUSE & START SIMULATION 🚀 ]` or `[ SAVE & RESUME ▶ ]`)**:
+   - **Primary Action CTA (`[ UNPAUSE & START SIMULATION 🚀 ]` or `[ RESUME SIMULATION ▶ ]`)**:
      - High-contrast NeoPOP button (Emerald background, solid 2px black border, 3px hard drop-shadow).
-     - Sets `simulation.isPaused = false` and navigates to `main_game`.
+     - Sets `simulation.isPaused = false` and navigates to `main_game` (or dismisses modal).
      - Always visible without scrolling.

@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, ReferenceLine, Tooltip, Legend } from 'recharts';
 import { useGameStore } from '../../engine/store.js';
 import {
   INSTRUMENTS,
@@ -12,7 +12,7 @@ import { formatINR } from '../../utils/format.js';
 
 export { getActiveAllocatableGoals };
 
-export default function FinancialSetupScreen({ isModal = false, onClose }) {
+export default function FinancialSetupScreen({ isModal = false, onClose, initialGoalId = null }) {
   const {
     character,
     goals,
@@ -22,22 +22,41 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
     setGoalAllocation,
     setAllocationMode,
     addCustomGoal,
+    transferLumpSumToGoal,
     navigateTo,
     play,
     closeModal,
   } = useGameStore();
 
-  const [currentIndex, setCurrentIndex] = useState(0);
+  // Filter active allocatable goals
+  const allocatableGoals = useMemo(() => getActiveAllocatableGoals(goals), [goals]);
+
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    if (initialGoalId && allocatableGoals.length > 0) {
+      const idx = allocatableGoals.findIndex((g) => g.id === initialGoalId);
+      return idx >= 0 ? idx : 0;
+    }
+    return 0;
+  });
+
+  useEffect(() => {
+    if (initialGoalId && allocatableGoals.length > 0) {
+      const idx = allocatableGoals.findIndex((g) => g.id === initialGoalId);
+      if (idx >= 0) setCurrentIndex(idx);
+    }
+  }, [initialGoalId, allocatableGoals]);
+
   const [skippedGoals, setSkippedGoals] = useState(new Set());
-  const [isChartOpen, setIsChartOpen] = useState(false);
+  const [isChartOpen, setIsChartOpen] = useState(true);
+  const [chartView, setChartView] = useState('projection'); // 'projection' | 'history'
+  const [timeHorizon, setTimeHorizon] = useState('monthly'); // 'monthly' | 'yearly'
+  const [seedAmount, setSeedAmount] = useState(10000);
+  const [transferSuccessMsg, setTransferSuccessMsg] = useState('');
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showHintModal, setShowHintModal] = useState(false);
   const [newGoalName, setNewGoalName] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('2500000');
   const [newGoalInstrument, setNewGoalInstrument] = useState('equity');
-
-  // Filter active allocatable goals
-  const allocatableGoals = useMemo(() => getActiveAllocatableGoals(goals), [goals]);
 
   if (!character || !goals.length) {
     return (
@@ -233,6 +252,34 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
   const monthsAway = currentGoal?.targetMonthsRemaining || (currentGoal?.recurrenceIntervalMonths || 12);
   const targetAge = currentGoal?.targetAge || (simulation.currentAge + Math.ceil(monthsAway / 12));
 
+  // Bank Cash & Lump-Sum Bounds
+  const availableBankCash = Math.max(0, character?.liquidCash || 0);
+  const isRetirement = currentGoal?.id === 'goal_retirement';
+  const maxLumpSum = isRetirement
+    ? availableBankCash
+    : Math.min(availableBankCash, Math.max(0, targetAmount - currentAmount));
+
+  // Reset transient feedback when active goal changes
+  useEffect(() => {
+    setTransferSuccessMsg('');
+    if (currentGoal) {
+      const isRet = currentGoal.id === 'goal_retirement';
+      const maxL = isRet ? availableBankCash : Math.min(availableBankCash, Math.max(0, (currentGoal.targetAmount || 1) - (currentGoal.currentAmount || 0)));
+      setSeedAmount(Math.min(10000, maxL > 0 ? maxL : 10000));
+    }
+  }, [currentGoal?.id]);
+
+  const handleExecuteTransfer = () => {
+    if (!currentGoal) return;
+    const amt = Math.min(seedAmount, maxLumpSum);
+    if (amt <= 0) return;
+    const ok = transferLumpSumToGoal(currentGoal.id, amt);
+    if (ok) {
+      setTransferSuccessMsg(`Successfully seeded +${formatINR(amt)} from Bank Cash!`);
+      setTimeout(() => setTransferSuccessMsg(''), 3500);
+    }
+  };
+
   // Recommended monthly SIP to achieve target by deadline based on compounding math
   const recommendedSIP = useMemo(() => {
     if (!currentGoal) return 0;
@@ -251,33 +298,71 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
 
   const feasibility = evaluateGoalFeasibility(currentGoal, currentSIP, currentInst.id);
 
-  // Chart dataset for active goal
-  const chartData = useMemo(() => {
+  const hasHistory = Boolean(currentGoal?.history && currentGoal.history.length > 1);
+
+  // Multi-curve dataset: Invested Principal vs Compounded Fund Value vs Target
+  const multiChartData = useMemo(() => {
     if (!currentGoal) return [];
+
+    if (chartView === 'history' && hasHistory) {
+      if (timeHorizon === 'yearly') {
+        const yearly = currentGoal.history.filter((h) => h.month % 12 === 0);
+        const entries = yearly.length > 0 ? yearly : currentGoal.history;
+        return entries.map((h) => ({
+          label: `Age ${h.age || Math.floor(h.month / 12)}`,
+          month: h.month,
+          investedPrincipal: Math.round(h.investedPrincipal ?? h.actualBalance),
+          fundValue: Math.round(h.actualBalance),
+          target: targetAmount,
+        }));
+      }
+      return currentGoal.history.map((h) => ({
+        label: `M${h.month}`,
+        month: h.month,
+        investedPrincipal: Math.round(h.investedPrincipal ?? h.actualBalance),
+        fundValue: Math.round(h.actualBalance),
+        target: targetAmount,
+      }));
+    }
+
+    // Default: Forward Compounding Projection
     const data = [];
-    const steps = Math.min(24, Math.max(6, monthsAway));
-    const stepMonths = Math.max(1, Math.round(monthsAway / steps));
+    const totalMonths = Math.max(1, monthsAway);
+    const steps = timeHorizon === 'yearly' ? Math.max(1, Math.ceil(totalMonths / 12)) : Math.min(24, Math.max(6, totalMonths));
+    const stepMonths = timeHorizon === 'yearly' ? 12 : Math.max(1, Math.round(totalMonths / steps));
 
-    for (let m = 0; m <= monthsAway; m += stepMonths) {
+    for (let m = 0; m <= totalMonths; m += stepMonths) {
+      const principal = currentAmount + (currentSIP * m);
       const fv = calculateProjectedFV(currentAmount, currentSIP, currentInst.annualRate, m);
+      const label = m === 0 ? 'Now' : timeHorizon === 'yearly' ? `Yr ${Math.round(m / 12)}` : `M${m}`;
       data.push({
+        label,
         month: m,
-        monthLabel: m === 0 ? 'Now' : `M${m}`,
-        projected: fv,
+        investedPrincipal: Math.round(principal),
+        fundValue: Math.round(fv),
         target: targetAmount,
       });
     }
 
-    if (data[data.length - 1].month !== monthsAway) {
+    if (data[data.length - 1].month !== totalMonths) {
+      const principal = currentAmount + (currentSIP * totalMonths);
+      const fv = calculateProjectedFV(currentAmount, currentSIP, currentInst.annualRate, totalMonths);
       data.push({
-        month: monthsAway,
-        monthLabel: `M${monthsAway}`,
-        projected: calculateProjectedFV(currentAmount, currentSIP, currentInst.annualRate, monthsAway),
+        label: timeHorizon === 'yearly' ? `Yr ${(totalMonths / 12).toFixed(1)}` : `M${totalMonths}`,
+        month: totalMonths,
+        investedPrincipal: Math.round(principal),
+        fundValue: Math.round(fv),
         target: targetAmount,
       });
     }
+
     return data;
-  }, [currentGoal, currentAmount, currentSIP, currentInst, monthsAway, targetAmount]);
+  }, [currentGoal, currentAmount, currentSIP, currentInst, monthsAway, targetAmount, chartView, timeHorizon, hasHistory]);
+
+  const projectedFinalPrincipal = currentAmount + (currentSIP * monthsAway);
+  const projectedFinalFV = calculateProjectedFV(currentAmount, currentSIP, currentInst.annualRate, monthsAway);
+  const projectedWealthGain = Math.max(0, projectedFinalFV - projectedFinalPrincipal);
+  const gainPercentage = projectedFinalPrincipal > 0 ? Math.round((projectedWealthGain / projectedFinalPrincipal) * 100) : 0;
 
   const chartColor =
     feasibility.status === 'on_track'
@@ -538,6 +623,120 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                 </div>
               </div>
 
+              {/* ─── Corpus Accumulation Progress Bar ─── */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-[10px] font-mono">
+                  <span className="text-slate-600">
+                    Accumulated: <strong className="text-slate-900 font-black">{formatINR(currentAmount)}</strong>
+                  </span>
+                  <span className="text-slate-700 font-bold">
+                    {Math.min(100, Math.round((currentAmount / targetAmount) * 100))}% of {formatINR(targetAmount)}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 border border-slate-900 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((currentAmount / targetAmount) * 100))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* ─── Mid-Game Lump-Sum Bank Cash Seeding ─── */}
+              <div className="p-2.5 sm:p-3 bg-emerald-50/70 border-2 border-slate-900 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-base sm:text-lg">⚡</span>
+                    <div className="min-w-0">
+                      <span className="font-display font-black text-xs text-slate-900 block truncate">
+                        Seed Capital from Bank Cash
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-600 block truncate">
+                        Deposit accumulated bank savings directly into goal
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-[9px] font-mono font-bold uppercase text-slate-500 block">Bank Cash</span>
+                    <span className="text-xs sm:text-sm font-mono font-black text-emerald-800">
+                      {formatINR(availableBankCash)}
+                    </span>
+                  </div>
+                </div>
+
+                {transferSuccessMsg && (
+                  <div className="py-1 px-2.5 bg-emerald-100 border border-emerald-700 text-emerald-950 text-[11px] font-mono font-bold animate-fadeIn">
+                    ✓ {transferSuccessMsg}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSeedAmount(Math.max(1000, seedAmount - 5000))}
+                    className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
+                  >
+                    −
+                  </button>
+                  <div className="relative flex-1">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs font-black">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      step="1000"
+                      min="0"
+                      max={maxLumpSum}
+                      value={seedAmount || ''}
+                      onChange={(e) => setSeedAmount(Math.max(0, Math.min(maxLumpSum, Number(e.target.value) || 0)))}
+                      className="w-full bg-white border-2 border-slate-900 py-1 pl-6 pr-2 font-mono font-black text-slate-900 text-xs sm:text-sm outline-none text-center"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSeedAmount(Math.min(maxLumpSum, seedAmount + 5000))}
+                    className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    disabled={maxLumpSum <= 0 || seedAmount <= 0}
+                    onClick={handleExecuteTransfer}
+                    className={`py-1.5 px-3 font-mono font-black text-xs uppercase border-2 border-slate-900 btn-press-sm transition-all shrink-0 ${
+                      maxLumpSum > 0 && seedAmount > 0
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-hard-sm'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Transfer
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1 font-mono text-[9px]">
+                  {[5000, 10000, 25000, 50000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={preset > maxLumpSum}
+                      onClick={() => setSeedAmount(preset)}
+                      className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-900 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      +{formatINR(preset)}
+                    </button>
+                  ))}
+                  {maxLumpSum > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSeedAmount(maxLumpSum)}
+                      className="px-1.5 py-0.5 bg-purple-100 hover:bg-purple-200 border border-purple-900 text-purple-900 font-bold ml-auto"
+                    >
+                      Max ({formatINR(maxLumpSum)})
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Monthly Allocation Input with Steppers & Dual Mode */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -760,6 +959,54 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                     );
                   })}
                 </div>
+
+                {/* ─── Instrument Risk Profile Card ─── */}
+                <div className="p-2.5 bg-slate-50 border-2 border-slate-900 text-xs font-body leading-relaxed space-y-1">
+                  {currentGoal.instrumentId === 'savings' && (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-emerald-900 font-bold font-mono text-[11px]">
+                        <span>🛡️</span>
+                        <span>LIQUID SAVINGS · ZERO VOLATILITY</span>
+                      </div>
+                      <p className="text-slate-600 text-[11px]">
+                        Steady linear climb with zero volatility. 100% capital protection and instant liquidity. Ideal for Emergency Fund (6 months) and near-term vacation expenses.
+                      </p>
+                    </div>
+                  )}
+                  {currentGoal.instrumentId === 'fd' && (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-blue-900 font-bold font-mono text-[11px]">
+                        <span>🔒</span>
+                        <span>FIXED DEPOSIT · GUARANTEED COMPOUNDING</span>
+                      </div>
+                      <p className="text-slate-600 text-[11px]">
+                        Guaranteed exponential growth (7.0% p.a.). Zero market volatility. Incurs a 1.5% penalty if liquidated prematurely before maturity. Great for 2–5 year goals.
+                      </p>
+                    </div>
+                  )}
+                  {currentGoal.instrumentId === 'gold' && (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-amber-900 font-bold font-mono text-[11px]">
+                        <span>🟡</span>
+                        <span>GOLD / SGB · INFLATION HEDGE</span>
+                      </div>
+                      <p className="text-slate-600 text-[11px]">
+                        Capital preservation with moderate monthly cyclical swings (-1.0% to +2.0%/mo). Acts as a resilient safe-haven during macro equity crashes.
+                      </p>
+                    </div>
+                  )}
+                  {currentGoal.instrumentId === 'equity' && (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-purple-900 font-bold font-mono text-[11px]">
+                        <span>★</span>
+                        <span>EQUITY MUTUAL FUNDS · WEALTH COMPOUNDER</span>
+                      </div>
+                      <p className="text-slate-600 text-[11px]">
+                        High long-term compounding (~12% p.a.) with realistic monthly swings (-3.5% to +4.5%/mo). Guaranteed macro crash (-28% to -55%) occurs between age 34 and 45. Essential for multi-decade retirement, high risk for short-term goals.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* ─── Clear & Concise Status Pill ─── */}
@@ -788,37 +1035,118 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                 </div>
               </div>
 
-              {/* ─── Collapsible Projection Chart ─── */}
-              <div className="space-y-1.5 pt-1 border-t border-slate-200">
+              {/* ─── Collapsible Multi-Curve Growth Engine ─── */}
+              <div className="space-y-2 pt-1 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsChartOpen((prev) => !prev)}
-                  className="w-full py-1.5 px-3 bg-slate-50 hover:bg-slate-100 border-2 border-slate-900 font-mono text-xs font-bold flex items-center justify-between btn-press-sm text-slate-800 transition-colors cursor-pointer"
+                  className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 border-2 border-slate-900 font-mono text-xs font-bold flex items-center justify-between btn-press-sm text-slate-800 transition-colors cursor-pointer"
                 >
                   <span className="flex items-center gap-1.5">
                     <span>📈</span>
-                    <span>{isChartOpen ? 'Hide Growth Chart' : 'View Growth Chart'}</span>
+                    <span>{isChartOpen ? 'Hide Multi-Curve Growth Chart' : 'View Multi-Curve Growth Chart'}</span>
                   </span>
                   <span className="text-slate-500">{isChartOpen ? '▴' : '▾'}</span>
                 </button>
 
                 {isChartOpen && (
-                  <div className="bg-slate-50 border-2 border-slate-900 p-2.5 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] font-mono font-bold text-slate-600">
-                      <span>COMPOUNDING PROJECTION</span>
-                      <span>Target: {formatINR(targetAmount)}</span>
+                  <div className="bg-slate-50 border-2 border-slate-900 p-3 space-y-2.5">
+                    {/* Header Controls */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-1 border-b border-slate-200">
+                      <div>
+                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
+                          Portfolio Compounding Analytics
+                        </span>
+                        <h4 className="font-display font-black text-xs sm:text-sm text-slate-900">
+                          Invested Principal vs. Compounded Fund Value
+                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                        {hasHistory && (
+                          <div className="inline-flex bg-slate-200 border border-slate-900 p-0.5 font-mono text-[9px] font-bold">
+                            <button
+                              type="button"
+                              onClick={() => setChartView('projection')}
+                              className={`px-2 py-0.5 transition-colors ${
+                                chartView === 'projection' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:text-slate-900'
+                              }`}
+                            >
+                              Projection
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setChartView('history')}
+                              className={`px-2 py-0.5 transition-colors ${
+                                chartView === 'history' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:text-slate-900'
+                              }`}
+                            >
+                              History
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="inline-flex bg-slate-200 border border-slate-900 p-0.5 font-mono text-[9px] font-bold">
+                          <button
+                            type="button"
+                            onClick={() => setTimeHorizon('monthly')}
+                            className={`px-2 py-0.5 transition-colors ${
+                              timeHorizon === 'monthly' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:text-slate-900'
+                            }`}
+                          >
+                            ● Monthly
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setTimeHorizon('yearly')}
+                            className={`px-2 py-0.5 transition-colors ${
+                              timeHorizon === 'yearly' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:text-slate-900'
+                            }`}
+                          >
+                            ○ Yearly
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="h-28 sm:h-32 w-full pt-1 min-w-0 overflow-hidden">
+
+                    {/* 4 Multi-Metric Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center font-mono">
+                      <div className="bg-white border border-slate-300 p-1.5">
+                        <span className="text-[8px] uppercase text-slate-500 block">Invested Principal</span>
+                        <span className="font-bold text-xs text-slate-800">{formatINR(projectedFinalPrincipal)}</span>
+                      </div>
+                      <div className="bg-white border border-slate-300 p-1.5">
+                        <span className="text-[8px] uppercase text-slate-500 block">Projected Corpus</span>
+                        <span className="font-bold text-xs text-blue-900">{formatINR(projectedFinalFV)}</span>
+                      </div>
+                      <div className="bg-white border border-slate-300 p-1.5">
+                        <span className="text-[8px] uppercase text-slate-500 block">Net Growth</span>
+                        <span className={`font-black text-xs ${projectedWealthGain > 0 ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          +{formatINR(projectedWealthGain)} ({gainPercentage}%)
+                        </span>
+                      </div>
+                      <div className="bg-white border border-slate-300 p-1.5">
+                        <span className="text-[8px] uppercase text-slate-500 block">Target Corpus</span>
+                        <span className="font-bold text-xs text-slate-900">{formatINR(targetAmount)}</span>
+                      </div>
+                    </div>
+
+                    {/* Multi-Area / Multi-Curve Chart */}
+                    <div className="h-40 sm:h-48 w-full pt-1 min-w-0 overflow-hidden bg-white border border-slate-300 p-1.5">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                        <AreaChart data={multiChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                           <defs>
-                            <linearGradient id="goalAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
+                            <linearGradient id="fundValueGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={chartColor} stopOpacity={0.35} />
                               <stop offset="95%" stopColor={chartColor} stopOpacity={0.0} />
+                            </linearGradient>
+                            <linearGradient id="principalGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#64748B" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#64748B" stopOpacity={0.0} />
                             </linearGradient>
                           </defs>
                           <XAxis
-                            dataKey="monthLabel"
+                            dataKey="label"
                             stroke="#475569"
                             fontSize={9}
                             fontFamily="JetBrains Mono"
@@ -837,6 +1165,20 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                                 : `₹${val}`
                             }
                           />
+                          <Tooltip
+                            formatter={(val, name) => [formatINR(val), name]}
+                            contentStyle={{
+                              backgroundColor: '#0f172a',
+                              borderColor: '#0f172a',
+                              color: '#fff',
+                              fontSize: '11px',
+                              fontFamily: 'monospace',
+                              borderRadius: '2px',
+                            }}
+                          />
+                          <Legend
+                            wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', paddingTop: '4px' }}
+                          />
                           <ReferenceLine
                             y={targetAmount}
                             stroke="#0F172A"
@@ -851,14 +1193,30 @@ export default function FinancialSetupScreen({ isModal = false, onClose }) {
                           />
                           <Area
                             type="monotone"
-                            dataKey="projected"
-                            stroke={chartColor}
+                            dataKey="investedPrincipal"
+                            name="Invested Principal"
+                            stroke="#64748B"
                             strokeWidth={2}
+                            strokeDasharray="3 3"
                             fillOpacity={1}
-                            fill="url(#goalAreaGrad)"
+                            fill="url(#principalGrad)"
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="fundValue"
+                            name="Compounded Fund Value"
+                            stroke={chartColor}
+                            strokeWidth={2.5}
+                            fillOpacity={1}
+                            fill="url(#fundValueGrad)"
                           />
                         </AreaChart>
                       </ResponsiveContainer>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-0.5 px-0.5">
+                      <span>Gray Dashed: Cumulative Out-of-Pocket Deposits</span>
+                      <span className="text-emerald-700 font-bold">Colored Area: Compounded Returns Growth</span>
                     </div>
                   </div>
                 )}

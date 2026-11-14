@@ -52,14 +52,22 @@ The player monitors their goal progress, balances cashflow, manages loans, weath
 
 ---
 
-### B. Expanded Goal Inspection Drawer / Modal (Analytics & Lump-Sum Seeding)
-When the player taps any collapsed goal card, it opens a dedicated NeoPOP Drawer with high-fidelity analytics and bank cash seeding controls:
+### B. Goal Interaction: Transition to Integrated Surplus Distribution Screen
+When the player taps any collapsed goal card on the Main Game Screen, the simulation auto-pauses (`pause()`) and opens the existing **Surplus Distribution Screen (`FinancialSetupScreen.jsx`)** in modal mode, focused directly on that goal (`initialGoalId`).
+
+Inside `FinancialSetupScreen`, the player has complete, unified control over the goal:
+1. **Corpus Accumulation Progress:** Live progress bar showing accumulated corpus vs target.
+2. **Mid-Game Lump-Sum Bank Cash Seeding:** Transfer accumulated Bank Cash (`character.liquidCash`) directly into the goal.
+3. **Monthly SIP Rebalancing:** Set ₹ Amount or % Surplus Share with real-time feedback and quick presets.
+4. **4-Pill Instrument Selector & Risk Profile Card:** Instant vehicle switching with dedicated risk behavior guidelines.
+5. **Interactive Multi-Curve Compounding Growth Chart:** Compares Invested Principal ($P(t)$) vs Compounded Fund Value ($V(t)$) over Monthly/Yearly horizons with net wealth created metrics.
 
 ```
 +-------------------------------------------------------------+
-| 🚗 FIRST CAR MILESTONE                   [X Close Drawer]   |
+| 🚗 FIRST CAR MILESTONE             [← Back to Dashboard]    |
 | Category: Asset  •  Target: ₹6,50,000 by Age 27             |
 | Current Corpus: ₹4,80,000 (74% Achieved • 28 Months Left)   |
+| [====================================                      ]|
 +-------------------------------------------------------------+
 |                                                             |
 |  [ 1. SEED CAPITAL FROM BANK CASH ]                         |
@@ -71,12 +79,11 @@ When the player taps any collapsed goal card, it opens a dedicated NeoPOP Drawer
 |                                                             |
 |  Monthly SIP Allocation:                                    |
 |  [ − ]  ₹ 5,000 / month  [ + ]   [Mode: ₹ Fixed | % Share]  |
-|  [ UPDATE MONTHLY SIP ]                                     |
 |                                                             |
 |  ---------------------------------------------------------  |
 |                                                             |
-|  [ 2. INTERACTIVE ANALYTICS: PRINCIPAL VS. FUND VALUE ]     |
-|  View Granularity: [ ● Monthly ] [ ○ Yearly ]               |
+|  [ 2. MULTI-CURVE GROWTH ENGINE: PRINCIPAL VS. FUND VALUE ] |
+|  Time Horizon: [ ● Monthly ] [ ○ Yearly ]                   |
 |                                                             |
 |  ₹ Value                                                    |
 |  5.0L ┤                                       ╭── V(t) Actual|
@@ -89,11 +96,11 @@ When the player taps any collapsed goal card, it opens a dedicated NeoPOP Drawer
 |                                                             |
 |  • Curve 1 (Invested Principal): ₹4,20,000 (Seeds + SIPs)   |
 |  • Curve 2 (Actual Fund Value):  ₹4,80,000 (Compounded)     |
-|  • Unrealized Market Wealth:     +₹60,000 (+14.3%)          |
+|  • Net Compounding Wealth Gain:  +₹60,000 (+14.3%)          |
 |                                                             |
 |  ---------------------------------------------------------  |
 |                                                             |
-|  [ 3. INSTRUMENT RISK PROFILE ]                             |
+|  [ 3. INSTRUMENT RISK PROFILE CARD ]                        |
 |  Selected: ★ Equity Mutual Funds (12% p.a. Long-Term Mean)  |
 |  +-------------------------------------------------------+  |
 |  | ⚠️ HIGH MONTHLY VOLATILITY (-3.5% to +4.5% / mo)       |  |
@@ -104,6 +111,7 @@ When the player taps any collapsed goal card, it opens a dedicated NeoPOP Drawer
 |  +-------------------------------------------------------+  |
 |  Change Instrument: [ Savings 4% ] [ FD 7% ] [ Gold 8.5% ]  |
 |                                                             |
+|  [◄ PREV GOAL]    [NEXT GOAL ►]    [ RESUME SIMULATION ▶ ]  |
 +-------------------------------------------------------------+
 ```
 
@@ -156,24 +164,24 @@ goal.history.push({
   - **Left Section:** Goal Icon, Name, Category Badge (`[Safety]`, `[Asset]`, `[Lifestyle]`, `[Wealth]`).
   - **Middle Section:** Current Rupee / Target Rupee in monospace bold, accompanied by a slim animated progress bar.
   - **Right Section:** Target Age / Remaining Months badge, and current vehicle/SIP tag.
-- Clicking any collapsed card pauses the simulation (if playing) and opens the Expanded Goal Drawer.
+- Clicking any collapsed card pauses the simulation (if playing) and opens the existing **Surplus Distribution Screen (`FinancialSetupScreen.jsx`)** focused directly on that goal (`initialGoalId`).
 
-### 3. Expanded Goal Drawer Controls
+### 3. Integrated Goal Management Inside Surplus Distribution Screen
 1. **Lump-Sum Bank Seeding Section:**
-   - Input stepper + quick presets (`+₹10,000`, `+₹25,000`, `+₹50,000`, `Max Available`).
+   - Input stepper + quick presets (`+₹5,000`, `+₹10,000`, `+₹25,000`, `+₹50,000`, `Max Available`).
    - Validates that transfer cannot exceed `character.liquidCash`.
-   - Primary Action Button: `[ ⚡ TRANSFER LUMP-SUM FROM BANK CASH ]`.
+   - Primary Action Button: `[ Transfer ]`.
 2. **Monthly SIP Adjuster:**
-   - Real-time stepper and slider to adjust base monthly SIP without leaving the screen.
-3. **Dual-Curve Analytics Area Chart (Recharts):**
-   - **Curve 1 (Invested Principal):** Solid slate line showing cumulative cost basis.
-   - **Curve 2 (Actual Fund Value):** Vibrant emerald/cyan line showing real-time valuation.
-   - Area fill between curves highlights net wealth generated or temporary market drawdowns.
+   - Real-time stepper, dual ₹ / % mode toggle, and quick presets to allocate monthly surplus.
+3. **Multi-Curve Compounding Growth Chart (Recharts):**
+   - **Curve 1 (Invested Principal):** Slate dashed curve showing cumulative cost basis ($P(t)$).
+   - **Curve 2 (Compounded Value):** Emerald/amber area showing real-time compounded valuation ($V(t)$).
+   - **Reference Line:** Target goal corpus threshold.
    - **Time Horizon Toggle:** Segmented pill toggle:
      - `[ Monthly ]`: Raw month-by-month trajectory with full market volatility.
      - `[ Yearly ]`: Aggregated 12-month interval trendline.
-4. **Instrument Risk Profile Card:**
-   - Displays real-world risk/return trade-offs:
+4. **Integrated Instrument Risk Profile Card:**
+   - Displays real-world risk/return trade-offs right below the 4 instrument pills:
      - **Liquid Savings:** Steady linear climb, zero volatility, safe liquidity.
      - **Fixed Deposit (FD):** Steady, guaranteed compounded growth; 1.5% premature penalty.
      - **Gold:** Capital preservation with moderate cyclical dips ($-1.0\%$ to $+2.0\%$).

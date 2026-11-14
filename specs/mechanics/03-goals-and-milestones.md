@@ -91,9 +91,9 @@ $$\text{goal.totalPrincipalDeposited} \leftarrow \text{goal.totalPrincipalDeposi
 
 ---
 
-## 5. Per-Goal Interactive Analytics Graph & Risk Profiles
+## 5. Per-Goal Interactive Multi-Curve Growth Chart & Risk Profiles
 
-Inside each goal's expanded inspection view or drawer, players can inspect an interactive dual-curve analytics chart:
+Inside the surplus distribution screen (`FinancialSetupScreen.jsx`), players can inspect an interactive multi-curve analytics chart for each goal:
 
 ### A. Dual Curves Formulation
 1. **Curve 1: Invested Principal ($P(t)$)**:
