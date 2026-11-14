@@ -16,7 +16,8 @@
     "test:phase8": "node tests/test-phase8-investment-risk.mjs",
     "test:phase9": "node tests/test-phase9-career-appraisals.mjs",
     "test:phase10": "node tests/test-phase10-scorecard-retrospective.mjs",
-    "test:phase11": "node tests/test-phase11-persistence.mjs"
+    "test:phase11": "node tests/test-phase11-persistence.mjs",
+    "test:verify": "node tests/test-verify-market-cycles-instant-start.mjs && node tests/test-verify-e2e-all-features.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

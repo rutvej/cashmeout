@@ -3,6 +3,7 @@ import {
   INSTRUMENTS,
   calculateEffectiveSIPs,
   getMonthlyInstrumentReturnRate,
+  getEquityCrashProfile,
   calculateLiquidationPenalty,
   isMarketInCorrection,
   processLiquidationFromGoal,
@@ -635,67 +636,61 @@ export function tickMonthlySimulation(state) {
     }
   }
 
-  // ─── 7. Distribute Waterfall SIPs ────────────────────────────────────────
+  // ─── 7. Distribute Waterfall SIPs & Strict Cashflow Invariant ───────────
   const effectiveSIPs = calculateEffectiveSIPs(updatedGoals);
   let totalSIPDeductions = 0;
 
-  updatedGoals = updatedGoals.map((g) => {
-    // Active launched ventures are operational assets that do not consume SIPs
-    if (g.isLaunched) {
-      return {
-        ...g,
-        effectiveMonthlySIP: 0,
-        baseMonthlySIP: 0,
-        allocationPercent: 0,
-      };
-    }
-
-    const sip = effectiveSIPs[g.id] || 0;
-    let current = g.currentAmount || 0;
-    const target = g.targetAmount || 1;
-
-    const isRetirement = g.id === 'goal_retirement';
-
-    // Strict cap: For non-retirement milestone goals, ensure currentAmount does not exceed target
-    if (current >= target && !isRetirement) {
-      const legacyExcess = current - target;
-      if (legacyExcess > 0) {
-        liquidCash += legacyExcess;
+  if (monthlySurplus > 0) {
+    updatedGoals = updatedGoals.map((g) => {
+      // Active launched ventures are operational assets that do not consume SIPs
+      if (g.isLaunched) {
+        return {
+          ...g,
+          effectiveMonthlySIP: 0,
+          baseMonthlySIP: 0,
+          allocationPercent: 0,
+        };
       }
+
+      const sip = effectiveSIPs[g.id] || 0;
+      let current = g.currentAmount || 0;
+      const target = g.targetAmount || 1;
+      const isRetirement = g.id === 'goal_retirement';
+
+      // Strict cap: For non-retirement milestone goals, ensure currentAmount does not exceed target
+      if (current >= target && !isRetirement) {
+        return {
+          ...g,
+          currentAmount: target,
+          effectiveMonthlySIP: 0,
+        };
+      }
+
+      const needed = isRetirement ? sip : Math.max(0, target - current);
+      // Total SIP contributions strictly funded from monthlySurplus
+      const availableForThisSIP = Math.max(0, monthlySurplus - totalSIPDeductions);
+      const actualContribution = Math.min(sip, Math.min(needed, availableForThisSIP));
+      totalSIPDeductions += actualContribution;
+
       return {
         ...g,
-        currentAmount: target,
-        effectiveMonthlySIP: 0,
+        effectiveMonthlySIP: actualContribution,
+        currentAmount: current + actualContribution,
+        totalPrincipalDeposited: (g.totalPrincipalDeposited || current) + actualContribution,
       };
-    }
+    });
 
-    if (isRetirement) {
-      totalSIPDeductions += sip;
-      return {
-        ...g,
-        effectiveMonthlySIP: sip,
-        currentAmount: current + sip,
-      };
-    }
-
-    const needed = Math.max(0, target - current);
-    const actualContribution = Math.min(sip, needed);
-    totalSIPDeductions += actualContribution;
-
-    const excess = sip - actualContribution;
-    if (excess > 0) {
-      liquidCash += excess;
-    }
-
-    return {
+    // Zero Free Money Leak Invariant: Only residual unallocated surplus deposits into Bank Cash
+    const leftoverSurplus = Math.max(0, monthlySurplus - totalSIPDeductions);
+    liquidCash += leftoverSurplus;
+  } else {
+    // monthlySurplus <= 0: All SIP contributions are strictly 0. Zero phantom cash deposited to bank.
+    // (Deficit has already been drawn from Liquid Cash first, then Emergency Fund in Step 4)
+    updatedGoals = updatedGoals.map((g) => ({
       ...g,
-      effectiveMonthlySIP: actualContribution,
-      currentAmount: Math.min(target, current + actualContribution),
-    };
-  });
-
-  const leftoverSurplus = Math.max(0, monthlySurplus - totalSIPDeductions);
-  liquidCash += leftoverSurplus;
+      effectiveMonthlySIP: 0,
+    }));
+  }
 
   // ─── 8. Compound Investments with Monthly Rates ──────────────────────────
   updatedGoals = updatedGoals.map((g) => {
@@ -723,7 +718,7 @@ export function tickMonthlySimulation(state) {
     }
 
     const inst = INSTRUMENTS[g.instrumentId] || INSTRUMENTS.savings;
-    const monthlyRate = getMonthlyInstrumentReturnRate(g.instrumentId, nextMonthIndex, character.seed);
+    const monthlyRate = getMonthlyInstrumentReturnRate(g.instrumentId, nextMonthIndex, character.seed, character.age);
     const balance = g.currentAmount || 0;
     const target = g.targetAmount || 1;
     const growth = Math.round(balance * monthlyRate);
@@ -775,9 +770,20 @@ export function tickMonthlySimulation(state) {
       liquidCash += excessGrowth;
     }
 
+    // Per-Goal Ledger Snapshot for Interactive Dual-Curve Analytics
+    const historyEntry = {
+      month: nextMonthIndex,
+      age: currentAge,
+      investedPrincipal: Math.round(g.totalPrincipalDeposited || newBalance),
+      actualBalance: newBalance,
+      monthlyReturnRate: Number(monthlyRate.toFixed(6)),
+    };
+
     return {
       ...g,
       currentAmount: newBalance,
+      totalPrincipalDeposited: g.totalPrincipalDeposited || newBalance,
+      history: [...(g.history || []), historyEntry],
       status,
       filledEarlyMonths,
     };
@@ -909,7 +915,7 @@ export function tickMonthlySimulation(state) {
     reachedMilestones.forEach((pendingMilestone) => {
       isPaused = true;
       if (pendingMilestone.id === 'goal_marriage') {
-        const spouseProfile = generateSpouseProfile(character.seed);
+        const spouseProfile = generateSpouseProfile(character.seed, character.gender);
         const isFunded = (pendingMilestone.currentAmount || 0) >= (pendingMilestone.targetAmount || 1);
         if (isFunded) {
           const weddingModal = {
@@ -973,6 +979,29 @@ export function tickMonthlySimulation(state) {
         g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
       );
     });
+  }
+
+  // ─── 9d. Guaranteed Macro Market Crash Alert (Between Age 34 and 45) ──────
+  const crashProfile = getEquityCrashProfile(character.seed, character.age);
+  let hasTriggeredMacroCrash = simulation.hasTriggeredMacroCrash || false;
+  if (!hasTriggeredMacroCrash && nextMonthIndex === crashProfile.triggerMonthIndex) {
+    hasTriggeredMacroCrash = true;
+    const depthPct = Math.round(Math.abs(crashProfile.depthPercent) * 100);
+    const crashModal = {
+      type: 'market_crash',
+      crashAge: crashProfile.crashAge,
+      tier: crashProfile.tier,
+      depthPercent: crashProfile.depthPercent,
+      headline: `SENSEX PLUNGES ${depthPct}% AMID GLOBAL MACROECONOMIC CRISIS`,
+      contextText: `Equity Mutual Funds face severe drawdown across the next ${crashProfile.plungeMonths} months. Fixed Deposits and Liquid Savings remain completely unaffected (0% drop). Gold holds steady as a safe-haven asset.`,
+    };
+
+    isPaused = true;
+    if (!activeModal) {
+      activeModal = crashModal;
+    } else {
+      modalQueue.push(crashModal);
+    }
   }
 
   // ─── 10. Check Retirement ────────────────────────────────────────────────
@@ -1073,6 +1102,7 @@ export function tickMonthlySimulation(state) {
       activeModal: isRetirementReached ? null : activeModal,
       modalQueue: isRetirementReached ? [] : modalQueue,
       unemploymentReminder,
+      hasTriggeredMacroCrash,
       history: [...(simulation.history || []), newHistoryEntry],
       decisionJournal,
     },

@@ -19,6 +19,8 @@ import LaunchVentureModal from '../game/LaunchVentureModal.jsx';
 import WeddingModal from '../game/WeddingModal.jsx';
 import HomePurchaseModal from '../game/HomePurchaseModal.jsx';
 import EarlyHomeDecisionModal from '../game/EarlyHomeDecisionModal.jsx';
+import MarketCrashModal from '../game/MarketCrashModal.jsx';
+import GoalDetailsDrawer from '../game/GoalDetailsDrawer.jsx';
 import { getOutflowItemization } from '../../engine/lifeEventsEngine.js';
 import {
   pageTransition,
@@ -78,10 +80,14 @@ export default function MainGameScreen() {
     dropActiveCourse,
     launchVenture,
     scaleVenture,
+    transferLumpSumToGoal,
+    setGoalAllocation,
+    updateGoal,
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState('goals');
   const [goalFilter, setGoalFilter] = useState('all'); // 'all' | 'active' | 'completed'
+  const [selectedGoalForDrawer, setSelectedGoalForDrawer] = useState(null);
   const [isAdjustingAllocations, setIsAdjustingAllocations] = useState(false);
   const [isUpskillingModalOpen, setIsUpskillingModalOpen] = useState(false);
   const [isJobMarketModalOpen, setIsJobMarketModalOpen] = useState(false);
@@ -742,78 +748,66 @@ export default function MainGameScreen() {
                   );
                 }
 
-                // ─── STANDARD MILESTONE / RECURRING GOAL CARD ───
-
+                // ─── COLLAPSED GOAL CARD (DEFAULT VIEW) ───
                 return (
                   <div
                     key={goal.id}
-                    className="card-neopop-sm p-3 sm:p-4 space-y-2 sm:space-y-3 bg-white"
+                    onClick={() => {
+                      pause();
+                      setSelectedGoalForDrawer(goal);
+                    }}
+                    className="card-neopop-sm p-3 bg-white hover:bg-slate-50 border-2 border-slate-900 cursor-pointer transition-all space-y-2 group shadow-[2px_2px_0px_#0f172a]"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <div className="relative shrink-0">
-                          <ProgressRing percent={pct} size={38} stroke={3} color={ringColor} />
-                          <div className="absolute inset-0 flex items-center justify-center text-base sm:text-lg">
+                          <ProgressRing percent={pct} size={34} stroke={3} color={ringColor} />
+                          <div className="absolute inset-0 flex items-center justify-center text-sm">
                             {goal.icon}
                           </div>
                         </div>
                         <div className="min-w-0">
-                          <div className="font-display font-black text-xs sm:text-sm text-slate-900 truncate">{goal.name}</div>
-                          <div className="text-[10px] sm:text-[11px] font-mono font-bold text-slate-500 truncate">
-                            {inst.name} · {(inst.annualRate * 100).toFixed(0)}% p.a.
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-display font-black text-xs sm:text-sm text-slate-900 truncate">
+                              {goal.name}
+                            </span>
+                            <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 bg-slate-100 border border-slate-900 text-slate-700 uppercase">
+                              {goal.category}
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-500 truncate">
+                            {inst.name} · SIP: {formatINR(effectiveSIP)}/mo
                           </div>
                         </div>
                       </div>
 
-                      {/* Status Badges */}
-                      <div className="shrink-0">
-                        {goal.id === 'goal_emergency' && current >= target && (
-                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-emerald-100 border border-slate-900 text-emerald-900 flex items-center gap-1">
-                            <span>🟢</span> SHIELD INTACT (100%)
-                          </span>
-                        )}
-                        {goal.id === 'goal_emergency' && current < target && (
-                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-amber-100 border border-slate-900 text-amber-900 animate-pulse flex items-center gap-1">
-                            <span>🟠</span> REFILL IN PROGRESS
-                          </span>
-                        )}
-                        {goal.id !== 'goal_emergency' && (isCompleted || current >= target) && (
-                          <span className="text-[8px] sm:text-[9px] font-mono font-bold px-1.5 sm:px-2 py-0.5 bg-emerald-100 border border-slate-900 text-emerald-900">
-                            🏆 {isCompleted ? 'COMPLETED' : '100% FUNDED'}
-                          </span>
-                        )}
+                      {/* Right summary stats */}
+                      <div className="text-right shrink-0">
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 border border-slate-900 text-slate-800">
+                          {pct}% {goal.targetAge ? `· Age ${goal.targetAge}` : ''}
+                        </span>
+                        <div className="text-[11px] font-mono font-black text-slate-900 mt-0.5">
+                          {formatINR(current)} / {formatINR(target)}
+                        </div>
                       </div>
                     </div>
 
                     {/* Amount Progress Bar */}
-                    <div className="space-y-0.5 sm:space-y-1">
-                      <div className="flex justify-between text-[11px] sm:text-xs font-mono font-bold">
-                        <span className="text-emerald-700">{formatINR(current)}</span>
-                        <span className="text-slate-600">
-                          {goal.id === 'goal_emergency'
-                            ? `Target: ${formatINR(target)} (6× outflows)`
-                            : `${formatINR(target)} (${pct}%)`}
-                        </span>
-                      </div>
-                      <div className="w-full h-1.5 sm:h-2 bg-slate-100 border border-slate-900 overflow-hidden">
-                        <div
-                          className="h-full transition-all duration-300"
-                          style={{ width: `${pct}%`, backgroundColor: ringColor }}
-                        />
-                      </div>
+                    <div className="w-full h-1.5 bg-slate-100 border border-slate-900 overflow-hidden">
+                      <div
+                        className="h-full transition-all duration-300"
+                        style={{ width: `${pct}%`, backgroundColor: ringColor }}
+                      />
                     </div>
 
-                    {/* SIP Info */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-1 border-t border-slate-200 text-[10px] sm:text-xs font-mono gap-0.5 sm:gap-1">
-                      <div className="text-slate-600 truncate">
-                        SIP: <strong className="text-slate-900 font-bold">{formatINR(effectiveSIP)}</strong>
-                        {bonusSIP > 0 && (
-                          <span className="text-emerald-700 font-bold ml-1">(+{formatINR(bonusSIP)} ↪)</span>
-                        )}
-                      </div>
+                    {/* Bottom Tap Hint */}
+                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-0.5 border-t border-slate-100">
+                      <span className="text-blue-700 font-bold group-hover:underline">
+                        📈 View Analytics & Seed Cash ➔
+                      </span>
                       {goal.redirectGoalId && (
-                        <span className="text-[9px] sm:text-[10px] text-blue-700 font-bold truncate">
-                          {current >= target ? `↪ ${goals.find(x => x.id === goal.redirectGoalId)?.name || 'Next Goal'}` : '↪ Redirection set'}
+                        <span className="text-slate-400 truncate">
+                          {current >= target ? '↪ Waterfall active' : '↪ Cascade set'}
                         </span>
                       )}
                     </div>
@@ -1236,6 +1230,9 @@ export default function MainGameScreen() {
           onAdjustAllocations={() => setIsAdjustingAllocations(true)}
         />
       )}
+      {simulation.activeModal?.type === 'market_crash' && (
+        <MarketCrashModal data={simulation.activeModal} />
+      )}
 
       {/* ─── Upskilling & Job Market Hub Modals ─── */}
       {isUpskillingModalOpen && (
@@ -1258,6 +1255,20 @@ export default function MainGameScreen() {
             />
           </div>
         </div>
+      )}
+
+      {/* ─── Per-Goal Interactive Analytics & Lump-Sum Seeding Drawer ─── */}
+      {selectedGoalForDrawer && (
+        <GoalDetailsDrawer
+          goal={goals.find((g) => g.id === selectedGoalForDrawer.id) || selectedGoalForDrawer}
+          character={character}
+          simulation={simulation}
+          isOpen={!!selectedGoalForDrawer}
+          onClose={() => setSelectedGoalForDrawer(null)}
+          onTransferLumpSum={transferLumpSumToGoal}
+          onUpdateAllocation={setGoalAllocation}
+          onUpdateGoal={updateGoal}
+        />
       )}
 
     </motion.div>

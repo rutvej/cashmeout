@@ -13,6 +13,16 @@ const TIER_MULTIPLIERS = {
   tier3: { cost: 0.75, salary: 0.80 },
 };
 
+export const MALE_NAMES = [
+  'Aarav Sharma', 'Rohan Verma', 'Aditya Kulkarni', 'Vikram Joshi',
+  'Kabir Sengupta', 'Arjun Kapoor', 'Rishi Choudhury', 'Siddharth Pillai',
+];
+
+export const FEMALE_NAMES = [
+  'Ananya Iyer', 'Priya Nair', 'Sneha Patel', 'Divya Menon',
+  'Meera Rao', 'Tanvi Deshmukh', 'Isha Mehra', 'Pooja Reddy',
+];
+
 const NAMES = [
   'Aarav Sharma', 'Ananya Iyer', 'Rohan Verma', 'Priya Nair', 
   'Aditya Kulkarni', 'Sneha Patel', 'Vikram Joshi', 'Divya Menon',
@@ -78,6 +88,7 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
   // 1. Identity
   const nameIndex = Math.floor(rng() * NAMES.length);
   const name = NAMES[nameIndex];
+  const gender = (nameIndex % 2 === 0) ? 'male' : 'female';
   const age = 22 + Math.floor(rng() * 3); // 22, 23, or 24
   const retirementAge = 60;
 
@@ -182,6 +193,7 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
     id: `char_${seed}`,
     seed,
     name,
+    gender,
     age,
     retirementAge,
     city,

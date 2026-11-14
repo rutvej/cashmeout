@@ -73,6 +73,16 @@ export const SPOUSE_ARCHETYPES = {
   },
 };
 
+export const FEMALE_SPOUSE_NAMES = [
+  'Ananya Iyer', 'Priya Nair', 'Sneha Patel', 'Meera Rao',
+  'Divya Menon', 'Tanvi Deshmukh', 'Isha Mehra', 'Pooja Reddy',
+];
+
+export const MALE_SPOUSE_NAMES = [
+  'Rohan Verma', 'Aditya Kulkarni', 'Vikram Joshi', 'Kabir Sengupta',
+  'Arjun Kapoor', 'Siddharth Pillai', 'Rishi Choudhury', 'Aarav Sharma',
+];
+
 const SPOUSE_NAMES = [
   'Ananya Iyer', 'Priya Nair', 'Sneha Patel', 'Meera Rao',
   'Divya Menon', 'Tanvi Deshmukh', 'Isha Mehra', 'Pooja Reddy',
@@ -92,9 +102,12 @@ export function getInitialAssetMaintenanceState() {
 }
 
 /**
- * Deterministically rolls a spouse profile based on the character seed.
+ * Deterministically rolls a spouse profile based on the character seed and character gender.
+ * Guarantees complementary heterosexual matching:
+ * Male character -> Female spouse
+ * Female character -> Male spouse
  */
-export function generateSpouseProfile(seed) {
+export function generateSpouseProfile(seed, characterGender = 'male') {
   const rng = createPRNG(`${seed}_spouse_profile`);
   const roll = rng();
 
@@ -110,11 +123,15 @@ export function generateSpouseProfile(seed) {
   const professionIndex = Math.floor(rng() * archetypeConfig.professions.length);
   const profession = archetypeConfig.professions[professionIndex];
 
-  const nameIndex = Math.floor(rng() * SPOUSE_NAMES.length);
-  const name = SPOUSE_NAMES[nameIndex];
+  // Complementary Heterosexual Spouse Matching
+  const spouseGender = characterGender === 'male' ? 'female' : 'male';
+  const namePool = spouseGender === 'female' ? FEMALE_SPOUSE_NAMES : MALE_SPOUSE_NAMES;
+  const nameIndex = Math.floor(rng() * namePool.length);
+  const name = namePool[nameIndex];
 
   return {
     name,
+    gender: spouseGender,
     profession,
     archetype: archetypeConfig.name,
     archetypeId: archetypeConfig.id,

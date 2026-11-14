@@ -9,7 +9,7 @@ import {
 } from '../../utils/motion.js';
 
 export default function GoalSetupScreen() {
-  const { character, goals, updateGoal, navigateTo } = useGameStore();
+  const { character, goals, updateGoal, navigateTo, startInstantSimulation, pause } = useGameStore();
 
   if (!character || !goals.length) {
     return (
@@ -211,23 +211,56 @@ export default function GoalSetupScreen() {
           </div>
         </div>
 
-        {/* ─── Action Footer ─── */}
-        <div className="pt-1 sm:pt-2 flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-center">
-          <button
-            type="button"
-            onClick={() => navigateTo('spawn_reveal')}
-            className="w-full sm:w-auto px-5 py-3 sm:py-3.5 bg-white border-2 border-slate-900 text-slate-700 font-mono font-bold text-xs uppercase btn-press hover:bg-slate-50 transition-colors"
-          >
-            ← Back to Profile
-          </button>
-          <button
-            type="button"
-            onClick={() => navigateTo('financial_setup')}
-            className="w-full flex-1 py-3.5 sm:py-4 px-6 sm:px-8 bg-slate-900 text-white font-display font-black text-sm sm:text-base uppercase tracking-wider btn-press hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <span>Plan Monthly Allocations</span>
-            <span className="ml-2">➔</span>
-          </button>
+        {/* ─── Action Footer: Two-Way Onboarding Flow Choice ─── */}
+        <div className="pt-2 sm:pt-3 space-y-2.5 sm:space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+            {/* Option 1: Instant Start (Default to Bank Cash) */}
+            <button
+              type="button"
+              onClick={() => startInstantSimulation()}
+              className="p-3.5 sm:p-4 bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5">
+                  <span>⚡</span> START SIMULATION INSTANTLY
+                </span>
+                <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-emerald-100 font-body leading-snug">
+                100% of surplus ({formatINR(character.monthlySurplus)}/mo) flows to Bank Cash. Clock starts ticking now!
+              </p>
+            </button>
+
+            {/* Option 2: Pause & Plan Allocations First */}
+            <button
+              type="button"
+              onClick={() => {
+                pause();
+                navigateTo('financial_setup');
+              }}
+              className="p-3.5 sm:p-4 bg-white hover:bg-slate-50 text-slate-900 border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between gap-1 mb-1">
+                <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5 text-slate-900">
+                  <span>⏸️</span> PAUSE & PLAN ALLOCATIONS FIRST
+                </span>
+                <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-600 font-body leading-snug">
+                Configure ₹ Amount or % SIPs, pick investment vehicles, and setup insurance before unpausing.
+              </p>
+            </button>
+          </div>
+
+          <div className="flex justify-center pt-1">
+            <button
+              type="button"
+              onClick={() => navigateTo('spawn_reveal')}
+              className="px-4 py-2 bg-transparent text-slate-600 hover:text-slate-900 font-mono font-bold text-xs uppercase transition-colors"
+            >
+              ← Back to Profile
+            </button>
+          </div>
         </div>
 
       </motion.div>

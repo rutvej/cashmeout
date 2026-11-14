@@ -880,7 +880,7 @@ export const useGameStore = create((set, get) => ({
         intermediateChar = homeRes.character;
         finalGoals = homeRes.goals;
       } else if (goal.id === 'goal_marriage') {
-        const spouseProfile = generateSpouseProfile(character.seed);
+        const spouseProfile = generateSpouseProfile(character.seed, character.gender);
         nextModalToTrigger = {
           type: 'wedding',
           goal,
@@ -935,7 +935,7 @@ export const useGameStore = create((set, get) => ({
     const updatedJournal = [...(simulation.decisionJournal || []), milestoneDecision];
 
     if (goal.id === 'goal_marriage') {
-      const spouseProfile = generateSpouseProfile(character.seed);
+      const spouseProfile = generateSpouseProfile(character.seed, character.gender);
       set({
         simulation: {
           ...simulation,
@@ -1724,6 +1724,66 @@ export const useGameStore = create((set, get) => ({
     if (screen === 'main_game') {
       triggerAutoSave(get());
     }
+  },
+
+  // Instant simulation start: all goals initialized with ₹0 / 0% SIP, 100% surplus flows to bank cash, starts ticking
+  startInstantSimulation: () => {
+    const { goals, simulation } = get();
+    const initializedGoals = goals.map((g) => ({
+      ...g,
+      baseMonthlySIP: 0,
+      allocationPercent: 0,
+      effectiveMonthlySIP: 0,
+      totalPrincipalDeposited: g.totalPrincipalDeposited || g.currentAmount || 0,
+    }));
+
+    set({
+      goals: initializedGoals,
+      currentScreen: 'main_game',
+      simulation: {
+        ...simulation,
+        isPaused: false,
+      },
+    });
+    triggerAutoSave(get());
+  },
+
+  // Mid-Game Lump-Sum Seeding from Bank Cash
+  transferLumpSumToGoal: (goalId, transferAmount) => {
+    const { character, goals } = get();
+    const availableCash = Math.max(0, character.liquidCash || 0);
+    const goal = goals.find((g) => g.id === goalId);
+    if (!goal) return false;
+
+    const maxAllowed = goal.id === 'goal_retirement'
+      ? availableCash
+      : Math.min(availableCash, Math.max(0, (goal.targetAmount || 1) - (goal.currentAmount || 0)));
+
+    const sanitizedAmount = Math.max(0, Math.min(Math.round(transferAmount), maxAllowed));
+    if (sanitizedAmount <= 0) return false;
+
+    const updatedCharacter = {
+      ...character,
+      liquidCash: availableCash - sanitizedAmount,
+    };
+
+    const updatedGoals = goals.map((g) => {
+      if (g.id !== goalId) return g;
+      const newCurrent = (g.currentAmount || 0) + sanitizedAmount;
+      return {
+        ...g,
+        currentAmount: newCurrent,
+        initialLumpSumSeed: (g.initialLumpSumSeed || 0) + sanitizedAmount,
+        totalPrincipalDeposited: (g.totalPrincipalDeposited || (g.currentAmount || 0)) + sanitizedAmount,
+      };
+    });
+
+    set({
+      character: updatedCharacter,
+      goals: updatedGoals,
+    });
+    triggerAutoSave(get());
+    return true;
   },
 
   // Phase 11: Convenience aliases & persistence actions

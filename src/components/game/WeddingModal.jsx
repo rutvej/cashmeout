@@ -83,7 +83,9 @@ export default function WeddingModal({ data, goal }) {
             <div className="flex items-center gap-2.5">
               <span className="text-2xl">💐</span>
               <div>
-                <span className="text-[9px] font-mono font-bold text-slate-500 uppercase block">Life Partner</span>
+                <span className="text-[9px] font-mono font-bold text-slate-500 uppercase block">
+                  {spouseProfile.gender === 'female' ? 'Meet Your Wife' : spouseProfile.gender === 'male' ? 'Meet Your Husband' : 'Life Partner'}
+                </span>
                 <h3 className="font-display font-black text-base sm:text-lg text-slate-900">{spouseProfile.name}</h3>
               </div>
             </div>

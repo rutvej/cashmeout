@@ -159,8 +159,8 @@ SEEDS.forEach((seed) => {
   for (let m = 1; m <= 420; m++) { // 35 years = 420 months
     const rate = getMonthlyInstrumentReturnRate('equity', m, seed);
 
-    // Verify rate is strictly bounded between -0.015 (-1.5%) and +0.025 (+2.5%)
-    if (rate < -0.015001 || rate > 0.025001) {
+    // Verify rate is within realistic bounds (including macro crash plunge and recovery)
+    if (rate < -0.25 || rate > 0.10) {
       throw new Error(`Equity rate out of strict bounds at month ${m}: ${rate}`);
     }
 

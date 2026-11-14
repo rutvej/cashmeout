@@ -257,14 +257,63 @@ export function isMarketInCorrection(monthIndex, seed = 'default') {
 }
 
 /**
- * Calculates monthly return rate for an instrument taking into account PRNG seed and month.
- * - savings: 0.04 / 12 (flat, 0 volatility, 100% liquid safe)
- * - fd: 0.07 / 12 (flat guaranteed return)
- * - gold: (0.085 / 12) + noise where noise is bounded within +- 0.008
- * - equity: Models gentle 6-year macro cycle + bounded monthly noise around 12% p.a. mean,
- *   strictly bounded between -0.015 (-1.5%) and +0.025 (+2.5%), preserving ~12% p.a. CAGR.
+ * Computes deterministic crash parameters for a character lifetime.
+ * Every 37-year run is guaranteed to experience a severe macro market crash between ages 34 and 45.
  */
-export function getMonthlyInstrumentReturnRate(instrumentId, monthIndex = 0, seed = 'default') {
+export function getEquityCrashProfile(seed = 'default', startingAge = 23) {
+  const rng = createPRNG(`${seed}_macro_crash`);
+  
+  // Crash trigger between age 34 and 45
+  const crashAge = 34 + Math.floor(rng() * 12);
+  const crashMonthOfYear = Math.floor(rng() * 12);
+  const triggerMonthIndex = (crashAge - startingAge) * 12 + crashMonthOfYear;
+  
+  // Crash severity tier roll
+  const tierRoll = rng();
+  let tier, depthPercent, plungeMonths, recoveryMonths;
+  
+  if (tierRoll < 0.35) {
+    tier = 1; // Mild Bear Market (-28% to -34%)
+    depthPercent = -(0.28 + rng() * 0.06);
+    plungeMonths = 3 + Math.floor(rng() * 2);
+    recoveryMonths = 18 + Math.floor(rng() * 6);
+  } else if (tierRoll < 0.80) {
+    tier = 2; // Severe Crisis (-35% to -44%)
+    depthPercent = -(0.35 + rng() * 0.09);
+    plungeMonths = 3 + Math.floor(rng() * 3);
+    recoveryMonths = 22 + Math.floor(rng() * 6);
+  } else {
+    tier = 3; // Catastrophic Meltdown (-48% to -55%)
+    depthPercent = -(0.48 + rng() * 0.07);
+    plungeMonths = 4 + Math.floor(rng() * 2);
+    recoveryMonths = 26 + Math.floor(rng() * 5);
+  }
+
+  const consolidationMonths = 6;
+  const totalCrashDuration = plungeMonths + consolidationMonths + recoveryMonths;
+
+  return {
+    crashAge,
+    triggerMonthIndex,
+    tier,
+    depthPercent,
+    plungeMonths,
+    consolidationMonths,
+    recoveryMonths,
+    totalCrashDuration,
+  };
+}
+
+/**
+ * Calculates monthly return rate for an instrument taking into account PRNG seed,
+ * monthly volatility, and guaranteed macro crashes.
+ * - savings: 0.04 / 12 (flat, 0 volatility, 100% liquid safe)
+ * - fd: 0.07 / 12 (flat guaranteed return, 0 volatility)
+ * - gold: (0.085 / 12) + noise, bounded within [-1.0%, +2.0%]
+ * - equity: Realistic monthly volatility bounded within [-3.5%, +4.5%],
+ *   plus a guaranteed macro market crash between ages 34 and 45 (-28% to -55% drop).
+ */
+export function getMonthlyInstrumentReturnRate(instrumentId, monthIndex = 0, seed = 'default', startingAge = 23) {
   const m = Number(monthIndex) || 0;
 
   if (instrumentId === 'savings') {
@@ -278,13 +327,45 @@ export function getMonthlyInstrumentReturnRate(instrumentId, monthIndex = 0, see
   if (instrumentId === 'gold') {
     const rng = createPRNG(`${seed}_gold_${m}`);
     const noise = (rng() * 2 - 1) * 0.008;
-    return (0.085 / 12) + noise;
+    const rate = (0.085 / 12) + noise;
+    return Math.max(-0.010, Math.min(0.020, rate));
   }
 
   if (instrumentId === 'equity') {
-    const M_t = getEquityMarketMultiplier(m, seed);
-    const rawRate = (0.12 / 12) * M_t;
-    return Math.max(-0.015, Math.min(0.025, rawRate));
+    const crash = getEquityCrashProfile(seed, startingAge);
+    const startM = crash.triggerMonthIndex;
+    const plungeEnd = startM + crash.plungeMonths;
+    const consolEnd = plungeEnd + crash.consolidationMonths;
+    const recoveryEnd = consolEnd + crash.recoveryMonths;
+
+    // Phase 1: Plunge Phase
+    if (m >= startM && m < plungeEnd) {
+      const perMonthDrop = Math.pow(1 + crash.depthPercent, 1 / crash.plungeMonths) - 1;
+      const rng = createPRNG(`${seed}_crash_noise_${m}`);
+      const microNoise = (rng() * 2 - 1) * 0.01;
+      return perMonthDrop + microNoise;
+    }
+
+    // Phase 2: Consolidation Phase (Bottom Bumping)
+    if (m >= plungeEnd && m < consolEnd) {
+      const rng = createPRNG(`${seed}_consol_noise_${m}`);
+      return (rng() * 2 - 1) * 0.01;
+    }
+
+    // Phase 3: Recovery Phase (Bull Rebound)
+    if (m >= consolEnd && m < recoveryEnd) {
+      const recoveryTotal = Math.abs(crash.depthPercent) / (1 + crash.depthPercent);
+      const perMonthGain = Math.pow(1 + recoveryTotal, 1 / crash.recoveryMonths) - 1;
+      const rng = createPRNG(`${seed}_rec_noise_${m}`);
+      return perMonthGain + (rng() * 2 - 1) * 0.005;
+    }
+
+    // Normal Market Environment: Cyclical Macro Sine + Monthly Volatility Bounded [-3.5%, +4.5%]
+    const rng = createPRNG(`${seed}_equity_${m}`);
+    const noise = (rng() * 2 - 1) * 0.025;
+    const cycle = 0.008 * Math.sin((2 * Math.PI * m) / 72);
+    const baseRate = (0.12 / 12) + cycle + noise;
+    return Math.max(-0.035, Math.min(0.045, baseRate));
   }
 
   // Fallback to INSTRUMENTS registry or savings
