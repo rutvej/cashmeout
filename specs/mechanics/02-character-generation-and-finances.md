@@ -3,6 +3,8 @@
 ## 1. Overview & Objective
 This mechanism provides the pure, deterministic algorithm that transforms user selections `(seed, cityTier, careerField)` into a complete `CharacterState` object. It governs all starting financial variables: in-hand salary, line-item living expenses, initial debts/loans, initial cash buffer, and net surplus.
 
+It also introduces an explicit, deterministic **character gender assignment** (`gender: 'male' | 'female'`) to ensure downstream heterosexual spouse pairing at the wedding milestone.
+
 No UI or React code is included here. This is pure business logic and mathematical rules.
 
 ---
@@ -31,6 +33,7 @@ export interface CharacterState {
   id: string;                    // Unique identifier / seed hash
   seed: string;                  // Reproducible PRNG seed
   name: string;                  // Character's full name
+  gender: 'male' | 'female';     // Explicit gender for narrative & heterosexual marriage pairing
   age: number;                   // Starting age (22, 23, or 24)
   retirementAge: number;         // Fixed retirement age (default: 60)
   city: string;                  // City name (e.g. "Bengaluru", "Pune", "Indore")
@@ -65,14 +68,38 @@ export interface CharacterState {
 
 ## 3. Mathematical Models & Calibration (in ₹ INR)
 
-### A. City Tier Configuration
+### A. Name Pools & Deterministic Gender Assignment
+Characters are assigned names deterministically from balanced pools. The assigned `gender` is strictly bound to the selected name:
+
+| Pool | Names | Deterministic Gender |
+| :--- | :--- | :--- |
+| **Male Names** | `Aarav Sharma`, `Rohan Verma`, `Aditya Kulkarni`, `Vikram Joshi`, `Kabir Sengupta`, `Arjun Kapoor`, `Rishi Choudhury`, `Siddharth Pillai` | `'male'` |
+| **Female Names** | `Ananya Iyer`, `Priya Nair`, `Sneha Patel`, `Divya Menon`, `Meera Rao`, `Tanvi Deshmukh`, `Isha Mehra`, `Pooja Reddy` | `'female'` |
+
+```javascript
+// Deterministic Name & Gender Generation
+const isMaleRoll = prng(seed + '_gender') < 0.50;
+const pool = isMaleRoll ? MALE_NAMES : FEMALE_NAMES;
+const nameIndex = Math.floor(prng(seed + '_name') * pool.length);
+const name = pool[nameIndex];
+const gender = isMaleRoll ? 'male' : 'female';
+```
+
+#### Heterosexual Downstream Marriage Rule:
+The character's `gender` is passed to `generateSpouseProfile(seed, character.gender)` at the marriage milestone:
+- **Male Character** $\implies$ Spouse is strictly assigned a **Female** name and profile.
+- **Female Character** $\implies$ Spouse is strictly assigned a **Male** name and profile.
+
+---
+
+### B. City Tier Configuration
 | Tier | Cities Pool | Cost of Living Multiplier | Starting Salary Multiplier |
 | :--- | :--- | :--- | :--- |
 | **Tier 1 (Metro)** | Bengaluru, Mumbai, Delhi NCR, Hyderabad | 1.25x | 1.30x |
 | **Tier 2 (Growth)** | Pune, Ahmedabad, Chandigarh, Chennai, Kochi | 1.00x | 1.00x |
 | **Tier 3 (Town)** | Indore, Coimbatore, Jaipur, Nagpur, Bhubaneswar | 0.75x | 0.80x |
 
-### B. Career Field Starting Gross Salaries (Tier 2 Base)
+### C. Career Field Starting Gross Salaries (Tier 2 Base)
 - **Science / Tech:** Base range ₹50,000 – ₹70,000 / month.
   - Job Titles: *"Junior Software Engineer"*, *"Data Analyst"*, *"Cloud Systems Associate"*, *"Biotech Research Associate"*
 - **Commerce / Finance:** Base range ₹42,000 – ₹60,000 / month.
@@ -80,7 +107,7 @@ export interface CharacterState {
 - **Arts / Creative:** Base range ₹38,000 – ₹55,000 / month.
   - Job Titles: *"UI/UX Designer"*, *"Brand Strategist"*, *"Digital Media Associate"*, *"Junior Architect"*
 
-### C. Tax & Deductions Formula (Progressive Marginal Tax with Section 87A Rebate)
+### D. Tax & Deductions Formula (Progressive Marginal Tax with Section 87A Rebate)
 The game uses a progressive marginal tax calculation with Section 87A rebate and statutory Employee Provident Fund (EPF), completely eliminating tax cliffs:
 - **Employee Provident Fund (EPF):** Flat 5% across all earnings tiers:
   $$\text{monthlyPF} = \text{round}(\text{grossMonthlySalary} \times 0.05)$$
@@ -92,7 +119,7 @@ The game uses a progressive marginal tax calculation with Section 87A rebate and
   $$\text{taxAndPFDeductions} = \text{monthlyPF} + \text{monthlyTax}$$
   $$\text{monthlyTakeHome} = \text{grossMonthlySalary} - \text{taxAndPFDeductions}$$
 
-### D. Living Expenses Model
+### E. Living Expenses Model
 Living expenses are calibrated as percentages of `monthlyTakeHome` to guarantee realistic budgets:
 1. **Rent:** 22% – 28% of take-home (scaled by city cost multiplier).
 2. **Utilities:** Flat ₹3,000 – ₹5,000 / month.
@@ -100,7 +127,7 @@ Living expenses are calibrated as percentages of `monthlyTakeHome` to guarantee 
 4. **Lifestyle & Discretionary:** 8% – 12% of take-home.
 5. **Dependant Support:** 30% deterministic probability. If true: ₹6,000 / month; otherwise ₹0.
 
-### E. Starting Loans (Education Debt)
+### F. Starting Loans (Education Debt)
 - **Probability:** 45% chance character has an education loan.
 - **Principal:** ₹2,50,000 to ₹5,00,000.
 - **Interest Rate:** 8.5% per annum ($r = 0.085 / 12$ monthly rate).
@@ -108,13 +135,13 @@ Living expenses are calibrated as percentages of `monthlyTakeHome` to guarantee 
 - **Standard EMI Formula:**
   $$\text{EMI} = P \times r \times \frac{(1 + r)^n}{(1 + r)^n - 1}$$
 
-### F. The Golden Invariant: Guaranteed Starting Surplus
+### G. The Golden Invariant: Guaranteed Starting Surplus
 A game must never spawn an unwinnable, negative cashflow state on turn 1.
 $$\text{monthlySurplus} = \text{monthlyTakeHome} - (\text{totalFixedExpenses} + \text{totalLoanEMIs})$$
 **Rule:** $\text{monthlySurplus}$ **MUST be $\ge$ ₹10,000**.
 If expenses + EMIs exceed `monthlyTakeHome - 10000`, the algorithm scales down lifestyle and rent expenses until `monthlySurplus >= 10000`.
 
-### G. Initial Liquid Cash Buffer
+### H. Initial Liquid Cash Buffer
 Character spawns with an initial liquid bank balance:
 $$\text{liquidCash} = \text{round}(\text{totalMonthlyOutflow} \times \text{random}(1.2, 2.0))$$
 (Equivalent to 1.2 to 2 months of emergency expenses).
@@ -124,8 +151,11 @@ $$\text{liquidCash} = \text{round}(\text{totalMonthlyOutflow} \times \text{rando
 ## 4. Pure Function Interface
 
 ```javascript
+import { createPRNG } from './prng.js';
+
 /**
- * Generates the full initial character state deterministically from PRNG seed.
+ * Generates the full initial character state deterministically from PRNG seed,
+ * including explicit gender assignment.
  * 
  * @param {string} seed - PRNG seed string
  * @param {'tier1'|'tier2'|'tier3'} cityTier
@@ -133,14 +163,48 @@ $$\text{liquidCash} = \text{round}(\text{totalMonthlyOutflow} \times \text{rando
  * @returns {CharacterState}
  */
 export function generateCharacter(seed, cityTier, careerField) {
-  // Deterministic PRNG implementation
-  // Returns immutable CharacterState object
+  const rng = createPRNG(seed);
+
+  // Deterministic Name and Gender Selection
+  const isMale = rng() < 0.50;
+  const pool = isMale ? MALE_NAMES : FEMALE_NAMES;
+  const nameIndex = Math.floor(rng() * pool.length);
+  const name = pool[nameIndex];
+  const gender = isMale ? 'male' : 'female';
+
+  // Deterministic City, Career, Gross Salary, Taxes, Expenses, Loans...
+  // (Full calculation preserving monthlySurplus >= 10000)
+
+  return {
+    id: `char_${seed}`,
+    seed,
+    name,
+    gender,
+    age: 23,
+    retirementAge: 60,
+    city,
+    cityTier,
+    careerField,
+    jobTitle,
+    grossMonthlySalary,
+    taxAndPFDeductions,
+    monthlyTakeHome,
+    expenses,
+    loans,
+    liquidCash,
+    totalFixedExpenses,
+    totalLoanEMIs,
+    totalMonthlyOutflow,
+    monthlySurplus,
+    primaryDream,
+  };
 }
 ```
 
 ---
 
 ## 5. Verification & Unit Test Criteria
-1. **Determinism:** Calling `generateCharacter("491823", "tier1", "science")` 100 times in a row returns identical numbers down to the exact rupee.
-2. **Surplus Invariant:** For 500 random seeds across all tiers and fields, `monthlySurplus` is **always $\ge$ 10,000**.
-3. **Math Consistency:** `monthlyTakeHome - totalMonthlyOutflow === monthlySurplus` with 0 rounding errors.
+1. **Determinism:** Calling `generateCharacter("491823", "tier1", "science")` 100 times in a row returns identical numbers, name, and gender down to the exact rupee and string.
+2. **Gender Integrity:** Male names always produce `gender === 'male'`; female names always produce `gender === 'female'`.
+3. **Surplus Invariant:** For 500 random seeds across all tiers and fields, `monthlySurplus` is **always $\ge$ 10,000**.
+4. **Math Consistency:** `monthlyTakeHome - totalMonthlyOutflow === monthlySurplus` with 0 rounding errors.
