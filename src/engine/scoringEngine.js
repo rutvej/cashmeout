@@ -93,6 +93,7 @@ export function evaluateInstrumentSuitability(goal) {
   // Long-term goals (retirement or 10+ year milestones)
   const isLongTerm =
     goal.id === 'goal_retirement' ||
+    goal.id === 'goal_child' ||
     goal.id === 'goal_child_edu' ||
     (goal.targetMonthsRemaining && goal.targetMonthsRemaining >= 120);
 
@@ -184,7 +185,13 @@ export function evaluateScorecard(state = {}) {
   }
 
   // ─── Quantitative Pillar 2: Milestone Completion (Max 25 pts) ────────────
-  const nonRetirementGoals = goals.filter((g) => g.id !== 'goal_retirement');
+  const nonRetirementGoals = goals.filter(
+    (g) =>
+      g.id !== 'goal_retirement' &&
+      g.id !== 'goal_emergency' &&
+      g.id !== 'goal_vacation' &&
+      g.kind !== 'recurring'
+  );
   const completedGoals = nonRetirementGoals.filter(
     (g) =>
       (g.currentAmount || 0) >= (g.targetAmount || 1) ||
@@ -324,6 +331,7 @@ export function evaluateScorecard(state = {}) {
   const longTermGoals = goals.filter(
     (g) =>
       g.id === 'goal_retirement' ||
+      g.id === 'goal_child' ||
       g.id === 'goal_child_edu' ||
       (g.targetMonthsRemaining && g.targetMonthsRemaining >= 60)
   );
@@ -406,11 +414,21 @@ export function evaluateScorecard(state = {}) {
     decisionJournal.filter((d) => d.type === 'course_completed').length;
   const totalJobSwitches = decisionJournal.filter((d) => d.type === 'job_switch').length;
 
-  const careerStagnationDetected = yearsInTier1 >= 6 && completedCoursesCount === 0;
+  let yearsInJuniorTiers = 0;
+  if (history.length >= 12) {
+    const juniorMonths = history.filter((h) => (h.jobTier || 1) <= 2).length;
+    yearsInJuniorTiers = Math.round(juniorMonths / 12);
+  } else {
+    yearsInJuniorTiers = (character.jobTier || 1) <= 2 ? Math.max(0, (character.age || 60) - 23) : 2;
+  }
+
+  const careerStagnationDetected =
+    (yearsInTier1 >= 6 || (yearsInJuniorTiers >= 10 && (character.jobTier || 1) <= 2)) &&
+    completedCoursesCount === 0;
 
   let estimatedMissedEarnings = 0;
   if (careerStagnationDetected) {
-    const stagnantMonths = Math.max(1, (yearsInTier1 - 3)) * 12;
+    const stagnantMonths = Math.max(1, (yearsInTier1 >= 6 ? yearsInTier1 - 3 : yearsInJuniorTiers - 4)) * 12;
     estimatedMissedEarnings = stagnantMonths * 35000;
   }
 

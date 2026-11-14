@@ -375,6 +375,18 @@ export default function MainGameScreen() {
             <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Active SIPs:</span>
             <span className="text-blue-700 font-black truncate">{formatINR(totalSIPs)}/mo</span>
           </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
+            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">Surplus:</span>
+            <span className={`font-black truncate ${character.monthlySurplus >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+              {formatINR(character.monthlySurplus)}/mo
+            </span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-1.5 min-w-0">
+            <span className="text-slate-500 uppercase text-[9px] sm:text-[10px]">To Bank:</span>
+            <span className="text-slate-900 font-black truncate">
+              +{formatINR(Math.max(0, (character.monthlySurplus || 0) - totalSIPs))}/mo
+            </span>
+          </div>
         </div>
 
         {/* ─── Phase 5: Expandable Outflow Ledger Drawer ─── */}

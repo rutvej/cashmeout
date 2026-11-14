@@ -69,13 +69,16 @@ export const serializeGameState = (state) => {
   };
 };
 
+let saveQueue = Promise.resolve();
 const triggerAutoSave = (state) => {
   if (!state || !state.character) return;
   const payload = serializeGameState(state);
   if (payload) {
-    saveActiveGameSession(payload).catch((err) => {
-      console.warn('Auto-save error:', err);
-    });
+    saveQueue = saveQueue
+      .then(() => saveActiveGameSession(payload))
+      .catch((err) => {
+        console.warn('Auto-save error:', err);
+      });
   }
 };
 
@@ -1644,27 +1647,45 @@ export const useGameStore = create((set, get) => ({
   },
 
   prepayLoan: (loanId, amount) => {
-    const { character } = get();
+    const { character, insurance } = get();
     const payAmount = Math.min(amount, character.liquidCash);
     if (payAmount <= 0) return;
 
-    const updatedLoans = character.loans.map((l) => {
+    const updatedLoans = (character.loans || []).map((l) => {
       if (l.id === loanId) {
         const nextPrincipal = Math.max(0, l.principalRemaining - payAmount);
+        const nextTenure = nextPrincipal === 0 ? 0 : l.tenureMonthsRemaining;
+        const nextEMI = nextPrincipal === 0 ? 0 : calculateMortgageEMI(nextPrincipal, l.interestRateAnnual, nextTenure);
         return {
           ...l,
           principalRemaining: nextPrincipal,
-          tenureMonthsRemaining: nextPrincipal === 0 ? 0 : l.tenureMonthsRemaining,
+          tenureMonthsRemaining: nextTenure,
+          emi: nextEMI,
         };
       }
       return l;
     }).filter((l) => l.principalRemaining > 0);
+
+    const nextTotalLoanEMIs = updatedLoans.reduce((sum, l) => sum + l.emi, 0);
+    const healthPremium = insurance?.health?.isPurchased ? insurance.health.monthlyPremium : 0;
+    const termPremium = insurance?.termLife?.isPurchased ? insurance.termLife.monthlyPremium : 0;
+    const totalInsurance = healthPremium + termPremium;
+    const courseFee = character.activeCourse ? character.activeCourse.monthlyFee : 0;
+    const nextTotalOutflow = character.totalFixedExpenses + nextTotalLoanEMIs + totalInsurance + courseFee;
+    const totalInflow =
+      (character.employmentStatus === 'unemployed' ? 0 : (character.salaryTakeHome || character.monthlyTakeHome || 0)) +
+      (character.spouseTakeHome || 0) +
+      (character.ventureIncome || 0);
+    const nextSurplus = Math.max(0, totalInflow - nextTotalOutflow);
 
     set((state) => ({
       character: {
         ...state.character,
         liquidCash: state.character.liquidCash - payAmount,
         loans: updatedLoans,
+        totalLoanEMIs: nextTotalLoanEMIs,
+        totalMonthlyOutflow: nextTotalOutflow,
+        monthlySurplus: nextSurplus,
       },
     }));
     triggerAutoSave(get());

@@ -181,7 +181,7 @@ const CITIES_BY_TIER = {
 const CITY_TIER_SALARY_MULT = {
   tier1: 1.30,
   tier2: 1.00,
-  tier3: 0.85,
+  tier3: 0.80,
 };
 
 /**

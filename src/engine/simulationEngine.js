@@ -285,6 +285,18 @@ export function tickMonthlySimulation(state) {
     const inflationRng = createPRNG(`${character.seed}_inflation_${nextMonthIndex}`);
     const inflationRate = 0.05 + inflationRng() * 0.02; // 5–7%
     fixedExpenses = Math.round((character.totalFixedExpenses * (1 + inflationRate)) / 500) * 500;
+    if (character.expenses) {
+      const expFactor = 1 + inflationRate;
+      character.expenses = {
+        rent: Math.round((character.expenses.rent * expFactor) / 100) * 100,
+        utilities: Math.round((character.expenses.utilities * expFactor) / 100) * 100,
+        groceries: Math.round((character.expenses.groceries * expFactor) / 100) * 100,
+        lifestyle: Math.round((character.expenses.lifestyle * expFactor) / 100) * 100,
+        dependantSupport: character.expenses.dependantSupport > 0
+          ? Math.round((character.expenses.dependantSupport * expFactor) / 100) * 100
+          : 0,
+      };
+    }
 
     // C. Annual Vacation Cycle
     const vacIndex = updatedGoals.findIndex((g) => g.id === 'goal_vacation');
@@ -452,74 +464,9 @@ export function tickMonthlySimulation(state) {
     }
   }
 
-  // ─── 5. Milestone Checks by Age (Ensure NO milestones like Marriage are skipped) ──
-  const reachedMilestones = updatedGoals.filter(
-    (g) => g.kind === 'milestone' && !g.milestoneTriggered && currentAge >= g.targetAge
-  );
-  if (reachedMilestones.length > 0) {
-    reachedMilestones.forEach((pendingMilestone) => {
-      isPaused = true;
-      if (pendingMilestone.id === 'goal_marriage') {
-        const spouseProfile = generateSpouseProfile(character.seed);
-        const isFunded = (pendingMilestone.currentAmount || 0) >= (pendingMilestone.targetAmount || 1);
-        if (isFunded) {
-          const weddingModal = {
-            type: 'wedding',
-            goal: pendingMilestone,
-            spouseProfile,
-          };
-          if (!activeModal) {
-            activeModal = weddingModal;
-          } else {
-            modalQueue.push(weddingModal);
-          }
-        } else {
-          const milestoneModal = {
-            type: 'milestone',
-            goal: pendingMilestone,
-            spouseProfile,
-          };
-          if (!activeModal) {
-            activeModal = milestoneModal;
-          } else {
-            modalQueue.push(milestoneModal);
-          }
-        }
-      } else if (pendingMilestone.id === 'goal_home') {
-        const isOwned = !!(character.assetMaintenanceState?.hasOwnedHome);
-        if (isOwned) {
-          // Already bought early
-          updatedGoals = updatedGoals.map((g) =>
-            g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true, status: 'completed' } : g
-          );
-          return;
-        }
-        const homeModal = {
-          type: 'home_purchase',
-          goal: pendingMilestone,
-          character,
-        };
-        if (!activeModal) {
-          activeModal = homeModal;
-        } else {
-          modalQueue.push(homeModal);
-        }
-      } else {
-        const milestoneModal = {
-          type: 'milestone',
-          goal: pendingMilestone,
-        };
-        if (!activeModal) {
-          activeModal = milestoneModal;
-        } else {
-          modalQueue.push(milestoneModal);
-        }
-      }
-      updatedGoals = updatedGoals.map((g) =>
-        g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
-      );
-    });
-  }
+  // ─── 5. Milestone Checks by Age (Deferred to Step 9b to allow Month's SIP & Compounding to credit first) ──
+  // (Moved after Loan Servicing & Compounding per specs/mechanics/05-simulation-loop-and-calendar.md)
+
 
   // ─── 6. Cash Inflows, Monthly Surplus & Deficit Resolution ────────────────
   // Process cash flows from active launched ventures
@@ -953,6 +900,81 @@ export function tickMonthlySimulation(state) {
     }
   });
 
+  // ─── 9c. Milestone Checks by Age (Per specs/mechanics/05-simulation-loop-and-calendar.md) ──
+  // Evaluated after this month's SIP credit and compounding so target balances include Month t contributions.
+  const reachedMilestones = updatedGoals.filter(
+    (g) => g.kind === 'milestone' && !g.milestoneTriggered && currentAge >= g.targetAge
+  );
+  if (reachedMilestones.length > 0) {
+    reachedMilestones.forEach((pendingMilestone) => {
+      isPaused = true;
+      if (pendingMilestone.id === 'goal_marriage') {
+        const spouseProfile = generateSpouseProfile(character.seed);
+        const isFunded = (pendingMilestone.currentAmount || 0) >= (pendingMilestone.targetAmount || 1);
+        if (isFunded) {
+          const weddingModal = {
+            type: 'wedding',
+            goal: pendingMilestone,
+            spouseProfile,
+          };
+          if (!activeModal) {
+            activeModal = weddingModal;
+          } else {
+            modalQueue.push(weddingModal);
+          }
+        } else {
+          const milestoneModal = {
+            type: 'milestone',
+            goal: pendingMilestone,
+            spouseProfile,
+          };
+          if (!activeModal) {
+            activeModal = milestoneModal;
+          } else {
+            modalQueue.push(milestoneModal);
+          }
+        }
+      } else if (pendingMilestone.id === 'goal_home') {
+        const isOwned = !!(character.assetMaintenanceState?.hasOwnedHome);
+        if (isOwned) {
+          // Already bought early
+          updatedGoals = updatedGoals.map((g) =>
+            g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true, status: 'completed' } : g
+          );
+          return;
+        }
+        const homeModal = {
+          type: 'home_purchase',
+          goal: pendingMilestone,
+          character: {
+            ...character,
+            loans: updatedLoans,
+            totalLoanEMIs: nextTotalLoanEMIs,
+            liquidCash,
+          },
+        };
+        if (!activeModal) {
+          activeModal = homeModal;
+        } else {
+          modalQueue.push(homeModal);
+        }
+      } else {
+        const milestoneModal = {
+          type: 'milestone',
+          goal: pendingMilestone,
+        };
+        if (!activeModal) {
+          activeModal = milestoneModal;
+        } else {
+          modalQueue.push(milestoneModal);
+        }
+      }
+      updatedGoals = updatedGoals.map((g) =>
+        g.id === pendingMilestone.id ? { ...g, milestoneTriggered: true } : g
+      );
+    });
+  }
+
   // ─── 10. Check Retirement ────────────────────────────────────────────────
   if (isRetirementReached) {
     isPaused = true;
@@ -1003,7 +1025,7 @@ export function tickMonthlySimulation(state) {
 
   const effectiveTakeHome = (employmentStatus === 'unemployed' ? 0 : baseTakeHome) + totalVentureInflow;
   const householdTakeHome = (employmentStatus === 'unemployed' ? 0 : baseTakeHome) + spouseTakeHome + totalVentureInflow;
-  const effectiveSurplus = householdTakeHome - finalTotalOutflow;
+  const effectiveSurplus = Math.max(0, householdTakeHome - finalTotalOutflow);
 
   const updatedCharacter = {
     ...character,

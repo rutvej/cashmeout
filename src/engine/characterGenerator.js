@@ -10,7 +10,7 @@ const CITIES = {
 const TIER_MULTIPLIERS = {
   tier1: { cost: 1.25, salary: 1.30 },
   tier2: { cost: 1.00, salary: 1.00 },
-  tier3: { cost: 0.75, salary: 0.85 },
+  tier3: { cost: 0.75, salary: 0.80 },
 };
 
 const NAMES = [
@@ -28,8 +28,8 @@ const CAREER_DATA = {
       'Cloud Systems Associate',
       'Biotech Research Associate',
     ],
-    baseGrossMin: 52000,
-    baseGrossMax: 72000,
+    baseGrossMin: 50000,
+    baseGrossMax: 70000,
   },
   commerce: {
     titles: [
@@ -38,8 +38,8 @@ const CAREER_DATA = {
       'Tax Associate',
       'Risk Operations Analyst',
     ],
-    baseGrossMin: 44000,
-    baseGrossMax: 62000,
+    baseGrossMin: 42000,
+    baseGrossMax: 60000,
   },
   arts: {
     titles: [
@@ -48,8 +48,8 @@ const CAREER_DATA = {
       'Digital Media Associate',
       'Junior Architect',
     ],
-    baseGrossMin: 40000,
-    baseGrossMax: 56000,
+    baseGrossMin: 38000,
+    baseGrossMax: 55000,
   },
 };
 
@@ -100,13 +100,13 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
   const taxAndPFDeductions = monthlyPF + monthlyTax;
   const monthlyTakeHome = grossMonthlySalary - taxAndPFDeductions;
 
-  // 3. Loans (40% chance, scaled to salary so EMI never exceeds 18% of take-home)
-  const hasEducationLoan = rng() < 0.40;
+  // 3. Loans (45% chance, scaled to salary so EMI never exceeds 18% of take-home)
+  const hasEducationLoan = rng() < 0.45;
   const loans = [];
   if (hasEducationLoan) {
-    // Principal between 2L and 4.5L, capped by take-home capacity
+    // Principal between 2.5L and 5.0L, capped by take-home capacity
     const maxAffordablePrincipal = Math.floor((monthlyTakeHome * 0.18 * 45) / 10000) * 10000;
-    const rawPrincipal = Math.min(maxAffordablePrincipal, 200000 + rng() * 250000);
+    const rawPrincipal = Math.min(maxAffordablePrincipal, 250000 + rng() * 250000);
     const principalRemaining = Math.max(150000, Math.round(rawPrincipal / 10000) * 10000);
     const interestRateAnnual = 0.085;
     const tenureMonthsRemaining = 60;
@@ -131,9 +131,9 @@ export function generateCharacter(seed, cityTier = 'tier1', careerField = 'scien
   let groceries = Math.round((monthlyTakeHome * (0.11 + rng() * 0.03)) / 500) * 500;
   let lifestyle = Math.round((monthlyTakeHome * (0.07 + rng() * 0.03)) / 500) * 500;
   
-  // Dependant support only if take-home pay is healthy (> 35,000)
-  const hasDependant = monthlyTakeHome > 35000 && rng() < 0.30;
-  let dependantSupport = hasDependant ? 5000 : 0;
+  // Dependant support: 30% deterministic probability per spec (₹6,000 / month)
+  const hasDependant = rng() < 0.30;
+  let dependantSupport = hasDependant ? 6000 : 0;
 
   // Enforce Golden Invariant: monthlySurplus >= 10,000
   let totalFixedExpenses = rent + utilities + groceries + lifestyle + dependantSupport;
