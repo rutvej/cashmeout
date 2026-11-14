@@ -123,9 +123,6 @@ export default function SpawnRevealScreen() {
               </span>
             </div>
             <div className="text-blue-700 font-bold text-xs sm:text-sm font-sans">{jobTitle}</div>
-            <p className="text-[11px] sm:text-xs text-slate-600 italic font-body pt-0.5">
-              "{primaryDream}"
-            </p>
           </div>
         </motion.div>
 
@@ -188,16 +185,13 @@ export default function SpawnRevealScreen() {
 
         {/* ─── Loan Notice ─── */}
         {loans.length > 0 && (
-          <div className="card-neopop-sm p-3 sm:p-4 bg-amber-50 border-2 border-slate-900 flex items-start gap-2.5">
-            <span className="text-xl sm:text-2xl mt-0.5">🎓</span>
-            <div className="space-y-0.5 flex-1 text-xs">
-              <div className="font-bold text-amber-950 text-xs sm:text-sm">{loans[0].name} Active</div>
-              <p className="text-slate-700 text-[11px] sm:text-xs">
-                Principal remaining:{' '}
-                <strong className="text-slate-900 font-mono">{formatINR(loans[0].principalRemaining)}</strong>{' '}
-                at <strong className="text-slate-900">{formatPercent(loans[0].interestRateAnnual)}</strong>{' '}
-                p.a. ({loans[0].tenureMonthsRemaining} months at {formatINR(loans[0].emi)}/mo).
-              </p>
+          <div className="card-neopop-sm p-2 sm:p-2.5 bg-amber-50 border-2 border-slate-900 flex items-center justify-between text-xs font-mono">
+            <div className="flex items-center gap-1.5 font-bold text-amber-950">
+              <span>🎓</span>
+              <span>{loans[0].name}</span>
+            </div>
+            <div className="text-slate-800 font-bold">
+              EMI {formatINR(loans[0].emi)}/mo · {loans[0].tenureMonthsRemaining}m left
             </div>
           </div>
         )}
@@ -215,9 +209,6 @@ export default function SpawnRevealScreen() {
               {formatINR(animatedSurplus)}
               <span className="text-xs sm:text-sm font-normal text-slate-500 ml-1.5 font-sans">/ mo</span>
             </div>
-            <p className="text-[11px] sm:text-xs text-slate-600 pt-0.5">
-              Available cash after all living costs and debt obligations — ready to fund life goals.
-            </p>
           </div>
 
           <div className="w-full sm:w-auto text-left sm:text-right bg-slate-50 border-2 border-slate-900 p-2.5 sm:p-4 shrink-0 font-mono flex sm:flex-col justify-between items-center sm:items-end">
@@ -225,7 +216,6 @@ export default function SpawnRevealScreen() {
               <span className="text-[9px] uppercase font-bold text-slate-500 block">Liquid Buffer</span>
               <div className="text-lg sm:text-xl font-black text-slate-900">{formatINR(liquidCash)}</div>
             </div>
-            <div className="text-[10px] text-slate-500 hidden sm:block">Bank baseline</div>
           </div>
         </motion.div>
 

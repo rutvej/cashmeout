@@ -45,9 +45,6 @@ export default function MarketCrashModal({ data }) {
             <span>Market Benchmark Drawdown:</span>
             <span className="text-base font-black text-rose-700">-{depthDisplay}%</span>
           </div>
-          <p className="text-[11px] text-rose-800 font-body">
-            Equities have entered an official bear correction triggered by systemic liquidity tightening.
-          </p>
         </div>
 
         {/* Asset Class Impact Table */}
@@ -70,11 +67,6 @@ export default function MarketCrashModal({ data }) {
             </div>
           </div>
         </div>
-
-        {/* Historical Context */}
-        <p className="text-[11px] sm:text-xs text-slate-600 font-body leading-relaxed">
-          Economic panics occur periodically across generational careers. Historically, diversified equity recoveries take 18–30 months to retrace prior peaks.
-        </p>
 
         {/* Non-Directive Single Action CTA */}
         <div className="pt-2">

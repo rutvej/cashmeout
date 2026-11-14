@@ -90,13 +90,6 @@ export default function MilestoneModal({ goal }) {
           </div>
         </div>
 
-        {/* Narrative */}
-        <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed font-body">
-          {isFunded
-            ? `Congratulations! You successfully accumulated the full corpus for ${goal?.name}. Your disciplined monthly contributions paid off!`
-            : `The target deadline has arrived, but you have a shortfall of ${formatINR(shortfall)}. Choose how you wish to handle this milestone below:`}
-        </p>
-
         {/* Financial Numbers Bar */}
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-2 sm:p-3 bg-slate-100 border-2 border-slate-900 text-center font-mono">
           <div>
@@ -115,45 +108,7 @@ export default function MilestoneModal({ goal }) {
           </div>
         </div>
 
-        {/* Phase 5: Life Event Ongoing Outflow Notices */}
-        {goal?.id === 'goal_car' && (
-          <div className="p-2.5 sm:p-3 bg-blue-50 border-2 border-blue-900 text-[11px] space-y-1">
-            <div className="font-bold text-blue-950 flex items-center gap-1.5">
-              <span>🚗</span>
-              <span>Recurring Vehicle Upkeep Impact (+₹3,500/mo)</span>
-            </div>
-            <p className="text-blue-900 text-[10px] sm:text-[11px] leading-relaxed">
-              Completing vehicle purchase permanently adds <strong>+₹3,500/mo</strong> to monthly fixed expenses (Fuel ₹2,200 + Servicing Reserve ₹800 + Motor Insurance ₹500).
-              Your 6-month Emergency Fund target will automatically expand by <strong>+₹21,000</strong>.
-            </p>
-          </div>
-        )}
-
-        {goal?.id === 'goal_home' && (
-          <div className="p-2.5 sm:p-3 bg-amber-50 border-2 border-amber-900 text-[11px] space-y-1">
-            <div className="font-bold text-amber-950 flex items-center gap-1.5">
-              <span>🏠</span>
-              <span>Property Maintenance Charges (+₹5,500/mo)</span>
-            </div>
-            <p className="text-amber-900 text-[10px] sm:text-[11px] leading-relaxed">
-              Finalizing homeownership introduces <strong>+₹5,500/mo</strong> in fixed expenses for apartment society maintenance, civic taxes, and utility charges (combined with any mortgage loan EMI).
-            </p>
-          </div>
-        )}
-
-        {goal?.id === 'goal_marriage' && (
-          <div className="p-2.5 sm:p-3 bg-rose-50 border-2 border-rose-900 text-[11px] space-y-1">
-            <div className="font-bold text-rose-950 flex items-center gap-1.5">
-              <span>💍</span>
-              <span>Marriage Ceremony & Household Economics</span>
-            </div>
-            <p className="text-rose-900 text-[10px] sm:text-[11px] leading-relaxed">
-              Achieving this milestone celebrates your wedding and reveals your partner's career archetype, transitioning to combined dual-income household cashflows.
-            </p>
-          </div>
-        )}
-
-        {/* Shortfall Resolution Options (Requested by User) */}
+        {/* Shortfall Resolution Options */}
         {!isFunded && (
           <div className="space-y-1.5 sm:space-y-2">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-700 block">
@@ -174,13 +129,10 @@ export default function MilestoneModal({ goal }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between font-bold gap-1">
                   <span className="text-slate-900 flex items-center gap-1.5 min-w-0">
                     <span className="shrink-0">⏳</span>
-                    <span className="truncate">Postpone the Event (+2 Years)</span>
+                    <span className="truncate">Postpone (+2 Years)</span>
                   </span>
-                  <span className="font-mono text-blue-700 shrink-0 text-[11px] sm:text-xs">Target: Age {simulation.currentAge + 2}</span>
+                  <span className="font-mono text-blue-700 shrink-0 text-[11px] sm:text-xs">Age {simulation.currentAge + 2}</span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Delay milestone by 2 years. Keeps your monthly SIP compounding toward the goal naturally without debt or safety fund drains.
-                </p>
               </button>
 
               {/* Option 2: Pay from Bank & Emergency Buffer */}
@@ -199,18 +151,9 @@ export default function MilestoneModal({ goal }) {
                     <span className="truncate">Pay from Bank Cash & Emergency Buffer</span>
                   </span>
                   <span className={`font-mono shrink-0 text-[11px] sm:text-xs ${isBufferSufficient ? 'text-emerald-700' : 'text-amber-700'}`}>
-                    {isBufferSufficient ? 'Covered by Buffer' : 'Buffer Shortfall'}
+                    {isBufferSufficient ? 'Covered' : 'Partial'}
                   </span>
                 </div>
-                {isBufferSufficient ? (
-                  <p className="text-[11px] text-slate-600 mt-1">
-                    Deducts {formatINR(deductCash)} from bank cash and {formatINR(deductEmergency)} from emergency buffer. Leaves <strong className="text-slate-800">{formatINR(remainingEmergencyAfter)}</strong> in emergency buffer. Milestone completes debt-free!
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-amber-800 font-bold mt-1">
-                    ⚠️ Total buffer available is {formatINR(totalBufferAvailable)} (Bank: {formatINR(liquidCashAvailable)}, Emergency: {formatINR(emergencyAvailable)}), which cannot fully cover the {formatINR(shortfall)} shortfall. Option 1 (Postpone) or Option 3 (Loan) is recommended!
-                  </p>
-                )}
               </button>
 
               {/* Option 3: Take a Loan */}
@@ -226,13 +169,10 @@ export default function MilestoneModal({ goal }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between font-bold gap-1">
                   <span className="text-slate-900 flex items-center gap-1.5 min-w-0">
                     <span className="shrink-0">💳</span>
-                    <span className="truncate">Take a Loan ({loanName})</span>
+                    <span className="truncate">Take Loan ({loanName})</span>
                   </span>
-                  <span className="font-mono text-rose-700 shrink-0 text-[11px] sm:text-xs">~{formatINR(estEMI)}/mo EMI</span>
+                  <span className="font-mono text-rose-700 shrink-0 text-[11px] sm:text-xs">~{formatINR(estEMI)}/mo</span>
                 </div>
-                <p className="text-[11px] text-slate-600 mt-1">
-                  Finance {formatINR(shortfall)} via {tenureMonths}-month loan at {(interestRate * 100).toFixed(1)}% p.a. Adds an EMI to your monthly outflow. Milestone completed immediately!
-                </p>
               </button>
             </div>
           </div>

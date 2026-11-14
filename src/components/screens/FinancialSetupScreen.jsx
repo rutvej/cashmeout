@@ -459,12 +459,8 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
 
             {/* Compact 1-line Alert ONLY when strictly over-allocated */}
             {isOverAllocated && (
-              <div className="py-1 px-2.5 bg-rose-50 border-2 border-rose-600 text-rose-900 text-xs font-mono font-bold flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <span>🔴</span>
-                  <span>Over-Allocated by +{formatINR(Math.abs(remainingSurplus))}/mo</span>
-                </span>
-                <span className="text-[10px] text-rose-700 uppercase">Rebalance to proceed</span>
+              <div className="py-0.5 px-2 bg-rose-100 text-rose-800 text-[10px] font-mono font-bold text-center">
+                Over-allocated by +{formatINR(Math.abs(remainingSurplus))}/mo
               </div>
             )}
           </div>
@@ -536,10 +532,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
           <div className="card-neopop-sm p-2 sm:p-2.5 flex items-center justify-between gap-2 bg-blue-50/60">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-base sm:text-lg shrink-0">🛡️</span>
-              <div className="truncate">
-                <span className="font-bold text-xs text-slate-900 block truncate">Health Insurance Cover</span>
-                <span className="text-[10px] text-slate-600 block truncate">Shields emergency fund against medical wipes</span>
-              </div>
+              <span className="font-bold text-xs text-slate-900 block truncate">Health Insurance Cover</span>
             </div>
             <button
               type="button"
@@ -821,13 +814,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                         </button>
                       )}
                     </div>
-
-                    <div className="p-2 bg-blue-50/70 border-2 border-slate-900 text-[11px] text-blue-950 font-mono">
-                      <strong>Percentage Mode: Proportional Auto-Redistribution</strong>
-                      <p className="text-[10px] text-blue-800 mt-0.5">
-                        When this goal completes, its {currentPercent}% allocation automatically scales up remaining active goals.
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>
@@ -866,49 +852,29 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                 </div>
 
                 {/* ─── Instrument Risk Profile Card ─── */}
-                <div className="p-2.5 bg-slate-50 border-2 border-slate-900 text-xs font-body leading-relaxed space-y-1">
+                <div className="p-2 bg-slate-50 border-2 border-slate-900 text-xs font-mono">
                   {currentGoal.instrumentId === 'savings' && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-emerald-900 font-bold font-mono text-[11px]">
-                        <span>🛡️</span>
-                        <span>LIQUID SAVINGS · ZERO VOLATILITY</span>
-                      </div>
-                      <p className="text-slate-600 text-[11px]">
-                        Steady linear climb with zero volatility. 100% capital protection and instant liquidity. Ideal for Emergency Fund (6 months) and near-term vacation expenses.
-                      </p>
+                    <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-[11px]">
+                      <span>🛡️</span>
+                      <span>LIQUID SAVINGS · ZERO VOLATILITY</span>
                     </div>
                   )}
                   {currentGoal.instrumentId === 'fd' && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-blue-900 font-bold font-mono text-[11px]">
-                        <span>🔒</span>
-                        <span>FIXED DEPOSIT · GUARANTEED COMPOUNDING</span>
-                      </div>
-                      <p className="text-slate-600 text-[11px]">
-                        Guaranteed exponential growth (7.0% p.a.). Zero market volatility. Incurs a 1.5% penalty if liquidated prematurely before maturity. Great for 2–5 year goals.
-                      </p>
+                    <div className="flex items-center gap-1.5 text-blue-900 font-bold text-[11px]">
+                      <span>🔒</span>
+                      <span>FIXED DEPOSIT · GUARANTEED COMPOUNDING</span>
                     </div>
                   )}
                   {currentGoal.instrumentId === 'gold' && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-amber-900 font-bold font-mono text-[11px]">
-                        <span>🟡</span>
-                        <span>GOLD / SGB · INFLATION HEDGE</span>
-                      </div>
-                      <p className="text-slate-600 text-[11px]">
-                        Capital preservation with moderate monthly cyclical swings (-1.0% to +2.0%/mo). Acts as a resilient safe-haven during macro equity crashes.
-                      </p>
+                    <div className="flex items-center gap-1.5 text-amber-900 font-bold text-[11px]">
+                      <span>🟡</span>
+                      <span>GOLD / SGB · INFLATION HEDGE</span>
                     </div>
                   )}
                   {currentGoal.instrumentId === 'equity' && (
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-purple-900 font-bold font-mono text-[11px]">
-                        <span>★</span>
-                        <span>EQUITY MUTUAL FUNDS · WEALTH COMPOUNDER</span>
-                      </div>
-                      <p className="text-slate-600 text-[11px]">
-                        High long-term compounding (~12% p.a.) with realistic monthly swings (-3.5% to +4.5%/mo). Guaranteed macro crash (-28% to -55%) occurs between age 34 and 45. Essential for multi-decade retirement, high risk for short-term goals.
-                      </p>
+                    <div className="flex items-center gap-1.5 text-purple-900 font-bold text-[11px]">
+                      <span>★</span>
+                      <span>EQUITY MUTUAL FUNDS · WEALTH COMPOUNDER</span>
                     </div>
                   )}
                 </div>
@@ -959,9 +925,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                     {/* Header Controls */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-1 border-b border-slate-200">
                       <div>
-                        <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-slate-500 block">
-                          Portfolio Compounding Analytics
-                        </span>
                         <h4 className="font-display font-black text-xs sm:text-sm text-slate-900">
                           Invested Principal vs. Compounded Fund Value
                         </h4>
@@ -1118,11 +1081,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
-
-                    <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-0.5 px-0.5">
-                      <span>Gray Dashed: Cumulative Out-of-Pocket Deposits</span>
-                      <span className="text-emerald-700 font-bold">Colored Area: Compounded Returns Growth</span>
-                    </div>
                   </div>
                 )}
               </div>
@@ -1150,9 +1108,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                       <div className="min-w-0">
                         <span className="font-display font-black text-xs text-slate-900 block truncate">
                           Deposit Bank Reserves into Goal Corpus
-                        </span>
-                        <span className="text-[10px] font-mono text-slate-600 block truncate">
-                          Instant lump-sum transfer to boost goal progress
                         </span>
                       </div>
                       <div className="text-right shrink-0">
@@ -1434,28 +1389,12 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
               </button>
             </div>
 
-            {/* Strategic Reassurance */}
-            <div className="space-y-2 text-xs font-mono">
-              <div className="p-2 bg-slate-50 border border-slate-300">
-                <span className="font-bold text-slate-900 block">📈 Annual Appraisals</span>
-                <p className="text-[11px] text-slate-600">
-                  Salary raises automatically boost surplus. Auto-split scales up allocations seamlessly.
-                </p>
-              </div>
-              <div className="p-2 bg-slate-50 border border-slate-300">
-                <span className="font-bold text-slate-900 block">↪️ Milestone Waterfall</span>
-                <p className="text-[11px] text-slate-600">
-                  When early goals complete, their freed surplus auto-cascades to remaining goals.
-                </p>
-              </div>
-            </div>
-
             <button
               type="button"
               onClick={() => setShowHintModal(false)}
               className="w-full py-2 bg-slate-900 text-white font-mono font-bold text-xs uppercase btn-press hover:bg-slate-800"
             >
-              Got It ✓
+              Close
             </button>
           </div>
         </div>

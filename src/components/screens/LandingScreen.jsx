@@ -169,11 +169,6 @@ export default function LandingScreen() {
           </h1>
 
           <div className="bar-gold w-20 sm:w-24 mx-auto" />
-
-          <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto font-body leading-relaxed px-2">
-            Experience real-world cashflow, investments, and life decisions over a 37-year career.
-            Deterministic seed ensures 100% reproducible outcomes.
-          </p>
         </motion.div>
 
         {/* ─── Phase 11: NeoPOP "Resume Active Life" Card ─── */}
@@ -276,9 +271,6 @@ export default function LandingScreen() {
               🎲 Roll
             </button>
           </div>
-          <p className="text-[10px] font-mono text-slate-500 hidden sm:block">
-            Same seed + selections = exact same life timeline and financial trajectory.
-          </p>
         </motion.div>
 
         {/* ─── City Tier ─── */}
@@ -305,9 +297,6 @@ export default function LandingScreen() {
                     <div className="font-display font-black text-sm sm:text-lg leading-tight">{tier.title}</div>
                     <div className={`text-[11px] sm:text-xs font-bold ${isSelected ? 'text-blue-100' : 'text-slate-600'}`}>
                       {tier.subtitle}
-                    </div>
-                    <div className={`hidden sm:block text-[11px] leading-snug pt-1 ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
-                      {tier.description}
                     </div>
                   </div>
                   <div className="pt-2 sm:pt-3">
@@ -350,9 +339,6 @@ export default function LandingScreen() {
                   <div className="space-y-0.5 sm:space-y-1">
                     <span className="text-xl sm:text-2xl">{field.icon}</span>
                     <div className="font-display font-black text-xs sm:text-base pt-0.5 sm:pt-1 leading-tight">{field.title}</div>
-                    <div className={`hidden sm:block text-[11px] leading-snug ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
-                      {field.roles}
-                    </div>
                   </div>
                   <div className="pt-2 sm:pt-3">
                     <span
@@ -396,17 +382,14 @@ export default function LandingScreen() {
           data-testid="overwrite-confirmation-modal"
         >
           <div className="bg-white border-2 border-slate-900 shadow-hard-lg max-w-md w-full p-5 sm:p-6 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <span className="text-2xl">⚠️</span>
+            <div className="flex items-center gap-2">
               <h3 className="font-display font-black text-lg text-slate-900 tracking-tight">
                 Overwrite Saved Life?
               </h3>
             </div>
 
-            <p className="text-xs sm:text-sm font-body text-slate-700 leading-relaxed">
-              You have an active ongoing life for{' '}
-              <strong className="font-bold text-slate-900">{activeSession.character?.name}</strong>{' '}
-              (Age {sessionAge}). Starting a new life will overwrite your saved progress. Proceed?
+            <p className="text-xs font-mono text-slate-700">
+              Overwrite saved life for <strong className="font-bold text-slate-900">{activeSession.character?.name}</strong> (Age {sessionAge})?
             </p>
 
             <div className="flex flex-col sm:flex-row gap-2.5 pt-2">

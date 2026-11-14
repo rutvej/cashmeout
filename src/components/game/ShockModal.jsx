@@ -108,7 +108,7 @@ export default function ShockModal({ data, onReviewAllocations }) {
           </div>
           <div className="min-w-0">
             <span className={`text-[9px] sm:text-[10px] font-mono font-bold uppercase tracking-widest block ${meta.labelColor}`}>
-              Life Shock Event · {meta.label}
+              {meta.label}
             </span>
             <h2 className="font-display text-lg sm:text-xl font-black text-slate-900 leading-tight truncate">
               {data?.title}
@@ -117,23 +117,9 @@ export default function ShockModal({ data, onReviewAllocations }) {
         </div>
 
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
-          {/* Description */}
-          <p className="text-[11px] sm:text-xs text-slate-700 leading-relaxed font-body">
-            {data?.description}
-          </p>
-
           {isEviction ? (
             /* ── Housing Eviction Shock Choices ── */
             <div className="space-y-3 font-mono">
-              <div className="p-3 bg-rose-50 border-2 border-rose-500 space-y-1 text-xs">
-                <span className="text-[10px] font-black uppercase text-rose-800 block">
-                  🚨 Eviction &amp; Steep Rent Spike
-                </span>
-                <p className="text-slate-800 leading-snug">
-                  Your landlord is selling the flat. You must vacate within 30 days or relocate to a new rental at higher market rates!
-                </p>
-              </div>
-
               {/* Choice 1: Emergency Home Purchase */}
               <div
                 className={`p-3.5 border-2 transition-all ${
@@ -150,9 +136,9 @@ export default function ShockModal({ data, onReviewAllocations }) {
                     {savedDPPct}% DP Ready
                   </span>
                 </div>
-                <p className="text-xs text-slate-800 leading-snug">
-                  Execute emergency home purchase for {formatINR(propertyCost)} flat. Uses your accumulated {formatINR(currentSavedDP)}, bridges shortfall ({formatINR(bridgeCashNeeded)}) from liquid cash, takes 80% mortgage, and eliminates rent immediately!
-                </p>
+                <div className="text-xs font-mono text-slate-800">
+                  Flat: {formatINR(propertyCost)} · DP: {formatINR(currentSavedDP)}
+                </div>
                 {isEmergencyBuyEligible ? (
                   <button
                     type="button"
@@ -163,7 +149,7 @@ export default function ShockModal({ data, onReviewAllocations }) {
                   </button>
                 ) : (
                   <div className="mt-2 p-1.5 bg-slate-200 border border-slate-400 text-[10px] text-slate-700 font-bold">
-                    🔒 Locked: Requires at least 70% down payment saved (currently {savedDPPct}%).
+                    Requires 70% DP ({savedDPPct}% saved)
                   </div>
                 )}
               </div>
@@ -176,12 +162,9 @@ export default function ShockModal({ data, onReviewAllocations }) {
                   </span>
                   <span className="text-xs font-bold text-slate-900">New Rental</span>
                 </div>
-                <p className="text-xs text-slate-800 leading-snug">
-                  Move to a new rental apartment. Incurs a -₹60,000 moving, brokerage &amp; security deposit hit, and permanently raises monthly fixed rent by +₹3,000/month.
-                </p>
-                <div className="text-[10px] text-slate-600 space-y-0.5 pt-0.5">
-                  <div>• One-time moving fee: -₹60,000 (from liquid/emergency)</div>
-                  <div>• Ongoing market rent hike: +₹3,000/mo</div>
+                <div className="text-[10px] text-slate-600 space-y-0.5">
+                  <div>• Moving fee: -₹60,000</div>
+                  <div>• Rent hike: +₹3,000/mo</div>
                 </div>
                 <button
                   type="button"
@@ -216,9 +199,6 @@ export default function ShockModal({ data, onReviewAllocations }) {
                     −{formatINR(data?.grossAmount)}
                   </span>
                 </div>
-                <p className="text-[10px] sm:text-[11px] text-slate-500 leading-snug pt-1">
-                  Your fixed expenses and EMIs continue deducting from liquid cash and emergency fund each month until you're rehired.
-                </p>
               </>
             ) : (
               <>
@@ -236,7 +216,7 @@ export default function ShockModal({ data, onReviewAllocations }) {
                 )}
                 {isMedical && !data?.usedInsurance && (
                   <div className="flex justify-between py-1 border-b border-slate-200 text-rose-600">
-                    <span className="font-sans font-bold">⚠️ No Health Insurance</span>
+                    <span className="font-sans font-bold">No Insurance</span>
                     <span className="font-black">Full bill applies</span>
                   </div>
                 )}
@@ -252,7 +232,7 @@ export default function ShockModal({ data, onReviewAllocations }) {
                 )}
                 {(data?.unfundedDeficit || 0) > 0 && (
                   <div className="flex justify-between py-1 border-b border-slate-200">
-                    <span className="text-rose-700 font-sans font-bold">⚠️ Unfunded Deficit</span>
+                    <span className="text-rose-700 font-sans font-bold">Unfunded Deficit</span>
                     <span className="font-black text-rose-700">−{formatINR(data?.unfundedDeficit)}</span>
                   </div>
                 )}
@@ -260,11 +240,6 @@ export default function ShockModal({ data, onReviewAllocations }) {
                   <span className="font-bold text-slate-900 font-sans">Net Out-of-Pocket</span>
                   <span className="font-black text-rose-700 text-sm">{formatINR(data?.netOutflow)}</span>
                 </div>
-                {isMedical && data?.usedInsurance && (
-                  <p className="text-[10px] sm:text-[11px] text-emerald-800 font-bold leading-snug pt-1">
-                    ✓ Health insurance saved you {formatINR(data?.insuranceCoveredAmount)}! You only paid the ₹5,000 deductible.
-                  </p>
-                )}
               </>
             )}
           </div>
@@ -296,35 +271,17 @@ export default function ShockModal({ data, onReviewAllocations }) {
                   max={displayEmergencyMax}
                   color={emergencyAfter >= emergencyTarget ? 'bg-emerald-500' : 'bg-amber-500'}
                 />
-                {emergencyAfter < emergencyTarget && (
-                  <p className="text-[10px] text-amber-800 font-bold pt-0.5">
-                    ⚠️ Buffer below target — SIP will auto-refill before redirecting to other goals.
-                  </p>
-                )}
                 {data?.penaltiesPaidFD > 0 && (
-                  <p className="text-[10px] text-amber-900 font-bold pt-1 bg-amber-100 p-1 border border-amber-400">
-                    ⚠️ Premature FD Penalty: ₹{data.penaltiesPaidFD.toLocaleString('en-IN')} (1.5%) deducted for breaking Fixed Deposit early.
+                  <p className="text-[10px] text-amber-900 font-mono font-bold pt-1">
+                    Premature FD Penalty: ₹{data.penaltiesPaidFD.toLocaleString('en-IN')} (1.5%)
                   </p>
                 )}
                 {data?.marketLossesRealized > 0 && (
-                  <p className="text-[10px] text-rose-900 font-bold pt-1 bg-rose-100 p-1 border border-rose-400">
-                    ⚠️ Forced Equity Liquidation: Crystallized ₹{data.marketLossesRealized.toLocaleString('en-IN')} market loss during a correction dip.
+                  <p className="text-[10px] text-rose-900 font-mono font-bold pt-1">
+                    Realized Market Loss: ₹{data.marketLossesRealized.toLocaleString('en-IN')}
                   </p>
                 )}
               </div>
-            </div>
-          )}
-
-          {/* ── Job Loss Monthly Burn Preview ── */}
-          {isJobLoss && (
-            <div className="p-3 bg-amber-50 border-2 border-amber-500 space-y-1.5 text-xs font-mono">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-amber-700 block">Monthly Burn During Layoff</span>
-              <p className="text-slate-700 leading-snug">
-                Each month you remain unemployed, all fixed outflows will be drawn from your liquid bank cash, then emergency fund. SIPs are paused when cash runs dry.
-              </p>
-              <p className="font-bold text-amber-900 bg-amber-100 p-1.5 border border-amber-600">
-                ⚠️ No automatic rehire: You must actively apply on the Job Market to restore your salary and stop fund burn!
-              </p>
             </div>
           )}
 

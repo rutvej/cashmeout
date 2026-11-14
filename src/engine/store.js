@@ -278,49 +278,69 @@ export const useGameStore = create((set, get) => ({
     let updatedGoals = goals.map((g) => ({ ...g }));
 
     if (strategy === 'proportional_split') {
-      // Proportionally scales all active goal SIPs by their current % weights
-      const activeGoals = updatedGoals.filter(
-        (g) => g.id === 'goal_retirement' || (g.currentAmount || 0) < (g.targetAmount || 1)
-      );
-      const totalWeight = activeGoals.reduce((sum, g) => {
-        let w = g.allocationPercent;
-        if (w === undefined || w === null || w === 0) {
-          const oldSurplus = currentSurplus - deltaSurplus;
-          w = oldSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / oldSurplus) * 100) : 0;
-        }
-        return sum + (w || 0);
-      }, 0);
+      // Increases existing investments proportionally based on what the player has already decided
+      // Goals with ₹0 (or completed goals) stay at ₹0 and are not touched
+      const eligibleGoals = updatedGoals.filter((g) => {
+        const isCompleted =
+          g.status === 'completed' ||
+          (g.id !== 'goal_retirement' && (g.currentAmount || 0) >= (g.targetAmount || 1)) ||
+          g.isLaunched ||
+          g.isLocked;
+        if (isCompleted) return false;
+        const hasDecidedSIP = (g.baseMonthlySIP || 0) > 0 || (g.allocationPercent || 0) > 0;
+        return hasDecidedSIP;
+      });
 
-      let allocatedSoFar = 0;
-      updatedGoals = updatedGoals.map((g) => {
-        const isFull = g.id !== 'goal_retirement' && (g.currentAmount || 0) >= (g.targetAmount || 1);
-        if (isFull) return g;
+      const totalDecidedSIP = eligibleGoals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);
+      const totalDecidedPercent = eligibleGoals.reduce((sum, g) => sum + (g.allocationPercent || 0), 0);
 
-        let weight = g.allocationPercent;
-        if (weight === undefined || weight === null || weight === 0) {
-          const oldSurplus = currentSurplus - deltaSurplus;
-          weight = oldSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / oldSurplus) * 100) : 0;
-        }
+      if (eligibleGoals.length === 0 || (totalDecidedSIP <= 0 && totalDecidedPercent <= 0) || deltaSurplus <= 0) {
+        // No existing active investments decided, or zero hike: preserve SIPs as-is
+        updatedGoals = updatedGoals.map((g) => ({
+          ...g,
+          allocationPercent: currentSurplus > 0 ? Math.round(((g.baseMonthlySIP || 0) / currentSurplus) * 100) : (g.allocationPercent || 0),
+        }));
+      } else {
+        let allocatedDelta = 0;
+        const lastEligibleId = eligibleGoals[eligibleGoals.length - 1]?.id;
 
-        if (weight > 0 && currentSurplus > 0) {
-          const isLastActive = g.id === activeGoals[activeGoals.length - 1]?.id;
-          let newSIP = 0;
-          if (isLastActive && totalWeight > 0) {
-            newSIP = Math.max(0, currentSurplus - allocatedSoFar);
-          } else {
-            const frac = totalWeight > 0 ? weight / totalWeight : weight / 100;
-            newSIP = Math.round(frac * currentSurplus);
-            allocatedSoFar += newSIP;
+        updatedGoals = updatedGoals.map((g) => {
+          const isEligible = eligibleGoals.some((eg) => eg.id === g.id);
+          if (!isEligible) {
+            const actualPercent = currentSurplus > 0
+              ? Math.round(((g.baseMonthlySIP || 0) / currentSurplus) * 100)
+              : (g.allocationPercent || 0);
+            return {
+              ...g,
+              allocationPercent: actualPercent,
+            };
           }
-          const actualPercent = currentSurplus > 0 ? Math.round((newSIP / currentSurplus) * 100) : weight;
+
+          const isLastEligible = g.id === lastEligibleId;
+          const share = totalDecidedSIP > 0
+            ? (g.baseMonthlySIP || 0) / totalDecidedSIP
+            : (g.allocationPercent || 0) / totalDecidedPercent;
+
+          let hikeDelta = 0;
+          if (isLastEligible) {
+            hikeDelta = Math.max(0, deltaSurplus - allocatedDelta);
+          } else {
+            hikeDelta = Math.round(share * deltaSurplus);
+            allocatedDelta += hikeDelta;
+          }
+
+          const newSIP = (g.baseMonthlySIP || 0) + hikeDelta;
+          const actualPercent = currentSurplus > 0
+            ? Math.round((newSIP / currentSurplus) * 100)
+            : (g.allocationPercent || 0);
+
           return {
             ...g,
-            allocationPercent: actualPercent,
             baseMonthlySIP: newSIP,
+            allocationPercent: actualPercent,
           };
-        }
-        return g;
-      });
+        });
+      }
     } else if (strategy === 'bank_cash') {
       // Keep existing SIPs unchanged, allowing extra surplus to flow to liquid bank cash
       updatedGoals = updatedGoals.map((g) => {

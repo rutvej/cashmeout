@@ -157,29 +157,13 @@ export default function RaiseModal({ data, onAdjustAllocations, onOpenJobMarket 
 
         {/* Stagnation / Below-Market Job Hop Callout */}
         {(hikeRate <= 0.02 || isStagnated) && (
-          <div className="p-3 sm:p-3.5 bg-gradient-to-r from-amber-50 to-rose-50 border-2 border-slate-900 space-y-2 text-left">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="font-bold text-amber-950 flex items-center gap-1.5">
-                <span>⚠️</span>
-                <span>{isStagnated ? 'Tenure Stagnation Push' : 'Below-Market Appraisal'}</span>
-              </span>
-              <span className="text-[10px] font-bold text-rose-800 bg-rose-100 px-1.5 py-0.5 border border-rose-300">
-                +30% Market Target
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-700 font-sans leading-snug">
-              {isStagnated
-                ? 'Tenure Stagnation: Staying at the same company without switching has plateaued your pay. Switch employers to leap ahead!'
-                : 'Your compensation raise is minimal. Explore external openings on the Job Board to target higher market compensation.'}
-            </p>
-            <button
-              type="button"
-              onClick={handleOpenJobMarket}
-              className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold text-xs uppercase tracking-wider btn-press border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] flex items-center justify-center gap-2"
-            >
-              <span>💼 Explore Job Market (+30% Target)</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={handleOpenJobMarket}
+            className="w-full py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white font-mono font-bold text-xs uppercase tracking-wider btn-press border-2 border-slate-900 shadow-[2px_2px_0px_#0f172a] flex items-center justify-center gap-2"
+          >
+            <span>💼 Explore Job Market (+30% Target)</span>
+          </button>
         )}
 
         {/* Breakdown Card */}
@@ -222,7 +206,7 @@ export default function RaiseModal({ data, onAdjustAllocations, onOpenJobMarket 
                 )}
               </div>
               <p className="text-[11px] font-normal text-emerald-100 mt-1">
-                Scales all active goal SIPs proportionally by their current % weights.
+                Increases each active investment proportionally by +{formatINR(delta)} based on your existing allocations.
               </p>
 
               {/* Visual Countdown Progress Bar when timer active */}
@@ -262,9 +246,6 @@ export default function RaiseModal({ data, onAdjustAllocations, onOpenJobMarket 
               </span>
               <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 text-slate-800">RESUME ▶</span>
             </div>
-            <p className="text-[11px] font-normal text-slate-600 mt-1">
-              Keeps existing SIPs unchanged. The entire extra +{formatINR(delta)} flows into your liquid bank savings every month.
-            </p>
           </button>
 
           {/* Action 3: Custom Rebalance */}
@@ -279,9 +260,6 @@ export default function RaiseModal({ data, onAdjustAllocations, onOpenJobMarket 
               </span>
               <span className="text-[10px] font-mono bg-slate-200 px-1.5 py-0.5 text-slate-800">PAUSE ⏸</span>
             </div>
-            <p className="text-[11px] font-normal text-slate-600 mt-1">
-              Pauses simulation and opens the Allocation Sheet for manual adjustment.
-            </p>
           </button>
         </div>
 
@@ -294,7 +272,7 @@ export default function RaiseModal({ data, onAdjustAllocations, onOpenJobMarket 
             className="accent-slate-900 h-4 w-4 rounded cursor-pointer"
           />
           <span className="text-[11px] font-mono">
-            Auto-select Auto-Split in 3s on future raises (still shows appraisal screen)
+            Auto-split in 3s on future raises
           </span>
         </label>
       </motion.div>

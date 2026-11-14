@@ -73,10 +73,6 @@ export default function GoalSetupScreen() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-600 font-body leading-relaxed">
-          Review your life roadmap below. On the next screen, you will allocate your monthly surplus into specific investment instruments to fund these targets.
-        </p>
-
         {/* ─── Recurring & Dynamic Goals ─── */}
         <div className="space-y-2.5 sm:space-y-3">
           <div className="text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-slate-700 flex items-center gap-2">
@@ -112,9 +108,6 @@ export default function GoalSetupScreen() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 font-body line-clamp-2">
-                          {goal.description}
-                        </p>
                       </div>
                     </div>
 
@@ -191,9 +184,6 @@ export default function GoalSetupScreen() {
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 leading-snug font-body line-clamp-2">
-                        {goal.description}
-                      </p>
                     </div>
                   </div>
 
@@ -218,17 +208,12 @@ export default function GoalSetupScreen() {
             <button
               type="button"
               onClick={() => startInstantSimulation()}
-              className="p-3.5 sm:p-4 bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group"
+              className="p-3.5 sm:p-4 bg-emerald-600 hover:bg-emerald-700 text-white border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group flex items-center justify-between"
             >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5">
-                  <span>⚡</span> START SIMULATION INSTANTLY
-                </span>
-                <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
-              </div>
-              <p className="text-[11px] sm:text-xs text-emerald-100 font-body leading-snug">
-                100% of surplus ({formatINR(character.monthlySurplus)}/mo) flows to Bank Cash. Clock starts ticking now!
-              </p>
+              <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5">
+                <span>⚡</span> START SIMULATION INSTANTLY
+              </span>
+              <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
             </button>
 
             {/* Option 2: Pause & Plan Allocations First */}
@@ -238,17 +223,12 @@ export default function GoalSetupScreen() {
                 pause();
                 navigateTo('financial_setup');
               }}
-              className="p-3.5 sm:p-4 bg-white hover:bg-slate-50 text-slate-900 border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group"
+              className="p-3.5 sm:p-4 bg-white hover:bg-slate-50 text-slate-900 border-2 border-slate-900 shadow-[3px_3px_0px_#0f172a] text-left btn-press transition-all cursor-pointer group flex items-center justify-between"
             >
-              <div className="flex items-center justify-between gap-1 mb-1">
-                <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5 text-slate-900">
-                  <span>⏸️</span> PAUSE & PLAN ALLOCATIONS FIRST
-                </span>
-                <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
-              </div>
-              <p className="text-[11px] sm:text-xs text-slate-600 font-body leading-snug">
-                Configure ₹ Amount or % SIPs, pick investment vehicles, and setup insurance before unpausing.
-              </p>
+              <span className="font-display font-black text-sm sm:text-base uppercase tracking-wider flex items-center gap-1.5 text-slate-900">
+                <span>⏸️</span> PAUSE & PLAN ALLOCATIONS FIRST
+              </span>
+              <span className="text-xs font-mono font-bold group-hover:translate-x-1 transition-transform">➔</span>
             </button>
           </div>
 
