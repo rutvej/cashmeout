@@ -8,6 +8,7 @@ import {
 } from '../src/engine/compoundingEngine.js';
 import { tickMonthlySimulation } from '../src/engine/simulationEngine.js';
 import { useGameStore } from '../src/engine/store.js';
+import { calculateOfferProbability } from '../src/engine/careerEngine.js';
 
 console.log('🧪 Starting Verification of Technical Mechanics...\n');
 
@@ -230,5 +231,53 @@ assert.strictEqual(
 );
 
 console.log('✓ Mid-Game Lump-Sum Seeding verified: atomic transfer from Bank Cash into goal corpus.');
+
+// ─── 5. Experience Skill Growth, Internal Promotion & Single-Company Friction ───
+console.log('\nTest 5: Experience-driven Skill Growth, Internal Promotions & Single-Company Friction...');
+
+const dummyChar = {
+  yearsOfExperience: 5,
+  skillLevel: 2.2,
+  companyName: 'Infosys R&D',
+  jobTier: 1,
+  monthlyTakeHome: 50000,
+  tenureYearsAtCurrentCompany: 4,
+  monthsSinceLastCourseCompletion: 999,
+};
+
+const externalJob = {
+  id: 'job_flipkart_t2',
+  companyName: 'Flipkart',
+  tier: 2,
+  requiredExperienceYears: 3,
+  requiredSkillLevel: 2.0,
+  monthlyTakeHome: 85000,
+};
+
+const baselineOdds = calculateOfferProbability(5, 2.2, 3, 2.0);
+const frictionOdds = calculateOfferProbability(5, 2.2, 3, 2.0, dummyChar, externalJob);
+
+assert(
+  frictionOdds < baselineOdds,
+  `Single-company tenure must impose friction penalty: ${frictionOdds} < ${baselineOdds}`
+);
+assert(
+  baselineOdds - frictionOdds >= 0.15,
+  `Friction penalty must be at least 15% for 4 years tenure`
+);
+console.log(`✓ Single-Company Inertia Penalty verified: dropped from ${Math.round(baselineOdds * 100)}% to ${Math.round(frictionOdds * 100)}% (~3-4 interview attempts required)`);
+
+// Same Company Application (no friction)
+const internalJob = {
+  id: 'job_infosys_t2',
+  companyName: 'Infosys R&D',
+  tier: 2,
+  requiredExperienceYears: 3,
+  requiredSkillLevel: 2.0,
+  monthlyTakeHome: 80000,
+};
+const internalOdds = calculateOfferProbability(5, 2.2, 3, 2.0, dummyChar, internalJob);
+assert.strictEqual(internalOdds, baselineOdds, 'Internal application at same company must suffer no friction penalty');
+console.log('✓ Internal company applications experience zero friction penalty.');
 
 console.log('\n🎉 ALL PURE SPECIFICATION AND ENGINE TESTS PASSED WITH 100% SUCCESS!');

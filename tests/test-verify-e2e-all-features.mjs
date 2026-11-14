@@ -62,6 +62,20 @@ try {
   console.log('✓ Saved screenshot: tests/screenshot-main-game-collapsed-goals.png');
 
   console.log('\n--- 4. Testing Collapsed Goals View & Opening Integrated Surplus Distribution Screen ---');
+  // Verify goals are hidden by default
+  const goalsTabBtn = page.locator('button:has-text("Goals")').first();
+  await goalsTabBtn.waitFor({ state: 'visible', timeout: 5000 });
+  console.log('✓ Goals tab button is present (goals hidden by default on screen)!');
+
+  // Open the Goals tab
+  await goalsTabBtn.click();
+  await page.waitForTimeout(400);
+
+  // Verify the explicit Hide button is present
+  const hideGoalsBtn = page.locator('button:has-text("Hide Goals")').first();
+  await hideGoalsBtn.waitFor({ state: 'visible', timeout: 3000 });
+  console.log('✓ Goals tab opened with explicit [ ✕ Hide Goals ] close button!');
+
   // Find a collapsed goal card on main game screen
   const goalCard = page.locator('div:has-text("Buy First Car")').last();
   await goalCard.waitFor({ state: 'visible', timeout: 5000 });
@@ -73,12 +87,15 @@ try {
   await setupScreenHeader.waitFor({ state: 'visible', timeout: 5000 });
   console.log('✓ Surplus Distribution Screen (FinancialSetupScreen) opened directly focused on goal!');
 
-  // Verify Lump-Sum Bank Seeding controls inside the goal card
-  const seedingTitle = page.locator('text=/Seed Capital from Bank Cash/i').first();
-  await seedingTitle.waitFor({ state: 'visible', timeout: 5000 });
+  // Verify Lump-Sum Bank Seeding controls inside the goal card (collapsible below chart)
+  const seedAccordionBtn = page.locator('button:has-text("Seed Capital from Bank Cash")').first();
+  await seedAccordionBtn.waitFor({ state: 'visible', timeout: 5000 });
+  await seedAccordionBtn.click();
+  await page.waitForTimeout(300);
+
   const transferBtn = page.locator('button:has-text("Transfer")').first();
   await transferBtn.waitFor({ state: 'visible', timeout: 3000 });
-  console.log('✓ Lump-sum bank seeding section and transfer button are present inside goal card!');
+  console.log('✓ Collapsible lump-sum bank seeding section expanded and transfer button is present inside goal card!');
 
   // Verify Multi-Curve Compounding Growth Chart elements
   const analyticsTitle = page.locator('text=/Invested Principal vs. Compounded Fund Value/i').first();

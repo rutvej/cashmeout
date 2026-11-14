@@ -187,10 +187,33 @@ const CITY_TIER_SALARY_MULT = {
 /**
  * Calculates interview acceptance probability based on candidate vs required metrics.
  * Equation from Phase 3 spec:
- * P_offer = clamp(0.30 + 0.20 * (exp - exp_req) + 0.25 * (skill - skill_req), 0.10, 0.95)
+ * P_offer = clamp(0.30 + 0.20 * (exp - exp_req) + 0.25 * (skill - skill_req) - inertiaPenalty, 0.10, 0.95)
+ *
+ * Single-Company Inertia Penalty:
+ * Staying at one company builds tenure and internal titles, but external recruiters discount prolonged
+ * single-firm tenure (questioning domain breadth & cultural adaptability) when applying for higher-paying jobs.
+ * This drops acceptance rates down to ~25-35%, requiring candidates to interview 3-4 times unless mitigated
+ * by recent external upskilling certifications.
  */
-export function calculateOfferProbability(exp, skill, expReq, skillReq) {
-  const p = 0.30 + 0.20 * (exp - expReq) + 0.25 * (skill - skillReq);
+export function calculateOfferProbability(exp, skill, expReq, skillReq, character = null, job = null) {
+  let p = 0.30 + 0.20 * (exp - expReq) + 0.25 * (skill - skillReq);
+
+  if (character && job) {
+    const tenureAtCurrent = character.tenureYearsAtCurrentCompany || 0;
+    const isDifferentCompany = character.companyName && job.companyName !== character.companyName;
+    const isHigherTierOrPay = (job.tier > (character.jobTier || 1)) || (job.monthlyTakeHome > (character.monthlyTakeHome || 0));
+    const monthsSinceCourse = character.monthsSinceLastCourseCompletion ?? 999;
+    const hasUpskilledRecently = monthsSinceCourse <= 24;
+
+    if (isDifferentCompany && tenureAtCurrent >= 3 && isHigherTierOrPay) {
+      // Base friction penalty: -15% at 3 years, up to -25% at 5+ years
+      const baseFriction = Math.min(0.25, 0.15 + (tenureAtCurrent - 3) * 0.05);
+      // External certified upskilling validates modern tech stack, softening friction by 60%
+      const effectiveFriction = hasUpskilledRecently ? baseFriction * 0.4 : baseFriction;
+      p -= effectiveFriction;
+    }
+  }
+
   const clamped = Math.min(0.95, Math.max(0.10, p));
   return Number(clamped.toFixed(2));
 }
@@ -286,7 +309,7 @@ export function evaluateJobApplication(job, character, monthIndex = 0) {
   const expReq = job.requiredExperienceYears;
   const skillReq = job.requiredSkillLevel;
 
-  const probability = calculateOfferProbability(exp, skill, expReq, skillReq);
+  const probability = calculateOfferProbability(exp, skill, expReq, skillReq, character, job);
 
   // Deterministic roll keyed to character seed, job ID, and application month
   const rng = createPRNG(`${character.seed}_app_${job.id}_m${monthIndex}`);

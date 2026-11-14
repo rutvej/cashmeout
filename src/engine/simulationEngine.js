@@ -262,6 +262,8 @@ export function tickMonthlySimulation(state) {
   let completedCourses = [...(character.completedCourses || [])];
   let tenureYearsAtCurrentCompany = character.tenureYearsAtCurrentCompany || 0;
   let monthsSinceLastCourseCompletion = character.monthsSinceLastCourseCompletion ?? 999;
+  let jobTitle = character.jobTitle;
+  let jobTier = character.jobTier || 1;
   const courseFee = activeCourse ? activeCourse.monthlyFee : 0;
 
   // ─── 1. Unemployment State Tracking (No Automatic Rehire) ────────────────
@@ -420,21 +422,51 @@ export function tickMonthlySimulation(state) {
     tenureYearsAtCurrentCompany = (tenureYearsAtCurrentCompany || 0) + 1;
     monthsSinceLastCourseCompletion = (monthsSinceLastCourseCompletion || 0) + 12;
 
+    // Passive on-the-job skill growth with experience
+    if (employmentStatus === 'employed') {
+      skillLevel = Math.min(5.0, Number((skillLevel + 0.12).toFixed(2)));
+    }
+
     const isUnemployedOrRecentlyLaidOff =
       employmentStatus === 'unemployed' ||
       (lastJobLossMonthIndex !== null && (nextMonthIndex - lastJobLossMonthIndex) < 12);
 
     if (!isUnemployedOrRecentlyLaidOff) {
+      // Check for internal company title promotion (loyalty progression at same company)
+      let isInternalPromotion = false;
+      if (jobTier === 1 && tenureYearsAtCurrentCompany >= 3 && yearsOfExperience >= 3) {
+        jobTier = 2;
+        if (jobTitle.startsWith('Junior ')) {
+          jobTitle = jobTitle.replace('Junior ', 'Senior ');
+        } else if (jobTitle.startsWith('Associate ')) {
+          jobTitle = jobTitle.replace('Associate ', 'Senior ');
+        } else if (!jobTitle.startsWith('Senior ')) {
+          jobTitle = 'Senior ' + jobTitle;
+        }
+        isInternalPromotion = true;
+      } else if (jobTier === 2 && tenureYearsAtCurrentCompany >= 6 && yearsOfExperience >= 6) {
+        jobTier = 3;
+        if (jobTitle.startsWith('Senior ')) {
+          jobTitle = jobTitle.replace('Senior ', 'Lead ');
+        } else if (!jobTitle.startsWith('Lead ')) {
+          jobTitle = 'Lead ' + jobTitle;
+        }
+        isInternalPromotion = true;
+      }
+
       const appraisal = calculateAnnualAppraisal(
         {
           ...character,
           tenureYearsAtCurrentCompany,
           monthsSinceLastCourseCompletion,
+          jobTier,
+          jobTitle,
         },
         nextMonthIndex,
         character.seed
       );
-      const hikeRate = appraisal.hikeRate;
+      // Internal promotions guarantee a healthy promotion hike (minimum 12%)
+      const hikeRate = isInternalPromotion ? Math.max(appraisal.hikeRate, 0.12) : appraisal.hikeRate;
       grossSalary = Math.round((character.grossMonthlySalary * (1 + hikeRate)) / 500) * 500;
       const annualGrossSalary = grossSalary * 12;
       const monthlyPF = Math.round(grossSalary * 0.05);
@@ -448,11 +480,11 @@ export function tickMonthlySimulation(state) {
       isPaused = true;
       const raiseModal = {
         type: 'raise',
-        hikeRate: appraisal.hikeRate,
-        category: appraisal.category,
-        headline: appraisal.headline,
-        reason: appraisal.reason,
-        isStagnated: appraisal.isStagnated,
+        hikeRate,
+        category: isInternalPromotion ? 'boom' : appraisal.category,
+        headline: isInternalPromotion ? `Internal Promotion: ${jobTitle}` : appraisal.headline,
+        reason: isInternalPromotion ? `Promoted internally to Tier ${jobTier} at ${character.companyName || 'your current company'} with an upgraded title!` : appraisal.reason,
+        isStagnated: isInternalPromotion ? false : appraisal.isStagnated,
         oldTakeHome: character.monthlyTakeHome,
         newTakeHome: newRaisedTakeHome,
         deltaSurplus,
@@ -1058,6 +1090,8 @@ export function tickMonthlySimulation(state) {
 
   const updatedCharacter = {
     ...character,
+    jobTitle,
+    jobTier,
     assetMaintenanceState: assetMaintenance,
     yearsOfExperience,
     tenureYearsAtCurrentCompany,

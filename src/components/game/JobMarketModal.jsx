@@ -209,9 +209,24 @@ export default function JobMarketModal({ onClose }) {
                 currentExp,
                 currentSkill,
                 job.requiredExperienceYears,
+                job.requiredSkillLevel,
+                character,
+                job
+              );
+              const baselineOdds = calculateOfferProbability(
+                currentExp,
+                currentSkill,
+                job.requiredExperienceYears,
                 job.requiredSkillLevel
               );
               const oddsPercent = Math.round(odds * 100);
+              const hasSingleCompanyFriction =
+                (character.tenureYearsAtCurrentCompany || 0) >= 3 &&
+                character.companyName &&
+                job.companyName !== character.companyName &&
+                (job.tier > (character.jobTier || 1) || job.monthlyTakeHome > (character.monthlyTakeHome || 0)) &&
+                baselineOdds > odds;
+              const frictionDropPercent = Math.round((baselineOdds - odds) * 100);
 
               const hikeRupees = job.monthlyTakeHome - currentTakeHome;
               const hikePercent =
@@ -245,6 +260,13 @@ export default function JobMarketModal({ onClose }) {
                           </span>
                         )}
                       </div>
+
+                      {hasSingleCompanyFriction && (
+                        <div className="py-1 px-2 bg-amber-50 border border-amber-600 text-amber-950 font-mono text-[10px] flex items-center justify-between gap-1 mt-1">
+                          <span>⚠️ Single-Company Inertia Penalty: -{frictionDropPercent}% offer rate</span>
+                          <span className="text-[9px] text-amber-800 font-bold">Expect ~3–4 interview attempts</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Compensation Badge */}

@@ -52,6 +52,7 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
   const [timeHorizon, setTimeHorizon] = useState('monthly'); // 'monthly' | 'yearly'
   const [seedAmount, setSeedAmount] = useState(10000);
   const [transferSuccessMsg, setTransferSuccessMsg] = useState('');
+  const [isSeedOpen, setIsSeedOpen] = useState(false);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showHintModal, setShowHintModal] = useState(false);
   const [newGoalName, setNewGoalName] = useState('');
@@ -641,102 +642,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                 </div>
               </div>
 
-              {/* ─── Mid-Game Lump-Sum Bank Cash Seeding ─── */}
-              <div className="p-2.5 sm:p-3 bg-emerald-50/70 border-2 border-slate-900 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="text-base sm:text-lg">⚡</span>
-                    <div className="min-w-0">
-                      <span className="font-display font-black text-xs text-slate-900 block truncate">
-                        Seed Capital from Bank Cash
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-600 block truncate">
-                        Deposit accumulated bank savings directly into goal
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-[9px] font-mono font-bold uppercase text-slate-500 block">Bank Cash</span>
-                    <span className="text-xs sm:text-sm font-mono font-black text-emerald-800">
-                      {formatINR(availableBankCash)}
-                    </span>
-                  </div>
-                </div>
-
-                {transferSuccessMsg && (
-                  <div className="py-1 px-2.5 bg-emerald-100 border border-emerald-700 text-emerald-950 text-[11px] font-mono font-bold animate-fadeIn">
-                    ✓ {transferSuccessMsg}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setSeedAmount(Math.max(1000, seedAmount - 5000))}
-                    className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
-                  >
-                    −
-                  </button>
-                  <div className="relative flex-1">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs font-black">
-                      ₹
-                    </span>
-                    <input
-                      type="number"
-                      step="1000"
-                      min="0"
-                      max={maxLumpSum}
-                      value={seedAmount || ''}
-                      onChange={(e) => setSeedAmount(Math.max(0, Math.min(maxLumpSum, Number(e.target.value) || 0)))}
-                      className="w-full bg-white border-2 border-slate-900 py-1 pl-6 pr-2 font-mono font-black text-slate-900 text-xs sm:text-sm outline-none text-center"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSeedAmount(Math.min(maxLumpSum, seedAmount + 5000))}
-                    className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    disabled={maxLumpSum <= 0 || seedAmount <= 0}
-                    onClick={handleExecuteTransfer}
-                    className={`py-1.5 px-3 font-mono font-black text-xs uppercase border-2 border-slate-900 btn-press-sm transition-all shrink-0 ${
-                      maxLumpSum > 0 && seedAmount > 0
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-hard-sm'
-                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    Transfer
-                  </button>
-                </div>
-
-                {/* Quick Presets */}
-                <div className="flex flex-wrap items-center gap-1 font-mono text-[9px]">
-                  {[5000, 10000, 25000, 50000].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      disabled={preset > maxLumpSum}
-                      onClick={() => setSeedAmount(preset)}
-                      className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-900 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      +{formatINR(preset)}
-                    </button>
-                  ))}
-                  {maxLumpSum > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setSeedAmount(maxLumpSum)}
-                      className="px-1.5 py-0.5 bg-purple-100 hover:bg-purple-200 border border-purple-900 text-purple-900 font-bold ml-auto"
-                    >
-                      Max ({formatINR(maxLumpSum)})
-                    </button>
-                  )}
-                </div>
-              </div>
-
               {/* Monthly Allocation Input with Steppers & Dual Mode */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -1217,6 +1122,118 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
                     <div className="flex items-center justify-between text-[9px] font-mono text-slate-500 pt-0.5 px-0.5">
                       <span>Gray Dashed: Cumulative Out-of-Pocket Deposits</span>
                       <span className="text-emerald-700 font-bold">Colored Area: Compounded Returns Growth</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ─── Collapsible Mid-Game Lump-Sum Bank Cash Seeding (Below Growth Chart) ─── */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setIsSeedOpen((prev) => !prev)}
+                  className="w-full py-2 px-3 bg-emerald-50/80 hover:bg-emerald-100 border-2 border-slate-900 font-mono text-xs font-bold flex items-center justify-between btn-press-sm text-slate-800 transition-colors cursor-pointer"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span>⚡</span>
+                    <span>{isSeedOpen ? 'Hide Bank Cash Seeding' : 'Seed Capital from Bank Cash'}</span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.2 bg-white border border-slate-900 text-emerald-800 font-black">
+                      Bank: {formatINR(availableBankCash)}
+                    </span>
+                  </span>
+                  <span className="text-slate-500">{isSeedOpen ? '▴' : '▾'}</span>
+                </button>
+
+                {isSeedOpen && (
+                  <div className="p-2.5 sm:p-3 bg-emerald-50/70 border-2 border-slate-900 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-display font-black text-xs text-slate-900 block truncate">
+                          Deposit Bank Reserves into Goal Corpus
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-600 block truncate">
+                          Instant lump-sum transfer to boost goal progress
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[9px] font-mono font-bold uppercase text-slate-500 block">Bank Cash</span>
+                        <span className="text-xs sm:text-sm font-mono font-black text-emerald-800">
+                          {formatINR(availableBankCash)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {transferSuccessMsg && (
+                      <div className="py-1 px-2.5 bg-emerald-100 border border-emerald-700 text-emerald-950 text-[11px] font-mono font-bold animate-fadeIn">
+                        ✓ {transferSuccessMsg}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSeedAmount(Math.max(1000, seedAmount - 5000))}
+                        className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
+                      >
+                        −
+                      </button>
+                      <div className="relative flex-1">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs font-black">
+                          ₹
+                        </span>
+                        <input
+                          type="number"
+                          step="1000"
+                          min="0"
+                          max={maxLumpSum}
+                          value={seedAmount || ''}
+                          onChange={(e) => setSeedAmount(Math.max(0, Math.min(maxLumpSum, Number(e.target.value) || 0)))}
+                          className="w-full bg-white border-2 border-slate-900 py-1 pl-6 pr-2 font-mono font-black text-slate-900 text-xs sm:text-sm outline-none text-center"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSeedAmount(Math.min(maxLumpSum, seedAmount + 5000))}
+                        className="w-8 h-8 bg-white hover:bg-slate-100 border-2 border-slate-900 font-mono font-bold text-sm btn-press-sm shrink-0"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        disabled={maxLumpSum <= 0 || seedAmount <= 0}
+                        onClick={handleExecuteTransfer}
+                        className={`py-1.5 px-3 font-mono font-black text-xs uppercase border-2 border-slate-900 btn-press-sm transition-all shrink-0 ${
+                          maxLumpSum > 0 && seedAmount > 0
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-hard-sm'
+                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        Transfer
+                      </button>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="flex flex-wrap items-center gap-1 font-mono text-[9px]">
+                      {[5000, 10000, 25000, 50000].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          disabled={preset > maxLumpSum}
+                          onClick={() => setSeedAmount(preset)}
+                          className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-900 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          +{formatINR(preset)}
+                        </button>
+                      ))}
+                      {maxLumpSum > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSeedAmount(maxLumpSum)}
+                          className="px-1.5 py-0.5 bg-purple-100 hover:bg-purple-200 border border-purple-900 text-purple-900 font-bold ml-auto"
+                        >
+                          Max ({formatINR(maxLumpSum)})
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

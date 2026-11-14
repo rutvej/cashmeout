@@ -84,7 +84,7 @@ export default function MainGameScreen() {
     updateGoal,
   } = useGameStore();
 
-  const [activeTab, setActiveTab] = useState('goals');
+  const [activeTab, setActiveTab] = useState(null);
   const [goalFilter, setGoalFilter] = useState('all'); // 'all' | 'active' | 'completed'
   const [selectedGoalIdForSetup, setSelectedGoalIdForSetup] = useState(null);
   const [isAdjustingAllocations, setIsAdjustingAllocations] = useState(false);
@@ -462,26 +462,58 @@ export default function MainGameScreen() {
 
         {/* ─── Tabs Navigation (Strict Grid: Zero Overflow Guarantee) ─── */}
         <div className="grid grid-cols-4 border-b-2 border-slate-900 gap-0.5 sm:gap-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-tight sm:tracking-wider border-t-2 border-x-2 border-slate-900 transition-all text-center ${
-                activeTab === tab.id
-                  ? 'bg-white text-slate-900 -mb-[2px] shadow-sm'
-                  : 'bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-            >
-              <span>{tab.icon}</span>
-              <span className="truncate">{tab.label}</span>
-            </button>
-          ))}
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab((prev) => (prev === tab.id ? null : tab.id))}
+                className={`flex items-center justify-center gap-1 sm:gap-1.5 px-1 sm:px-4 py-2 sm:py-2.5 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-tight sm:tracking-wider border-t-2 border-x-2 border-slate-900 transition-all text-center cursor-pointer ${
+                  isActive
+                    ? 'bg-white text-slate-900 -mb-[2px] shadow-sm font-black'
+                    : 'bg-slate-100 text-slate-500 hover:text-slate-900 hover:bg-slate-200'
+                }`}
+              >
+                <span>{tab.icon}</span>
+                <span className="truncate">{tab.label}</span>
+                {isActive && <span className="text-slate-400 hover:text-rose-600 text-xs ml-0.5 font-bold">✕</span>}
+              </button>
+            );
+          })}
         </div>
+
+        {/* ─── Minimal Dashboard State when All Tabs Hidden ─── */}
+        {activeTab === null && (
+          <div className="py-3 px-3 text-center bg-slate-50 border-2 border-dashed border-slate-300">
+            <p className="text-[11px] sm:text-xs font-mono text-slate-600 font-bold">
+              💡 Tap any tab above (🎯 Goals, 💼 Career, 💳 Loans, 🛡️ Insurance) to inspect details.
+            </p>
+          </div>
+        )}
 
         {/* ─── Tab 1: Goals ─── */}
         {activeTab === 'goals' && (
-          <div className="space-y-2.5 sm:space-y-3">
+          <div className="space-y-2.5 sm:space-y-3 bg-white p-3 sm:p-4 border-2 border-slate-900 shadow-[2px_2px_0px_#0f172a]">
+            {/* Header with Title & Explicit Close (X) button */}
+            <div className="flex items-center justify-between pb-2 border-b-2 border-slate-900">
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg">🎯</span>
+                <h3 className="font-display font-black text-sm sm:text-base text-slate-900 uppercase">
+                  Financial Goals Portfolio
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab(null)}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-rose-100 hover:text-rose-900 border-2 border-slate-900 text-xs font-mono font-black uppercase flex items-center gap-1 btn-press-sm cursor-pointer transition-colors"
+                title="Hide Goals Panel (X)"
+              >
+                <span>✕</span>
+                <span className="hidden sm:inline">Hide Goals</span>
+              </button>
+            </div>
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               {/* Quick Filter Bar */}
               <div className="flex items-center gap-1 font-mono text-[10px] sm:text-xs font-bold">
@@ -863,6 +895,14 @@ export default function MainGameScreen() {
                 >
                   💼 Job Market
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(null)}
+                  className="px-2.5 py-2 bg-slate-100 hover:bg-rose-100 hover:text-rose-900 border-2 border-slate-900 text-xs font-mono font-black uppercase btn-press-sm cursor-pointer transition-colors"
+                  title="Hide Career Tab (X)"
+                >
+                  ✕
+                </button>
               </div>
             </div>
 
@@ -1108,9 +1148,20 @@ export default function MainGameScreen() {
         {/* ─── Tab 3: Loans ─── */}
         {activeTab === 'loans' && (
           <div className="card-neopop p-3.5 sm:p-5 space-y-3 sm:space-y-4 bg-white">
-            <h3 className="font-display font-black text-sm uppercase tracking-wider text-slate-900">
-              Active Debt & Liabilities
-            </h3>
+            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
+              <h3 className="font-display font-black text-sm uppercase tracking-wider text-slate-900">
+                Active Debt & Liabilities
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActiveTab(null)}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-rose-100 hover:text-rose-900 border-2 border-slate-900 text-xs font-mono font-black uppercase flex items-center gap-1 btn-press-sm cursor-pointer transition-colors"
+                title="Hide Loans Tab (X)"
+              >
+                <span>✕</span>
+                <span className="hidden sm:inline">Hide</span>
+              </button>
+            </div>
             {(!character.loans || character.loans.length === 0) ? (
               <p className="text-xs font-mono font-bold text-emerald-700">🎉 Congratulations! You are 100% debt-free!</p>
             ) : (
@@ -1151,9 +1202,20 @@ export default function MainGameScreen() {
         {/* ─── Tab 4: Insurance ─── */}
         {activeTab === 'insurance' && (
           <div className="card-neopop p-3.5 sm:p-5 space-y-3 sm:space-y-4 bg-white">
-            <h3 className="font-display font-black text-sm uppercase tracking-wider text-slate-900">
-              Risk Protection Status
-            </h3>
+            <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
+              <h3 className="font-display font-black text-sm uppercase tracking-wider text-slate-900">
+                Risk Protection Status
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActiveTab(null)}
+                className="px-2.5 py-1 bg-slate-100 hover:bg-rose-100 hover:text-rose-900 border-2 border-slate-900 text-xs font-mono font-black uppercase flex items-center gap-1 btn-press-sm cursor-pointer transition-colors"
+                title="Hide Insurance Tab (X)"
+              >
+                <span>✕</span>
+                <span className="hidden sm:inline">Hide</span>
+              </button>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
               {[insurance.health, insurance.termLife].map((ins) => (
                 <div key={ins.name} className="p-3 sm:p-4 bg-slate-50 border-2 border-slate-900 space-y-1.5 sm:space-y-2 text-xs">
