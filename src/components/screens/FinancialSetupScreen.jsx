@@ -234,7 +234,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
 
   const handleStartGame = () => {
     if (isOverAllocated) return;
-    closeModal();
     if (isModal && onClose) {
       onClose();
     } else {
@@ -385,7 +384,6 @@ export default function FinancialSetupScreen({ isModal = false, onClose, initial
               <button
                 type="button"
                 onClick={() => {
-                  closeModal();
                   if (isModal && onClose) onClose();
                   else navigateTo('main_game');
                 }}

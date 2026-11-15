@@ -1542,17 +1542,25 @@ export const useGameStore = create((set, get) => ({
     const result = evaluateJobApplication(job, character, currentMonth);
 
     if (result.isAccepted) {
-      // Pause simulation and show offer letter modal
-      set((state) => ({
-        simulation: {
-          ...state.simulation,
-          isPaused: true,
-          activeModal: {
-            type: 'job_offer',
-            offer: job,
+      // Pause simulation and show offer letter modal; preserve any existing active modal in queue
+      set((state) => {
+        const prevModal = state.simulation.activeModal;
+        const currentQueue = state.simulation.modalQueue || [];
+        const nextQueue = prevModal && prevModal.type !== 'job_offer'
+          ? [prevModal, ...currentQueue]
+          : currentQueue;
+        return {
+          simulation: {
+            ...state.simulation,
+            isPaused: true,
+            activeModal: {
+              type: 'job_offer',
+              offer: job,
+            },
+            modalQueue: nextQueue,
           },
-        },
-      }));
+        };
+      });
       return { isAccepted: true, offer: job };
     } else {
       // Set 3-month cooldown
@@ -1571,7 +1579,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   acceptJobOffer: (offer) => {
-    const { character, simulation, insurance } = get();
+    const { character, goals, simulation, insurance } = get();
     if (!character || !offer) return;
 
     const healthPremium = insurance?.health?.isPurchased ? insurance.health.monthlyPremium : 0;
@@ -1580,7 +1588,15 @@ export const useGameStore = create((set, get) => ({
     const totalLoanEMIs = (character.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
     const courseFee = character.activeCourse ? character.activeCourse.monthlyFee : 0;
     const totalOutflow = character.totalFixedExpenses + totalLoanEMIs + totalInsurance + courseFee;
-    const newSurplus = offer.monthlyTakeHome - totalOutflow;
+
+    // Correctly include spouse income and venture income in total household inflow
+    const spouseIncome = (character.assetMaintenanceState?.isMarried && character.assetMaintenanceState?.spouse)
+      ? (character.assetMaintenanceState.spouse.monthlyTakeHome || 0)
+      : (character.spouseTakeHome || 0);
+    const ventureIncome = character.ventureIncome || 0;
+    const totalHouseholdInflow = offer.monthlyTakeHome + spouseIncome + ventureIncome;
+    const effectiveTakeHome = offer.monthlyTakeHome + ventureIncome;
+    const newSurplus = Math.max(0, totalHouseholdInflow - totalOutflow);
 
     const signingBonus = offer.signingBonus || 0;
     const nextLiquidCash = character.liquidCash + signingBonus;
@@ -1599,13 +1615,33 @@ export const useGameStore = create((set, get) => ({
     };
     const updatedJournal = [...(simulation.decisionJournal || []), jobSwitchDecision];
 
+    // If active goals had contracted to 0 SIPs during unemployment, restore SIPs from allocationPercent
+    let updatedGoals = (goals || []).map((g) => {
+      const isCompleted =
+        g.status === 'completed' ||
+        (g.id !== 'goal_retirement' && (g.currentAmount || 0) >= (g.targetAmount || 1)) ||
+        g.isLaunched ||
+        g.isLocked;
+      if (isCompleted) return g;
+      if ((g.baseMonthlySIP || 0) === 0 && (g.allocationPercent || 0) > 0 && newSurplus > 0) {
+        return {
+          ...g,
+          baseMonthlySIP: Math.round(((g.allocationPercent || 0) / 100) * newSurplus),
+        };
+      }
+      return g;
+    });
+
     set((state) => ({
       character: {
         ...state.character,
         jobTitle: offer.title,
         jobTier: offer.tier,
         grossMonthlySalary: offer.grossMonthlySalary,
-        monthlyTakeHome: offer.monthlyTakeHome,
+        salaryTakeHome: offer.monthlyTakeHome,
+        monthlyTakeHome: effectiveTakeHome,
+        spouseTakeHome: spouseIncome,
+        householdTakeHome: totalHouseholdInflow,
         city: offer.city || state.character.city,
         cityTier: offer.cityTier || state.character.cityTier,
         liquidCash: nextLiquidCash,
@@ -1618,6 +1654,7 @@ export const useGameStore = create((set, get) => ({
         // Phase 9: Reset company tenure on job switch to clear stagnation
         tenureYearsAtCurrentCompany: 0,
       },
+      goals: updatedGoals,
       simulation: {
         ...state.simulation,
         decisionJournal: updatedJournal,

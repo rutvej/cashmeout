@@ -20,6 +20,16 @@ export default function OfferLetterModal({ offer, onAdjustAllocations }) {
 
   const isUnemployed = character.employmentStatus === 'unemployed';
 
+  const totalLoanEMIs = (character.loans || []).reduce((sum, l) => sum + (l.emi || 0), 0);
+  const totalFixed = character.totalFixedExpenses || 0;
+  const courseFee = character.activeCourse ? (character.activeCourse.monthlyFee || 0) : 0;
+  const totalOutflow = totalFixed + totalLoanEMIs + courseFee;
+  const spouseTakeHome = (character.assetMaintenanceState?.isMarried && character.assetMaintenanceState?.spouse)
+    ? (character.assetMaintenanceState.spouse.monthlyTakeHome || 0)
+    : (character.spouseTakeHome || 0);
+  const ventureIncome = character.ventureIncome || 0;
+  const estimatedSurplus = Math.max(0, offer.monthlyTakeHome + spouseTakeHome + ventureIncome - totalOutflow);
+
   const handleAcceptAndAdjust = () => {
     acceptJobOffer(offer);
     if (onAdjustAllocations) {
@@ -127,6 +137,16 @@ export default function OfferLetterModal({ offer, onAdjustAllocations }) {
             </span>
           </div>
         </div>
+
+        {/* Layoff Recovery & Restored Surplus Callout */}
+        {isUnemployed && (
+          <div className="p-2.5 bg-emerald-50 border-2 border-emerald-900 text-xs font-mono text-emerald-950 flex items-center justify-between">
+            <span className="font-bold flex items-center gap-1.5">
+              <span>🎉</span> Restores monthly surplus:
+            </span>
+            <span className="font-black text-emerald-800">+{formatINR(estimatedSurplus)}/mo</span>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="space-y-2 pt-2">

@@ -584,6 +584,26 @@ export function tickMonthlySimulation(state) {
     return g;
   });
 
+  // If all non-completed goals have ₹0 SIP (e.g. following unemployment contraction) but have allocationPercent, restore them when surplus returns
+  const activeUnfundedSIPGoals = updatedGoals.filter(
+    (g) =>
+      g.id === 'goal_retirement' ||
+      (g.status !== 'completed' && !g.isLaunched && !g.isLocked && (g.currentAmount || 0) < (g.targetAmount || 1))
+  );
+  const totalCurrentActiveSIP = activeUnfundedSIPGoals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);
+  if (totalCurrentActiveSIP === 0 && monthlySurplus > 0 && employmentStatus === 'employed') {
+    updatedGoals = updatedGoals.map((g) => {
+      const isEligible = activeUnfundedSIPGoals.some((eg) => eg.id === g.id);
+      if (isEligible && (g.allocationPercent || 0) > 0) {
+        return {
+          ...g,
+          baseMonthlySIP: Math.round(((g.allocationPercent || 0) / 100) * monthlySurplus),
+        };
+      }
+      return g;
+    });
+  }
+
   // Downward auto-contraction: When surplus shrinks, contract percentage-mode SIPs proportionally.
   // Mandatory goals (Emergency Fund) maintain priority; lifestyle goals shrink first via minPriority ordering.
   const totalDemandedSIP = updatedGoals.reduce((sum, g) => sum + (g.baseMonthlySIP || 0), 0);

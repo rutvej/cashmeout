@@ -108,6 +108,15 @@ export default function MilestoneModal({ goal }) {
           </div>
         </div>
 
+        {goal?.id === 'goal_marriage' && (
+          <div className="p-2.5 bg-rose-50 border-2 border-rose-900 text-xs font-mono text-rose-950 flex items-center justify-between">
+            <span className="font-bold flex items-center gap-1.5">
+              <span>💍</span> Wedding Milestone & Marriage Ceremony
+            </span>
+            <span className="text-[10px] text-rose-800">Unlocks Dual-Income Household</span>
+          </div>
+        )}
+
         {/* Shortfall Resolution Options */}
         {!isFunded && (
           <div className="space-y-1.5 sm:space-y-2">

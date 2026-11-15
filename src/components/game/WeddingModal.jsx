@@ -3,15 +3,19 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '../../engine/store.js';
 import { formatINR } from '../../utils/format.js';
 import { backdropFade, sheetSlideUp } from '../../utils/motion.js';
+import { generateSpouseProfile } from '../../engine/lifeEventsEngine.js';
 
 export default function WeddingModal({ data, goal }) {
   const { confirmWedding, character, goals, insurance } = useGameStore();
 
-  // Extract goal and spouse profile from prop data or goal
+  // Extract goal and spouse profile from prop data or goal, with deterministic fallback
   const modalGoal = goal || data?.goal;
-  const spouseProfile = data?.spouseProfile || modalGoal?.spouseProfile;
+  const spouseProfile =
+    data?.spouseProfile ||
+    modalGoal?.spouseProfile ||
+    generateSpouseProfile(character?.seed || 'seed', character?.gender || 'male');
 
-  if (!spouseProfile) return null;
+  if (!character) return null;
 
   // Individual baseline numbers
   const personalTakeHome = character.employmentStatus === 'unemployed' ? 0 : (character.monthlyTakeHome || 0);
